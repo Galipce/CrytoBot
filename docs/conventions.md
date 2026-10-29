@@ -47,5 +47,8 @@
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
 - `mypy --strict` — tip kontrolü (tüm `src/`).
-- `import-linter` — `docs/architecture.md` "Forbidden dependencies".
-- `pytest --cov` — `risk`, `execution`, `portfolio` için %90 branch coverage eşiği.
+- `import-linter` — `docs/architecture.md` "Forbidden dependencies" (`pyproject.toml` `[tool.importlinter]`;
+  yalnızca doğrudan importlar). "İç alt modül" kuralı özel sözleşme tipiyle: `tools/import_contracts.py`.
+- `pytest --cov` + `coverage report` — `risk`, `execution`, `portfolio` için %90 branch coverage eşiği
+  (full-only `coverage` adımı; `pyproject.toml` `[tool.coverage.*]`).
+- Türkçe metin: ruff `allowed-confusables = ["ı"]` — docstring/yorumlarda noktasız ı serbest.

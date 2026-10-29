@@ -16,6 +16,9 @@
 - **Determinizm:** saat `Clock` arayüzüyle sabitlenir (`FixedClock`), `hypothesis` ve rastgelelik seed'li,
   zaman dilimi UTC, veri fixture'ları repoda sabit. UI/animasyon yok (CLI + Telegram).
 - **Veri izolasyonu:** her test kendi geçici SQLite dosyasını (`tmp_path`) kullanır; koşular arası durum taşınmaz.
+- **Araç öz-testleri** (`tests/tooling/`, hepsi `slow`): projeyi `tmp_path`'e kopyalar, bir kuralı bilerek bozar ve
+  adım komutunu `scripts/check.conf`'tan okuyarak çalıştırır — her kapının gerçekten kırmızıya döndüğünün kanıtı.
+- **Coverage verisi:** `test-unit` `.coverage`'ı sıfırdan yazar, `test-slow` ekler, full-only `coverage` adımı eşiği uygular.
 
 ## What must be tested
 - Her iş kuralı (BR-n, `docs/domain.md`) en az bir testle; risk kuralları (BR-3…BR-8, BR-13) ayrıca
