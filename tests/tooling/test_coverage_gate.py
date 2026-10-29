@@ -28,6 +28,22 @@ FULLY_TESTED_BULK = (
 )
 
 
+def untested_code(project: Project, module: str) -> str:
+    """UNTESTED_BRANCHES plus one never-called function per source line already in the module.
+
+    Each adds three unexecuted statements, so the module drops under 90% however much
+    well-tested code it already has (plan 0002, amendment A-1).
+    """
+    lines = sum(
+        len(path.read_text(encoding="utf-8").splitlines())
+        for path in (project.root / "src" / "crytobot" / module).glob("*.py")
+    )
+    return UNTESTED_BRANCHES + "".join(
+        f"\n\ndef g{i}(x: int) -> int:\n    if x > {i}:\n        return x\n    return {i}\n"
+        for i in range(lines)
+    )
+
+
 def partial_test(module: str) -> str:
     # all three modules are imported (as tests/test_module_layout.py does), so the gate fails on
     # the missing branch, not on "No data to report" for a module no test touched
@@ -43,7 +59,7 @@ def partial_test(module: str) -> str:
 
 @pytest.mark.parametrize("module", SENSITIVE_MODULES)
 def test_untested_branch_in_sensitive_module_red(project: Project, module: str) -> None:
-    project.write(f"src/crytobot/{module}/_logic.py", UNTESTED_BRANCHES)
+    project.write(f"src/crytobot/{module}/_logic.py", untested_code(project, module))
     project.write("tests/test_logic.py", partial_test(module))
 
     tests = project.run_step("test-unit")
