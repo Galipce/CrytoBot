@@ -1,4 +1,4 @@
-"""Risk limitleri: tanım, sabit üst sınırlar ve config'ten yükleme (spec 0002; BR-4…BR-7)."""
+"""Risk limitleri: tanım, sabit üst sınırlar, config'ten yükleme, değiştirme kararı (spec 0002)."""
 
 import tomllib
 from collections.abc import Mapping
@@ -131,3 +131,56 @@ def load_limits(toml_text: str) -> LoadedLimits:
     if problems:
         raise RiskConfigError(tuple(problems))
     return LoadedLimits(_build(values), frozenset(LIMIT_NAMES) - section.keys())
+
+
+class Channel(Enum):
+    CLI = "cli"
+    TELEGRAM = "telegram"
+
+
+@dataclass(frozen=True)
+class LimitChange:
+    """Ham değiştirme isteği: limit adı, yeni değer (`Decimal` veya `int`) ve kanal adı."""
+
+    limit: str
+    value: object
+    channel: str
+
+
+@dataclass(frozen=True)
+class ChangeDecision:
+    """Karar sonrası geçerli limitler; ret durumunda limitler değişmemiştir."""
+
+    limits: RiskLimits
+    reason: RejectReason | None
+    message: str
+
+    @property
+    def accepted(self) -> bool:
+        return self.reason is None
+
+
+def decide_change(current: RiskLimits, change: LimitChange) -> ChangeDecision:
+    """BR-13: düşürme her kanaldan; artırma yalnızca CLI'den ve en fazla üst sınıra kadar."""
+
+    def reject(reason: RejectReason, message: str) -> ChangeDecision:
+        return ChangeDecision(current, reason, message)
+
+    try:
+        channel = Channel(change.channel)
+    except ValueError:
+        return reject(RejectReason.UNKNOWN_CHANNEL, f"{change.channel!r}: bilinmeyen kanal")
+    if change.limit not in LIMIT_NAMES:
+        return reject(RejectReason.UNKNOWN_LIMIT, f"{change.limit!r}: bilinmeyen limit adı")
+    checked = _validate(change.limit, change.value)
+    if isinstance(checked, _Problem):
+        return reject(checked.reason, checked.message)
+    values = _values(current)
+    if channel is Channel.TELEGRAM and checked > values[change.limit]:
+        return reject(
+            RejectReason.TELEGRAM_INCREASE,
+            f"{change.limit}: Telegram'dan artırma yapılamaz ({values[change.limit]} → {checked});"
+            " yalnızca CLI",
+        )
+    values[change.limit] = checked
+    return ChangeDecision(_build(values), None, f"{change.limit}: {checked} kabul edildi")
