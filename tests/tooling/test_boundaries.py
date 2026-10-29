@@ -59,11 +59,37 @@ def test_root_package_importing_module_internals_is_violation(project: Project) 
     assert "R-3d: no module imports another module's internal submodules BROKEN" in result.stdout
 
 
-def test_allowed_flow_strategy_risk_execution_passes(project: Project) -> None:
-    """Meşru akış (strategy → risk → execution) dolaylı import yüzünden kırmızı olmamalı."""
+def write_legitimate_flow(project: Project) -> None:
+    """strategy → risk → execution: risk kökü kendi _flow'unu, o da execution'ı import eder."""
     project.write("src/crytobot/risk/_flow.py", "import crytobot.execution\n")
+    project.write(
+        "src/crytobot/risk/__init__.py",
+        '"""Risk."""\n\nfrom crytobot.risk import _flow as _flow\n\n__all__: list[str] = []\n',
+    )
     project.write("src/crytobot/strategy/_flow.py", "import crytobot.risk\n")
+
+
+def test_allowed_flow_strategy_risk_execution_passes(project: Project) -> None:
+    """Meşru akış dolaylı import yüzünden kırmızı olmamalı (yasaklar yalnız doğrudan importlar)."""
+    write_legitimate_flow(project)
 
     result = project.run_step("boundaries")
 
     assert result.returncode == 0, result.stdout
+
+
+def test_same_flow_is_red_when_indirect_imports_are_forbidden(project: Project) -> None:
+    """Kontrol: zincir gerçekten var; dolaylı importlar yasaklanınca R-3a/R-3b bozulur."""
+    write_legitimate_flow(project)
+    pyproject = project.root / "pyproject.toml"
+    text = pyproject.read_text(encoding="utf-8")
+    pyproject.write_text(
+        text.replace("allow_indirect_imports = true", "allow_indirect_imports = false"),
+        encoding="utf-8",
+    )
+
+    result = project.run_step("boundaries")
+
+    broken = [line.split(":", 1)[0] for line in result.stdout.splitlines() if "BROKEN" in line]
+    assert result.returncode != 0
+    assert {"R-3a", "R-3b"} <= set(broken)
