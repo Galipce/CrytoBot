@@ -1,6 +1,6 @@
 # Spec 0001 — Proje iskeleti, modül sınırları ve doğrulama sözleşmesi
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0001-plan.md`
 
@@ -61,41 +61,41 @@ komutu ve CI çıktısıdır.)
 - `CLAUDE.md`/`.claude/` ve bootstrap çıktıları bu spec'in kapsamında değildir (önceden birleştirilir).
 
 ## Acceptance criteria
-- [ ] AC-1 — Temiz bir klondan, README "Geliştirme" bölümündeki kurulum komutu ve ardından `./scripts/check` çalıştırıldığında
+- [x] AC-1 — Temiz bir klondan, README "Geliştirme" bölümündeki kurulum komutu ve ardından `./scripts/check` çalıştırıldığında
   `CHECK GREEN (full, …)` alınır; bu hem Windows/Git Bash'te hem CI'da (Linux) geçerlidir. (R-1, R-4)
-- [ ] AC-2 — `./scripts/check --fast` lint, format, tip, sınır ve hızlı test adımlarını çalıştırır, yavaş
+- [x] AC-2 — `./scripts/check --fast` lint, format, tip, sınır ve hızlı test adımlarını çalıştırır, yavaş
   test adımını "full only" diye atlar ve yeşildir. (R-4)
-- [ ] AC-3 — Henüz hiç yavaş test yokken full profil yeşildir; tek bir yavaş test bilerek başarısız
+- [x] AC-3 — Henüz hiç yavaş test yokken full profil yeşildir; tek bir yavaş test bilerek başarısız
   yapıldığında full profil kırmızı olur, fast profil o testi çalıştırmaz. (R-4)
-- [ ] AC-4 — 13 modülün her biri uygulama paketi altında import edilebilir ve public arayüzü vardır; bir
+- [x] AC-4 — 13 modülün her biri uygulama paketi altında import edilebilir ve public arayüzü vardır; bir
   test bu listeyi `docs/architecture.md` tablosuyla birebir doğrular (eksik veya fazla modül → kırmızı). (R-2)
-- [ ] AC-5 — R-3'teki kuralların her biri için bilerek ihlal eden bir import eklendiğinde `check` sınır
+- [x] AC-5 — R-3'teki kuralların her biri için bilerek ihlal eden bir import eklendiğinde `check` sınır
   adımında kırmızı olur ve çıktı ihlal edilen kuralı adlandırır; import kaldırılınca yeşile döner. (R-3)
-- [ ] AC-6 — Bilerek eklenen bir lint ihlali, format bozukluğu ve tip hatasının her biri `check`'i ilgili
+- [x] AC-6 — Bilerek eklenen bir lint ihlali, format bozukluğu ve tip hatasının her biri `check`'i ilgili
   adımda kırmızı yapar. (R-4)
-- [ ] AC-7 — Ağ bağlantısı deneyen bir test başarısız olur (bağlantı engellendiği için). (R-5)
-- [ ] AC-8 — `risk`, `execution` veya `portfolio`'ya test edilmemiş dallı kod eklendiğinde full profil
+- [x] AC-7 — Ağ bağlantısı deneyen bir test başarısız olur (bağlantı engellendiği için). (R-5)
+- [x] AC-8 — `risk`, `execution` veya `portfolio`'ya test edilmemiş dallı kod eklendiğinde full profil
   coverage eşiği nedeniyle kırmızı olur; içeriksiz iskelette yeşildir. (R-6)
-- [ ] AC-9 — CI'da check job'ı full profili uv ile çalıştırır; ayrı bir job bağımlılıkları bilinen
+- [x] AC-9 — CI'da check job'ı full profili uv ile çalıştırır; ayrı bir job bağımlılıkları bilinen
   zafiyetlere karşı tarar ve zafiyetli bir sürüm sabitlendiğinde kırmızı olur. Kırmızı durumun kanıtı:
   bir kerelik deneme dalındaki CI koşusunun linki, PR'da (Evidence policy kural 3). (R-7)
-- [ ] AC-10 — Kilit dosyasındaki doğrudan bağımlılıklar yalnızca R-8 listesidir; `check` kilit dosyasını
+- [x] AC-10 — Kilit dosyasındaki doğrudan bağımlılıklar yalnızca R-8 listesidir; `check` kilit dosyasını
   değiştirmez (koşu sonrası `git status` temiz). (R-1, R-8)
-- [ ] AC-11 — `./scripts/residue` ve `./scripts/residue --fast` hiçbir artık süreç bildirmez; her profilin
+- [x] AC-11 — `./scripts/residue` ve `./scripts/residue --fast` hiçbir artık süreç bildirmez; her profilin
   süresi 3 koşunun medyanı olarak raporlanır; hijyen ayarlarından sonra test sayısı değişmez. (R-9)
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 onay sonrası (sapmalar plan amendment A-1…A-5) |
+| Fix rounds | 3 (fix-1 review r1, fix-2 VERIFY, fix-3 review r2) |
+| Review findings: real / noise / deferred | 9 / 3 / 1 (r1: L-1…L-3, I-1, I-2 real; L-4 defer B-1 · VERIFY: F-1…F-3 real; F-4, F-5 noise · r2: L-1 real; I-1 noise) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (henüz üretim yok) |
