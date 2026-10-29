@@ -33,6 +33,45 @@ allowed-confusables = ["ı"]
 strict = true
 python_version = "3.12"
 
+# Forbidden dependencies (docs/architecture.md; spec 0001 R-3). Direct imports only: the documented rule
+# is "never imports", and the legitimate strategy -> risk -> execution flow must not count (plan 0001, risk 1).
+[tool.importlinter]
+root_package = "crytobot"
+contract_types = ["no_foreign_submodule_imports: tools.import_contracts.NoForeignSubmoduleImportsContract"]
+
+[[tool.importlinter.contracts]]
+name = "R-3a: strategy, analysis, news, research, llm never import execution"
+type = "forbidden"
+source_modules = ["crytobot.strategy", "crytobot.analysis", "crytobot.news", "crytobot.research", "crytobot.llm"]
+forbidden_modules = ["crytobot.execution"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "R-3b: only risk, app and backtest import execution"
+type = "forbidden"
+source_modules = [
+    "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.analysis",
+    "crytobot.strategy", "crytobot.portfolio", "crytobot.control", "crytobot.reporting",
+]
+forbidden_modules = ["crytobot.execution"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "R-3c: analysis imports no other project module"
+type = "forbidden"
+source_modules = ["crytobot.analysis"]
+forbidden_modules = [
+    "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.strategy",
+    "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest", "crytobot.control",
+    "crytobot.reporting", "crytobot.app",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "R-3d: no module imports another module's internal submodules"
+type = "no_foreign_submodule_imports"
+root_package = "crytobot"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["slow: full-only tests (check step test-slow; docs/testing.md, Two speeds)"]
