@@ -38,6 +38,27 @@ def test_clean_tree_passes(project: Project) -> None:
     assert "4 kept, 0 broken" in result.stdout
 
 
+def test_module_importing_its_own_submodule_passes(project: Project) -> None:
+    """R-3d yalnızca başka modülün içini yasaklar; modül kendi alt modüllerini import edebilir."""
+    project.write("src/crytobot/risk/_b.py", '"""Risk modülünün iç alt modülü."""\n')
+    project.write("src/crytobot/risk/_a.py", "from crytobot.risk import _b\n")
+
+    result = project.run_step("boundaries")
+
+    assert result.returncode == 0, result.stdout
+
+
+def test_root_package_importing_module_internals_is_violation(project: Project) -> None:
+    """Kök paket hiçbir modülün sahibi değildir; bir modülün içine erişmesi de R-3d ihlalidir."""
+    project.write("src/crytobot/risk/limits.py", '"""Risk modülünün iç alt modülü."""\n')
+    project.write("src/crytobot/__init__.py", "from crytobot.risk import limits\n")
+
+    result = project.run_step("boundaries")
+
+    assert result.returncode != 0
+    assert "R-3d: no module imports another module's internal submodules BROKEN" in result.stdout
+
+
 def test_allowed_flow_strategy_risk_execution_passes(project: Project) -> None:
     """Meşru akış (strategy → risk → execution) dolaylı import yüzünden kırmızı olmamalı."""
     project.write("src/crytobot/risk/_flow.py", "import crytobot.execution\n")
