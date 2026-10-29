@@ -72,6 +72,19 @@ name = "R-3d: no module imports another module's internal submodules"
 type = "no_foreign_submodule_imports"
 root_package = "crytobot"
 
+# Coverage gate (spec 0001 R-6): measured for the sensitive modules only; enforced by the full-only
+# `coverage` step in scripts/check.conf (fail_under below).
+[tool.coverage.run]
+branch = true
+source_pkgs = ["crytobot.risk", "crytobot.execution", "crytobot.portfolio"]
+# test-slow (tooling tests in subprocesses) appends to test-unit's data without importing these packages
+disable_warnings = ["module-not-imported", "no-data-collected"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_empty = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["slow: full-only tests (check step test-slow; docs/testing.md, Two speeds)"]
