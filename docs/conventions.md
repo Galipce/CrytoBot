@@ -1,39 +1,57 @@
 # Conventions
 
-> **Template — filled during bootstrap.** Only rules that are real: every rule here should be
-> either enforced by tooling (preferred) or checked in review. Aspirations don't belong here.
+> Bootstrap: 2026-10-29. Buradaki her kural ya araçla zorlanır ya da review'da kontrol edilir.
 
 ## Language
-<!-- Set at bootstrap (step 0) and mirrored in AGENTS.md. Changing it later is allowed — edit both
-     places; existing documents are not translated retroactively. -->
-- Chat language (interviews, sessions): <!-- e.g. Turkish -->
-- Document language (docs/, specs, plans, ADRs, review and verify reports): <!-- e.g. Turkish -->
+- Chat language (interviews, sessions): Turkish (`tr`)
+- Document language (docs/, specs, plans, ADRs, review and verify reports): Turkish (`tr`)
 - Always English (protocol, not prose): ANEW core files, template headings and field labels,
   `Status:` values (Draft / Approved / In progress / Shipped), `Approved by / on:`, `Source:`.
-- Code identifiers, branch names, commit messages: <!-- default English; decide consciously -->
+- Code identifiers, branch names, commit messages: English
 - Agent messages (handoff summaries, refusals, `Next:` lines): chat language; command names, file
   paths and protocol fields verbatim.
 
 ## Language & framework versions
-<!-- Pin what matters. -->
+- Python 3.12; ortam ve bağımlılıklar `uv` ile, sürümler `uv.lock` ile sabit.
+- Ana kütüphaneler (sürümleri ilk iskelet spec'inde sabitlenir): `ccxt`, `pandas`, `anthropic`,
+  `python-telegram-bot` (veya eşdeğeri), `pydantic`, `pytest`, `hypothesis`, `ruff`, `mypy`, `import-linter`.
 
 ## Naming
-<!-- Files, types, tests, branches — whatever the team must keep consistent. -->
+- Paket düzeni: `src/crytobot/<module>/` — modül adları `docs/architecture.md` tablosundaki gibi.
+- Dosya/fonksiyon/değişken `snake_case`, sınıflar `PascalCase`, sabitler `UPPER_SNAKE`.
+- Testler: `tests/<module>/test_<konu>.py`; test adı davranışı söyler: `test_rejects_intent_without_stop_loss`.
+- İş kuralına bağlı testler adında veya docstring'inde BR numarasını taşır (`BR-4`).
 
 ## Error handling
-<!-- The one blessed pattern. What never leaks to users. -->
+- Her modül kendi tipli hatalarını tanımlar (`<Module>Error` tabanından); çıplak `except:` / `except Exception: pass` yasak.
+- **Fail-safe:** belirsiz durumda (emir durumu bilinmiyor, bakiye tutmuyor, veri bayat, LLM şema hatası)
+  yeni işlem açılmaz, durum loglanır ve bildirim gider (BR-11). Tahmin yürütülmez.
+- Emir gönderimi körlemesine retry edilmez; her emir idempotent `clientOrderId` taşır, retry önce durum sorgular.
+- Hata mesajları ve loglar asla sır (API anahtarı, TOTP sırrı, token) içermez.
 
 ## Data rules
-<!-- e.g. money/percentages use decimal types; timestamps are UTC; IDs are ... -->
+- Para, fiyat, miktar, oran (emir/risk/defter tarafı): **`decimal.Decimal`**, asla `float`.
+  `float` yalnızca `analysis` içinde (pandas/indikatör) kullanılır; `strategy → risk` sınırında
+  `Decimal`'e çevrilir ve borsanın adım/tick hassasiyetine yuvarlanır.
+- Yüzdeler oran olarak saklanır (`Decimal("0.01")` = %1).
+- Zaman damgaları **UTC, timezone-aware** (`datetime` + `tzinfo=UTC`); mumlar açılış zamanına (ms) göre anahtarlanır. "Gün" = UTC günü.
+- Saat enjekte edilir (`Clock` arayüzü); iş kodu doğrudan `datetime.now()` çağırmaz.
+- Defter append-only; kayıt silinmez/güncellenmez.
 
 ## Known traps
-<!-- Starts empty. One line per trap of this stack that a builder can know up front:
-     "<trap> — <what to do instead> — from <spec/finding>". A line is added when triage marks a
-     finding real and the reviewer says a build-time rule would have caught it; the human
-     approves it at triage as Amendment A-n and the Developer writes it in the fix round.
-     Builders read this section before the first plan step.
-     A trap that tooling can catch moves to "Enforced by tooling" instead. -->
+- Backtest'te look-ahead bias (kapanmamış mumun verisini veya gelecek veriyi kullanmak) — sinyal yalnızca kapanmış mumlardan hesaplanır, emir bir sonraki mumda dolar — from bootstrap
+- ccxt hassasiyet ve minimum emir (`amount_to_precision`, `price_to_precision`, `minNotional`) — her onaylı emir yuvarlanır ve min. tutar kontrolünden geçer — from bootstrap
+- Borsa rate limit'leri — ccxt `enableRateLimit=True`; döngüler backoff'lu — from bootstrap
+- LLM uydurması (hallucination) — araştırma/haber skoru kaynak alıntısı içermeli ve şema ile doğrulanmalı; alıntısız skor yok sayılır — from bootstrap
+- `subprocess.run(..., timeout=)` zaman aşımında yalnızca doğrudan çocuğu öldürür; `sh -c` sarmalayıcısı altındaki
+  süreçler (Windows/MSYS'te her durumda) arkada kalır — alt süreci kendi süreç grubunda başlat, zaman aşımında ağacı
+  sonlandır — from spec 0001, review round 1 L-4 (backlog B-1)
 
 ## Enforced by tooling
-<!-- List what the compiler/linter/analyzers already enforce, so review doesn't re-litigate it.
-Wire new rules into `scripts/check` whenever possible — prose is advice, tooling is law. -->
+- `ruff check` + `ruff format --check` — lint ve format.
+- `mypy --strict` — tip kontrolü (tüm `src/`).
+- `import-linter` — `docs/architecture.md` "Forbidden dependencies" (`pyproject.toml` `[tool.importlinter]`;
+  yalnızca doğrudan importlar). "İç alt modül" kuralı özel sözleşme tipiyle: `tools/import_contracts.py`.
+- `pytest --cov` + `coverage report` — `risk`, `execution`, `portfolio`: her biri için ayrı %90 branch coverage eşiği
+  (full-only `coverage` adımı, modül başına `coverage report --include`; `pyproject.toml` `[tool.coverage.*]`).
+- Türkçe metin: ruff `allowed-confusables = ["ı"]` — docstring/yorumlarda noktasız ı serbest.

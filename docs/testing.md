@@ -8,11 +8,30 @@
 - The whole suite runs inside `scripts/check` — one command, everywhere.
 
 ## Frameworks & layout
-<!-- Test framework(s), where tests live, naming pattern. -->
+- `pytest` + `hypothesis` (property testleri) + `pytest-cov`; testler `tests/<module>/test_<konu>.py`.
+- Hız ayrımı **marker ile (seçici, liste değil)**: yavaş testler `@pytest.mark.slow`;
+  `--fast` = `pytest -m "not slow"`, tam koşu ek olarak `pytest -m slow` (Two speeds, kural 4).
+- **Ağ yok:** `check` asla gerçek borsaya, habere veya Claude API'ye çıkmaz. Borsa → kayıtlı fixture'lar
+  ve `FakeExchange`; LLM → stub `llm` adaptörü; Telegram → stub. `pytest-socket` ile ağ erişimi testte kapalı.
+- **Determinizm:** saat `Clock` arayüzüyle sabitlenir (`FixedClock`), `hypothesis` ve rastgelelik seed'li,
+  zaman dilimi UTC, veri fixture'ları repoda sabit. UI/animasyon yok (CLI + Telegram).
+- **Veri izolasyonu:** her test kendi geçici SQLite dosyasını (`tmp_path`) kullanır; koşular arası durum taşınmaz.
+- **Araç öz-testleri** (`tests/tooling/`, hepsi `slow`): projeyi `tmp_path`'e kopyalar, bir kuralı bilerek bozar ve
+  adım komutunu `scripts/check.conf`'tan okuyarak çalıştırır — her kapının gerçekten kırmızıya döndüğünün kanıtı.
+- **Coverage verisi:** `test-unit` `.coverage`'ı sıfırdan yazar, `test-slow` ekler, full-only `coverage` adımı eşiği **her modüle ayrı** uygular (toplam değil).
 
 ## What must be tested
-<!-- e.g. every business rule (BR-n), every boundary/forbidden dependency; the e2e journeys and
-     budget, if the project has e2e at all (Test layers). -->
+- Her iş kuralı (BR-n, `docs/domain.md`) en az bir testle; risk kuralları (BR-3…BR-8, BR-13) ayrıca
+  `hypothesis` property testleriyle ("hiçbir girdi için işlem riski sabit üst sınırı aşamaz").
+- Her yasak bağımlılık — `import-linter` sözleşmeleriyle (`docs/architecture.md`).
+- İndikatörler bilinen referans değerlere karşı.
+- Backtest motoru: look-ahead bias olmadığını kanıtlayan test (gelecek mum değiştiğinde geçmiş sinyal değişmez).
+- `execution`: idempotent `clientOrderId`, belirsiz emir durumunda fail-safe (BR-11), hassasiyet/minNotional.
+- `control`: yetkisiz chat ID reddi, TOTP'siz hassas komut reddi, Telegram'dan limit artırma reddi.
+- LLM çıktısı: şema dışı / alıntısız skorun yok sayılması; prompt-injection içerikli dokümanın aksiyon üretmemesi.
+- **Coverage:** `risk`, `execution`, `portfolio` için **her biri ayrı ayrı** %90 branch coverage zorunlu; diğer modüllerde eşik yok.
+- **e2e yok** (CLI + Telegram; tüm kriterler unit/entegrasyon katmanında kanıtlanır).
+- Strateji kabulü (BR-10) bir test değil, kanıt artefaktıdır: komisyon/slippage dahil out-of-sample backtest raporu spec'e bağlanır.
 
 ## Test layers
 1. **The cheapest test that proves the criterion.** Unit first, then component or integration

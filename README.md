@@ -1,3 +1,18 @@
+# CrytoBot — Geliştirme
+
+Kişisel, spot-only kripto alım-satım botu. Proje kuralları: [`AGENTS.md`](AGENTS.md).
+
+Gereken tek araç [uv](https://docs.astral.sh/uv/); Python 3.12'yi uv kendisi kurar. Windows'ta komutlar
+Git Bash'te çalıştırılır.
+
+```sh
+uv sync --locked          # Python 3.12 + kilitli geliştirme araçları, paket editable kurulur
+./scripts/check --fast    # iç döngü: lint, format, tip, sınırlar, hızlı testler
+./scripts/check           # tam doğrulama (tek kanıt): + yavaş testler ve coverage kapısı
+```
+
+---
+
 # ANEW — AI Native Engineering Workspace
 
 **A general-purpose, technology-agnostic bootstrap for building software with AI — under control.**

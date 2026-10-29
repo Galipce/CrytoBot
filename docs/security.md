@@ -6,14 +6,39 @@
 - Secrets never enter the repo, specs, prompts, or chat. `.env` is gitignored; provide `.env.example`.
 - Agents never print secret values, even when debugging.
 
+- Sırlar `.env` (gitignore'da) veya işletim sistemi keyring'inde; `.env.example` yalnızca anahtar adlarını içerir.
+- Sırlar loglara, raporlara, Telegram mesajlarına, LLM prompt'larına ve hata mesajlarına asla yazılmaz
+  (log redaksiyonu testle kanıtlanır).
+- **Borsa API anahtarı:** yalnızca okuma + spot işlem yetkisi; **para çekme (withdrawal) yetkisi kapalı**;
+  borsa destekliyorsa IP kısıtlaması açık. Bot başlarken anahtar yetkilerini doğrulayabiliyorsa withdrawal
+  yetkisi görürse çalışmayı reddeder.
+- Testnet, paper ve live için **ayrı anahtarlar**; live anahtarı paper modda yüklenmez.
+
 ## Input & output
-<!-- Validation strategy at boundaries; what is escaped/encoded; what never leaks in error messages. -->
+- Borsa, haber, whitepaper ve LLM yanıtları **güvenilmeyen girdidir**; sınırda `pydantic` şemalarıyla doğrulanır.
+- **Prompt injection:** haber/whitepaper metni LLM'e veri olarak, talimat olmayacak şekilde verilir. LLM çıktısı
+  yalnızca şemalı bir skor (+ kaynak alıntısı) olabilir; şema dışı çıktı yok sayılır. LLM çıktısı hiçbir
+  aksiyonu (emir, limit, mod, beyaz liste) doğrudan tetikleyemez.
+- Dış kaynaklardan indirilen dokümanlar boyut ve tür sınırlıdır; çalıştırılmaz, yalnızca metin olarak işlenir.
+- LLM harcaması günlük limitlidir (config); limit aşılınca LLM sinyali devre dışı kalır, bot teknik sinyalle devam eder.
 
 ## AuthN / AuthZ
-<!-- Who may call what; where authorization is enforced; default-deny statements. -->
+- Tek kullanıcı. **Varsayılan: reddet.**
+- **Varsayılan mod `paper`.** `live` için config bayrağı **ve** açık onay (CLI'de ya da Telegram'da TOTP + teyit) gerekir.
+- **Telegram:** yalnızca config'teki chat ID'den gelen komutlar kabul edilir, diğerleri sessizce reddedilir ve loglanır.
+  - Zararsız komutlar (durum, rapor, **kill switch / durdurma**): chat ID yeterli.
+  - **Hassas komutlar** (paper↔live mod değişikliği, aşama onayı, strateji aç/kapa, beyaz liste değişikliği):
+    chat ID + **TOTP kodu** + "evet/hayır" teyit adımı.
+  - Risk limitleri Telegram'dan **yalnızca düşürülebilir**; artırma yalnızca CLI'den (BR-13).
+  - Para çekme ve API anahtarı işlemleri hiçbir kanaldan yoktur.
+- Her CLI/Telegram komutu `control` audit log'una yazılır (kim, ne, ne zaman, sonuç) — sır içermeden.
+- Kodda sabit risk üst sınırları hiçbir kanaldan aşılamaz.
 
 ## Dependencies
-<!-- Policy for adding new dependencies: who approves, what gets checked (license, maintenance, CVEs). -->
+- Sürümler `uv.lock` ile sabit; yeni bağımlılık **insan onayı** ister (spec/plan'da gerekçesiyle):
+  lisans (MIT/BSD/Apache uyumlu), bakım durumu, bilinen CVE kontrol edilir.
+- `pip-audit` ağ gerektirdiği için `scripts/check` içinde değil, CI'da ayrı adım olarak çalışır.
+- Kripto/borsa ile ilgili az bilinen paketler (typosquatting riski) özellikle incelenir.
 
 ## Review lens
 Security is a mandatory dimension of every independent review (see `prompts/review.md`), not a

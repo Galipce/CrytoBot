@@ -1,0 +1,92 @@
+[project]
+name = "crytobot"
+version = "0.1.0"
+description = "Kişisel, spot-only kripto alım-satım botu (haber, whitepaper, teknik analiz; risk onaylı emirler)."
+requires-python = "==3.12.*"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6",
+    "import-linter>=2",
+    "mypy>=1.10",
+    "pytest>=8",
+    "pytest-cov>=5",
+    "pytest-socket>=0.7",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+# Turkish prose in docstrings/comments (docs language = tr): dotless ı is a letter, not a confusable
+allowed-confusables = ["ı"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+
+# Forbidden dependencies (docs/architecture.md; spec 0001 R-3). Direct imports only: the documented rule
+# is "never imports", and the legitimate strategy -> risk -> execution flow must not count (plan 0001, risk 1).
+[tool.importlinter]
+root_package = "crytobot"
+contract_types = ["no_foreign_submodule_imports: tools.import_contracts.NoForeignSubmoduleImportsContract"]
+
+[[tool.importlinter.contracts]]
+name = "R-3a: strategy, analysis, news, research, llm never import execution"
+type = "forbidden"
+source_modules = ["crytobot.strategy", "crytobot.analysis", "crytobot.news", "crytobot.research", "crytobot.llm"]
+forbidden_modules = ["crytobot.execution"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "R-3b: only risk, app and backtest import execution"
+type = "forbidden"
+source_modules = [
+    "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.analysis",
+    "crytobot.strategy", "crytobot.portfolio", "crytobot.control", "crytobot.reporting",
+]
+forbidden_modules = ["crytobot.execution"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "R-3c: analysis imports no other project module"
+type = "forbidden"
+source_modules = ["crytobot.analysis"]
+forbidden_modules = [
+    "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.strategy",
+    "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest", "crytobot.control",
+    "crytobot.reporting", "crytobot.app",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "R-3d: no module imports another module's internal submodules"
+type = "no_foreign_submodule_imports"
+root_package = "crytobot"
+
+# Coverage gate (spec 0001 R-6): measured for the sensitive modules only; enforced by the full-only
+# `coverage` step in scripts/check.conf (fail_under below).
+[tool.coverage.run]
+branch = true
+source_pkgs = ["crytobot.risk", "crytobot.execution", "crytobot.portfolio"]
+# test-slow (tooling tests in subprocesses) appends to test-unit's data without importing these packages
+disable_warnings = ["module-not-imported", "no-data-collected"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_empty = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: full-only tests (check step test-slow; docs/testing.md, Two speeds)"]
+# --disable-socket: tests never reach the network (docs/testing.md; spec 0001 R-5)
+addopts = ["--strict-markers", "--disable-socket"]
