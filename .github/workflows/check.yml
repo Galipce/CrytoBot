@@ -1,0 +1,31 @@
+name: check
+on:
+  push:
+  pull_request:
+
+jobs:
+  doctor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # doctor diffs specs/done/ against the PR's merge-base; a shallow clone has no base
+      - name: Workspace health (spec/plan gates are failures in CI)
+        run: ./scripts/doctor --strict
+      - name: Self-test (scripts/check, doctor and residue behave as documented)
+        run: ./scripts/selftest
+
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The bootstrap workflow may add toolchain setup steps here (e.g. setup-java, setup-node)
+      # to match the commands it writes into scripts/check.conf.
+      # --fast is for the inner loop only; CI always runs the full contract (docs/testing.md).
+      - name: Verification contract
+        run: |
+          if [ -f scripts/check.conf ]; then
+            ./scripts/check
+          else
+            echo "scripts/check.conf not present yet (pre-bootstrap) — skipping."
+          fi

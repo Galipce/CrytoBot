@@ -1,0 +1,82 @@
+#!/bin/sh
+# ANEW check — THE single verification contract.
+# Humans, agents, hooks, and CI all answer "is this good?" by running this one command.
+# Stack-specific internals live in scripts/check.conf (generated at bootstrap).
+# check.conf format: one step per line ->  <name>: <command>
+#   build [fast]: ./gradlew assemble --no-daemon
+#   test: ./gradlew test --no-daemon
+#   lint [fast]: npm run lint
+# Blank or whitespace-only lines and lines whose first non-blank character is # are ignored.
+# Steps run in order, fail fast.
+# Two speeds, one contract (docs/testing.md): ./scripts/check runs every step (full — the only
+# evidence); ./scripts/check --fast runs only steps whose name carries [fast] (inner loop).
+# A conf without [fast] tags runs every step in both profiles.
+# Output: "==> <step>" before each step, "<== <step> (n s)" after it, and the total in the green
+# line: CHECK GREEN (full, 14 steps, 1080 s).
+set -u
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+CONF="$ROOT/scripts/check.conf"
+
+profile=full
+case "$#:${1:-}" in
+  0:) ;;
+  1:--fast) profile=fast ;;
+  *)
+    echo "usage: ./scripts/check [--fast]" >&2
+    echo "  (no argument)  full profile: every step — the only evidence" >&2
+    echo "  --fast         inner loop: only steps tagged [fast] in scripts/check.conf" >&2
+    exit 2 ;;
+esac
+
+if [ ! -f "$CONF" ]; then
+  echo "check: no scripts/check.conf yet." >&2
+  echo "Run the bootstrap workflow (/bootstrap or prompts/bootstrap.md) to generate it," >&2
+  echo "or copy scripts/check.conf.example and fill in your stack's commands." >&2
+  exit 1
+fi
+
+# --fast on a conf with no tagged step runs everything and says so (backward compatible).
+label=$profile
+if [ "$profile" = fast ] && ! grep -q '^[^#:]*\[fast\][^:]*:' "$CONF"; then
+  profile=full
+  label="fast = full: no steps tagged fast"
+fi
+
+# Wall-clock seconds per step and in total (docs/testing.md, Two speeds): `date +%s` needs no bc
+# and works in Git Bash, macOS and Linux. Where it doesn't yield a number, times are left out.
+now() { t=$(date +%s 2>/dev/null); case "$t" in ''|*[!0-9]*) echo ;; *) echo "$t" ;; esac; }
+took() { [ -n "$1" ] && [ -n "$2" ] && echo " ($(($2 - $1)) s)"; }   # " (12 s)" or nothing
+start=$(now)
+
+steps=0
+ws=" $(printf '\t\r\v\f')"   # ASCII whitespace only: the same set in every shell and locale
+while IFS= read -r line || [ -n "$line" ]; do
+  # Whitespace-only lines (a stray CR included) and indented comments are not steps either:
+  # each would run as an empty command and count as a green step.
+  case "$line" in *[!$ws]*) ;; *) continue ;; esac
+  case "${line#"${line%%[!$ws]*}"}" in \#*) continue ;; esac
+  name=${line%%:*}
+  cmd=${line#*:}
+  case "$name" in
+    *"[fast]"*) name=$(printf '%s' "$name" | sed 's/[[:space:]]*\[fast\]//') ;;
+    *) if [ "$profile" = fast ]; then echo "skip  $name (full only)"; continue; fi ;;
+  esac
+  steps=$((steps + 1))
+  echo "==> $name"
+  t0=$(now)
+  # </dev/null: a step that reads stdin must not swallow the rest of check.conf (silent false green).
+  if ! ( cd "$ROOT" && sh -c "$cmd" </dev/null ); then
+    echo "<== $name$(took "$t0" "$(now)")"
+    echo "CHECK FAILED ($label) at step: $name" >&2
+    exit 1
+  fi
+  echo "<== $name$(took "$t0" "$(now)")"
+done < "$CONF"
+
+if [ "$steps" -eq 0 ]; then
+  echo "check: check.conf has no steps — greenfield no-op. Add steps as soon as code exists."
+  exit 0
+fi
+total=$(took "$start" "$(now)")   # " (n s)" → ", n s" inside the green line
+total=${total# (}; total=${total%)}
+echo "CHECK GREEN ($label, $steps steps${total:+, $total})"

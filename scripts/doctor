@@ -1,0 +1,264 @@
+#!/bin/sh
+# ANEW doctor — workspace health check. Structure, configuration state, adapter presence.
+# Exit 0 = healthy (warnings allowed), exit 1 = broken structure.
+# --strict: spec/plan gate violations (see workflows/segments.md) become FAIL — used by CI.
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+fails=0
+warns=0
+strict=0
+[ "${1:-}" = "--strict" ] && strict=1
+
+fail() { echo "FAIL  $1"; fails=$((fails + 1)); }
+warn() { echo "WARN  $1"; warns=$((warns + 1)); }
+ok()   { echo "ok    $1"; }
+gate() { if [ "$strict" -eq 1 ]; then fail "$1"; else warn "$1"; fi; }
+
+echo "== ANEW doctor =="
+
+# --- structure: required files ---
+for f in \
+  AGENTS.md README.md \
+  docs/architecture.md docs/domain.md docs/conventions.md docs/testing.md docs/security.md docs/git.md \
+  docs/decisions/README.md docs/decisions/TEMPLATE.md \
+  docs/roles/README.md docs/roles/analyst.md docs/roles/developer.md docs/roles/reviewer.md docs/roles/qa.md \
+  specs/TEMPLATE.md specs/TEMPLATE-mini.md specs/plans/TEMPLATE.md \
+  specs/active/README.md specs/plans/README.md specs/done/README.md \
+  workflows/README.md workflows/bootstrap.md workflows/feature-development.md workflows/bug-fix.md \
+  workflows/refactor.md workflows/incident.md workflows/segments.md workflows/change-request.md \
+  prompts/README.md prompts/bootstrap.md prompts/clarify.md prompts/spec.md prompts/plan.md \
+  prompts/build.md prompts/review.md prompts/verify.md prompts/adr.md prompts/recovery/README.md \
+  docs/commands.md \
+  scripts/check
+do
+  if [ -f "$ROOT/$f" ]; then :; else fail "missing: $f"; fi
+done
+[ "$fails" -eq 0 ] && ok "core structure complete"
+
+# --- recovery ramps ---
+ramps=$(ls "$ROOT/prompts/recovery" 2>/dev/null | grep -c '^[a-z].*\.md$')
+if [ "$ramps" -ge 12 ]; then ok "recovery catalog present ($ramps ramps)"; else warn "recovery catalog incomplete (found $ramps ramps, expected 12)"; fi
+
+# --- configuration state ---
+if grep -q "STATUS: NOT CONFIGURED" "$ROOT/AGENTS.md" 2>/dev/null; then
+  warn "AGENTS.md not configured yet — run the bootstrap workflow (/bootstrap or prompts/bootstrap.md)"
+else
+  ok "AGENTS.md configured"
+fi
+
+if grep -qi "^\*\*Mode: unset\*\*\|Mode: unset" "$ROOT/AGENTS.md" 2>/dev/null; then
+  warn "operating mode not set (lite/strict) — bootstrap sets it in AGENTS.md"
+else
+  ok "operating mode set"
+fi
+
+if grep -q "Language: unset" "$ROOT/AGENTS.md" 2>/dev/null; then
+  warn "chat/document language not set — bootstrap step 0 sets the Language line in AGENTS.md"
+elif grep -q "Language:" "$ROOT/AGENTS.md" 2>/dev/null; then
+  ok "language set"
+else
+  warn "AGENTS.md has no Language line — add 'Language: chat=<xx> · docs=<xx>' (see docs/conventions.md)"
+fi
+
+if grep -q "Invariant rules" "$ROOT/AGENTS.md" 2>/dev/null; then
+  ok "AGENTS.md invariant rules block present"
+else
+  fail "AGENTS.md invariant rules block MISSING — it must survive bootstrap"
+fi
+
+lines=$(wc -l < "$ROOT/AGENTS.md" 2>/dev/null || echo 0)
+if [ "$lines" -gt 60 ]; then
+  warn "AGENTS.md is $lines lines — it should be a signpost (<= ~40 lines), not a handbook"
+fi
+
+# Same rule as check: blank or whitespace-only lines and (indented) comments are not steps.
+ws=" $(printf '\t\r\v\f')"   # ASCII whitespace only, as in check
+if [ -f "$ROOT/scripts/check.conf" ] && ! grep -q -v -e "^[$ws]*\$" -e "^[$ws]*#" "$ROOT/scripts/check.conf"; then
+  warn "scripts/check.conf has no steps — check and residue prove nothing until the first steps exist"
+elif [ -f "$ROOT/scripts/check.conf" ]; then
+  ok "verification contract configured (scripts/check.conf)"
+else
+  warn "scripts/check.conf missing — bootstrap generates it; until then './scripts/check' has nothing to run"
+fi
+
+# --- template version: the base an upgrade diffs against (CHANGELOG, "How to upgrade") ---
+if [ -f "$ROOT/.anew-version" ]; then
+  ok "ANEW base version: $(head -n 1 "$ROOT/.anew-version" | tr -d '\r')"
+else
+  warn ".anew-version missing — write the ANEW version this workspace is based on (e.g. v1.13) so upgrades know their base"
+fi
+
+# --- adapter presence ---
+if [ -f "$ROOT/CLAUDE.md" ] || [ -f "$ROOT/.github/copilot-instructions.md" ] || [ -d "$ROOT/.cursor/rules" ] || [ -f "$ROOT/.agents/skills/analyze/SKILL.md" ]; then
+  ok "an AI tool adapter is installed"
+else
+  warn "no adapter installed — run ./scripts/init <claude-code|github-copilot|cursor|codex|generic>"
+fi
+
+# --- spec/plan consistency (state machine: Draft -> Approved -> In progress -> Shipped) ---
+# Mini-specs (specs/TEMPLATE-mini.md) share the NNNN-<name>.md naming and the Status line, so the
+# checks below cover them unchanged. Mini-specs additionally need a Source work item.
+# gate() = WARN locally, FAIL under --strict (CI).
+plans_checked=0
+for p in "$ROOT/specs/plans/"[0-9]*-plan.md; do
+  [ -f "$p" ] || continue
+  plans_checked=$((plans_checked + 1))
+  n=$(basename "$p" | sed 's/-plan\.md$//')
+  spec=""
+  for s in "$ROOT/specs/active/$n-"*.md "$ROOT/specs/done/$n-"*.md; do
+    [ -f "$s" ] && { spec="$s"; break; }
+  done
+  if [ -z "$spec" ]; then
+    gate "plan exists for unapproved spec $n (no spec file found in specs/active/ or specs/done/)"
+    continue
+  fi
+  status=$(grep -m1 '^- Status:' "$spec" | sed 's/^- Status:[[:space:]]*//; s/[[:space:]]*$//')
+  case "$spec" in "$ROOT/specs/done/"*) status="Shipped" ;; esac
+  case "$status" in
+    Approved|"In progress"|Shipped) ;;
+    *) gate "plan exists for unapproved spec $n (spec status: ${status:-unknown})" ;;
+  esac
+  # approval line, HTML comments stripped; empty, "-" or "—" means not recorded
+  approval=$(grep -m1 '^- Approved by / on:' "$p" | sed 's/<!--.*-->//g; s/^- Approved by \/ on:[[:space:]]*//; s/[[:space:]]*$//')
+  case "$approval" in
+    ""|"-"|"—") approved=0 ;;
+    *) approved=1 ;;
+  esac
+  if [ "$status" = "In progress" ] && [ "$approved" -eq 0 ]; then
+    gate "build started without recorded plan approval (spec $n is In progress, plan has no 'Approved by / on')"
+  fi
+done
+[ "$plans_checked" -gt 0 ] && ok "spec/plan consistency checked ($plans_checked plan(s))"
+
+minis=0
+for s in "$ROOT/specs/active/"[0-9]*.md; do
+  [ -f "$s" ] || continue
+  grep -q '^## Preserved behavior' "$s" || continue
+  minis=$((minis + 1))
+  n=$(basename "$s" | sed 's/-.*//')
+  source=$(grep -m1 '^- Source:' "$s" | sed 's/<!--.*-->//g; s/^- Source:[[:space:]]*//; s/[[:space:]]*$//')
+  [ -n "$source" ] || warn "mini-spec $n has no Source work item (specs/TEMPLATE-mini.md requires one)"
+done
+[ "$minis" -gt 0 ] && ok "mini-specs checked ($minis)"
+dupsrc=$(for s in "$ROOT/specs/active/"[0-9]*.md; do
+  [ -f "$s" ] && grep -m1 '^- Source:' "$s" | sed 's/<!--.*-->//g; s/^- Source:[[:space:]]*//; s/[[:space:]]*$//'
+done | grep -v '^$' | sort | uniq -d)
+oldifs=$IFS; IFS='
+'
+for k in $dupsrc; do gate "two open specs share Source '$k' (twin change request)"; done
+IFS=$oldifs
+
+# --- spec numbering: one NNNN per piece of work; a duplicate is a twin spec ---
+dups=$(for f in "$ROOT/specs/active/"[0-9]*.md "$ROOT/specs/done/"[0-9]*.md; do
+  [ -f "$f" ] && basename "$f" | sed 's/[-.].*//'
+done | sort | uniq -d)
+for n in $dups; do gate "duplicate spec number $n (twin spec) across specs/active/ and specs/done/"; done
+
+# --- shipped specs must say so ---
+for s in "$ROOT/specs/done/"[0-9]*.md; do
+  [ -f "$s" ] || continue
+  grep -q '^- Status:[[:space:]]*Shipped' "$s" || warn "specs/done/$(basename "$s") is not marked 'Status: Shipped'"
+done
+
+# --- shipped specs are immutable: no edit, deletion or rename under specs/done/ vs a base ref ---
+# gate() = WARN locally, FAIL under --strict (CI). Base ref: $ANEW_BASE_REF, else the merge-base
+# with the PR target ($GITHUB_BASE_REF, needs fetch-depth: 0), else HEAD (catches uncommitted edits).
+if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if [ -n "${ANEW_BASE_REF:-}" ]; then
+    base="$ANEW_BASE_REF"
+  elif [ -n "${GITHUB_BASE_REF:-}" ]; then
+    base=$(git -C "$ROOT" merge-base HEAD "origin/$GITHUB_BASE_REF" 2>/dev/null || true)
+  else
+    base=HEAD
+  fi
+  if [ -n "$base" ] && git -C "$ROOT" rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1; then
+    changes=$(git -C "$ROOT" diff --name-status -M "$base" -- specs/done/ 2>/dev/null)
+    shipped_viol=0
+    oldifs=$IFS; IFS='
+'
+    for line in $changes; do
+      st=$(printf '%s' "$line" | cut -f1)
+      src=$(printf '%s' "$line" | cut -f2)
+      case "$st" in
+        M*|D*|R*|C*)
+          gate "shipped spec changed: $src — shipped specs are immutable; open a new change request (/change)"
+          shipped_viol=$((shipped_viol + 1)) ;;
+      esac
+    done
+    IFS=$oldifs
+    [ "$shipped_viol" -eq 0 ] && ok "shipped specs unchanged vs $base (specs/done/ immutable)"
+  else
+    warn "immutability check skipped — base ref '${base:-?}' cannot be resolved (CI needs fetch-depth: 0)"
+  fi
+else
+  warn "immutability check skipped — not a git repository"
+fi
+
+# --- adapter parity: every Claude Code command has a Cursor, a Copilot and a Codex counterpart ---
+# Runs only where adapters/ exists (the template, and repos that kept it). Missing = FAIL: README
+# promises the same commands in every tool. A Codex skill must also stay explicit-only, or Codex
+# could start a gated stage on its own.
+if [ -d "$ROOT/adapters/claude-code/.claude/commands" ]; then
+  parity_fails=0
+  for c in "$ROOT/adapters/claude-code/.claude/commands/"*.md; do
+    [ -f "$c" ] || continue
+    x=$(basename "$c" .md)
+    [ -f "$ROOT/adapters/cursor/commands/$x.md" ] || { fail "adapter parity: $x missing in cursor"; parity_fails=$((parity_fails + 1)); }
+    [ -f "$ROOT/adapters/github-copilot/prompts/$x.prompt.md" ] || { fail "adapter parity: $x missing in github-copilot"; parity_fails=$((parity_fails + 1)); }
+    [ -f "$ROOT/adapters/codex/skills/$x/SKILL.md" ] || { fail "adapter parity: $x missing in codex"; parity_fails=$((parity_fails + 1)); }
+    grep -qs "allow_implicit_invocation: false" "$ROOT/adapters/codex/skills/$x/agents/openai.yaml" || [ ! -f "$ROOT/adapters/codex/skills/$x/SKILL.md" ] || { fail "adapter parity: codex skill $x is not explicit-only (agents/openai.yaml)"; parity_fails=$((parity_fails + 1)); }
+  done
+  [ "$parity_fails" -eq 0 ] && ok "adapter parity: every Claude Code command exists for Cursor, Copilot and Codex"
+  # Command reference (docs/commands.md) has a section for every command and script — a reference
+  # that falls behind the commands is worse than none.
+  ref_fails=0
+  for c in "$ROOT/adapters/claude-code/.claude/commands/"*.md; do
+    [ -f "$c" ] || continue
+    x=/$(basename "$c" .md)
+    grep -qF "### \`$x\`" "$ROOT/docs/commands.md" 2>/dev/null || { fail "command reference out of date: $x missing from docs/commands.md"; ref_fails=$((ref_fails + 1)); }
+  done
+  for s in init doctor check residue selftest; do
+    grep -qF "### \`scripts/$s\`" "$ROOT/docs/commands.md" 2>/dev/null || { fail "command reference out of date: scripts/$s missing from docs/commands.md"; ref_fails=$((ref_fails + 1)); }
+  done
+  [ "$ref_fails" -eq 0 ] && ok "command reference covers every command (docs/commands.md)"
+fi
+
+# --- hygiene ---
+if [ -d "$ROOT/.claude/hooks" ]; then
+  for h in "$ROOT/.claude/hooks/"*.sh; do
+    [ -f "$h" ] && [ ! -x "$h" ] && warn "hook not executable: ${h#"$ROOT"/} (chmod +x it)"
+  done
+fi
+
+# --- fast output cited as evidence (docs/testing.md, Two speeds rule 2): every mode, WARN ---
+# Fast green is a working state; only full green is evidence. Shipped specs, and in CI the pull
+# request description from the event payload ($GITHUB_EVENT_PATH — read locally, no network).
+fast_only() { grep -qF 'CHECK GREEN (fast,' "$1" && ! grep -qF 'CHECK GREEN (full,' "$1"; }
+for s in "$ROOT"/specs/done/*.md; do
+  [ -f "$s" ] && fast_only "$s" && warn "fast output cited as evidence: ${s#"$ROOT"/} shows CHECK GREEN (fast, …) and no (full, …)"
+done
+if [ -f "${GITHUB_EVENT_PATH:-}" ] && grep -q '"pull_request"' "$GITHUB_EVENT_PATH" && fast_only "$GITHUB_EVENT_PATH"; then
+  warn "fast output cited as evidence: the pull request description shows CHECK GREEN (fast, …) and no (full, …)"
+fi
+
+# --- evidence hygiene (docs/testing.md Evidence policy): path checks only, every mode, WARN ---
+# One find pass; the root .git and node_modules are pruned. A nested clone is reported once and
+# nothing inside it is reported again. .git files (submodules, worktrees) are not clones; ignored.
+hyg=$(find "$ROOT" \( -path "$ROOT/.git" -o -name node_modules \) -prune -o \
+  -type d \( -name .git -print -prune -o \( -name evidence -o -name .evidence \) -print \) 2>/dev/null)
+clones=$(printf '%s\n' "$hyg" | sed -n 's|/\.git$||p')
+oldifs=$IFS; IFS='
+'
+for c in $clones; do
+  warn "repository clone inside the working tree: ${c#"$ROOT"/} — clean-clone verification belongs in a temp dir outside the repo (docs/testing.md Evidence policy)"
+done
+for d in $hyg; do
+  case "$d" in */.git) continue ;; esac
+  inside=0
+  for c in $clones; do case "$d" in "$c"/*) inside=1 ;; esac; done
+  [ "$inside" -eq 0 ] && warn "evidence directory found: ${d#"$ROOT"/} — evidence is referenced, not stored (docs/testing.md Evidence policy)"
+done
+IFS=$oldifs
+
+echo "== result: $fails fail, $warns warn =="
+[ "$fails" -eq 0 ] || exit 1
+exit 0

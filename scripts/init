@@ -1,0 +1,83 @@
+#!/bin/sh
+# ANEW init — installs an AI tool adapter into the repo root.
+# Usage: ./scripts/init [--force] <claude-code|github-copilot|cursor|codex|generic>
+# Existing files are kept unless --force is given, so customized commands are never lost silently.
+set -e
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ADAPTERS="$ROOT/adapters"
+force=0
+kept=0
+
+usage() {
+  echo "Usage: ./scripts/init [--force] <adapter>"
+  echo ""
+  echo "Available adapters:"
+  echo "  claude-code      CLAUDE.md + .claude/ (commands, reviewer subagent, permissions, hooks)"
+  echo "  github-copilot   .github/ (copilot-instructions.md, prompts/, agents/, instructions/)"
+  echo "  cursor           .cursor/ (rules/, commands/)"
+  echo "  codex            .agents/skills/ (every command as a Codex skill; AGENTS.md is read natively)"
+  echo "  generic          nothing to install — prints wiring instructions"
+  echo ""
+  echo "  --force          overwrite files that already exist (default: keep them)"
+}
+
+# put <src> <dst>: copy one file unless the destination exists (or --force).
+put() {
+  if [ -f "$2" ] && [ "$force" -eq 0 ]; then
+    echo "kept   ${2#"$ROOT"/} (exists — use --force to overwrite)"
+    kept=$((kept + 1))
+  else
+    mkdir -p "$(dirname "$2")"
+    cp "$1" "$2"
+  fi
+}
+# put_dir <srcdir> <dstdir>: copy every regular file in a directory tree, via put.
+put_dir() {
+  find "$1" -type f | while IFS= read -r f; do
+    put "$f" "$2/${f#"$1"/}"
+  done
+}
+
+[ "${1:-}" = "--force" ] && { force=1; shift; }
+[ $# -eq 1 ] || { usage; exit 1; }
+
+case "$1" in
+  claude-code)
+    put "$ADAPTERS/claude-code/CLAUDE.md" "$ROOT/CLAUDE.md"
+    put_dir "$ADAPTERS/claude-code/.claude" "$ROOT/.claude"
+    chmod +x "$ROOT/.claude/hooks/"*.sh 2>/dev/null || true
+    echo "Installed: CLAUDE.md, .claude/ (commands, agents, hooks, settings)."
+    echo "Next: open Claude Code here and run /bootstrap"
+    ;;
+  github-copilot)
+    put "$ADAPTERS/github-copilot/copilot-instructions.md" "$ROOT/.github/copilot-instructions.md"
+    for d in prompts agents instructions; do
+      put_dir "$ADAPTERS/github-copilot/$d" "$ROOT/.github/$d"
+    done
+    echo "Installed: .github/copilot-instructions.md, .github/prompts/ (all commands),"
+    echo "           .github/agents/reviewer.agent.md, .github/instructions/specs-done.instructions.md."
+    echo "Next: open Copilot chat and run /bootstrap"
+    ;;
+  cursor)
+    put_dir "$ADAPTERS/cursor/rules" "$ROOT/.cursor/rules"
+    put_dir "$ADAPTERS/cursor/commands" "$ROOT/.cursor/commands"
+    echo "Installed: .cursor/rules/ (pointer + specs/done rule), .cursor/commands/ (all commands)."
+    echo "Next: open Cursor here and run /bootstrap"
+    ;;
+  codex)
+    put_dir "$ADAPTERS/codex/skills" "$ROOT/.agents/skills"
+    echo "Installed: .agents/skills/ (every command as a project-level Codex skill, explicit only)."
+    echo "AGENTS.md needs no wiring: Codex reads it natively."
+    echo "Next: open Codex here and run \$bootstrap"
+    ;;
+  generic)
+    echo "Nothing to install. See adapters/generic/README.md for wiring any tool:"
+    echo "paste AGENTS.md at session start, drive workflows/ manually, review in a fresh session."
+    ;;
+  -h|--help) usage ;;
+  *)
+    echo "Unknown adapter: $1" >&2
+    usage
+    exit 1
+    ;;
+esac
