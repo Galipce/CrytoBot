@@ -39,10 +39,13 @@ class Project:
         path.write_text(content, encoding="utf-8")
 
     def run_step(self, name: str) -> subprocess.CompletedProcess[str]:
+        return self.run(check_step(name))
+
+    def run(self, command: str) -> subprocess.CompletedProcess[str]:
         sh = shutil.which("sh")
         assert sh, "sh is required (Git Bash on Windows)"
         return subprocess.run(
-            [sh, "-c", check_step(name)],
+            [sh, "-c", command],
             cwd=self.root,
             env=_isolated_env(self.root),
             capture_output=True,
