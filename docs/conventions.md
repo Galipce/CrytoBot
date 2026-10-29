@@ -52,6 +52,6 @@
 - `mypy --strict` — tip kontrolü (tüm `src/`).
 - `import-linter` — `docs/architecture.md` "Forbidden dependencies" (`pyproject.toml` `[tool.importlinter]`;
   yalnızca doğrudan importlar). "İç alt modül" kuralı özel sözleşme tipiyle: `tools/import_contracts.py`.
-- `pytest --cov` + `coverage report` — `risk`, `execution`, `portfolio` için her biri için ayrı %90 branch coverage eşiği
+- `pytest --cov` + `coverage report` — `risk`, `execution`, `portfolio`: her biri için ayrı %90 branch coverage eşiği
   (full-only `coverage` adımı, modül başına `coverage report --include`; `pyproject.toml` `[tool.coverage.*]`).
 - Türkçe metin: ruff `allowed-confusables = ["ı"]` — docstring/yorumlarda noktasız ı serbest.
