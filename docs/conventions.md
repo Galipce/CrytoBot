@@ -46,6 +46,10 @@
 - `subprocess.run(..., timeout=)` zaman aşımında yalnızca doğrudan çocuğu öldürür; `sh -c` sarmalayıcısı altındaki
   süreçler (Windows/MSYS'te her durumda) arkada kalır — alt süreci kendi süreç grubunda başlat, zaman aşımında ağacı
   sonlandır — from spec 0001, review round 1 L-4 (backlog B-1)
+- Windows'ta `core.filemode=false`: yeni çalıştırılabilir dosya (betik, hook) git'e `100644` girer ve POSIX'te
+  çalışmaz — `git update-index --chmod=+x <yol>`, modu `git ls-files -s` ile doğrula; pathspec'li commit
+  (`git commit -- <yol>`) index'teki mod değişikliğini görmez, yalnız o dosya staged iken index'ten commit'le
+  — from bug-001, review round 1 L-1
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
