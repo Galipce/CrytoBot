@@ -1,6 +1,6 @@
 # Spec 0002 — Risk limitleri ve sabit üst sınırlar
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0002-plan.md`
 
