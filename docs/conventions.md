@@ -43,6 +43,9 @@
 - ccxt hassasiyet ve minimum emir (`amount_to_precision`, `price_to_precision`, `minNotional`) — her onaylı emir yuvarlanır ve min. tutar kontrolünden geçer — from bootstrap
 - Borsa rate limit'leri — ccxt `enableRateLimit=True`; döngüler backoff'lu — from bootstrap
 - LLM uydurması (hallucination) — araştırma/haber skoru kaynak alıntısı içermeli ve şema ile doğrulanmalı; alıntısız skor yok sayılır — from bootstrap
+- `subprocess.run(..., timeout=)` zaman aşımında yalnızca doğrudan çocuğu öldürür; `sh -c` sarmalayıcısı altındaki
+  süreçler (Windows/MSYS'te her durumda) arkada kalır — alt süreci kendi süreç grubunda başlat, zaman aşımında ağacı
+  sonlandır — from spec 0001, review round 1 L-4 (backlog B-1)
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
