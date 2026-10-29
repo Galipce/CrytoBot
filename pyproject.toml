@@ -1,0 +1,39 @@
+[project]
+name = "crytobot"
+version = "0.1.0"
+description = "Kişisel, spot-only kripto alım-satım botu (haber, whitepaper, teknik analiz; risk onaylı emirler)."
+requires-python = "==3.12.*"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6",
+    "import-linter>=2",
+    "mypy>=1.10",
+    "pytest>=8",
+    "pytest-cov>=5",
+    "pytest-socket>=0.7",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+# Turkish prose in docstrings/comments (docs language = tr): dotless ı is a letter, not a confusable
+allowed-confusables = ["ı"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: full-only tests (check step test-slow; docs/testing.md, Two speeds)"]
+addopts = ["--strict-markers"]
