@@ -15,9 +15,13 @@
   ve `FakeExchange`; LLM → stub `llm` adaptörü; Telegram → stub. `pytest-socket` ile ağ erişimi testte kapalı.
 - **Determinizm:** saat `Clock` arayüzüyle sabitlenir (`FixedClock`), `hypothesis` ve rastgelelik seed'li,
   zaman dilimi UTC, veri fixture'ları repoda sabit. UI/animasyon yok (CLI + Telegram).
+- **Hypothesis profili** (`tests/conftest.py`): `derandomize=True`, `database=None`; hypothesis'in ev dizini her
+  koşuda yeni bir geçici dizin, çıkışta silinir — `.hypothesis/` önbelleği ağaçta kalmaz. `st.text` yerine sabit
+  örnekler (her koşuda unicode tablosu kurulmasın). Strateji değerleri sınırlara (üst sınır çevresi) odaklanır.
 - **Veri izolasyonu:** her test kendi geçici SQLite dosyasını (`tmp_path`) kullanır; koşular arası durum taşınmaz.
 - **Araç öz-testleri** (`tests/tooling/`, hepsi `slow`): projeyi `tmp_path`'e kopyalar, bir kuralı bilerek bozar ve
   adım komutunu `scripts/check.conf`'tan okuyarak çalıştırır — her kapının gerçekten kırmızıya döndüğünün kanıtı.
+  Kopya hassas modüllerin (`risk`, `execution`, `portfolio`) gerçek testlerini de alır; gerçek kod kopyada da kapıyı geçer.
 - **Coverage verisi:** `test-unit` `.coverage`'ı sıfırdan yazar, `test-slow` ekler, full-only `coverage` adımı eşiği **her modüle ayrı** uygular (toplam değil).
 
 ## What must be tested

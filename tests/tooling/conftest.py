@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 UV_PREFIX = "uv run --locked "
 STEP_LINE = re.compile(r"^(?P<name>[^#:]+?)(?:\s*\[fast\])?\s*:\s*(?P<cmd>.+)$")
 TIMEOUT_S = 180
+SENSITIVE_MODULES = ("risk", "execution", "portfolio")
 
 
 def check_step(name: str) -> str:
@@ -72,11 +73,21 @@ def _isolated_env(project_root: Path) -> dict[str, str]:
 
 @pytest.fixture
 def project(tmp_path: Path) -> Project:
-    """pyproject + src + tools'un geçici kopyası ve tek bir geçen test."""
+    """pyproject + src + tools'un geçici kopyası, hassas modül testleri ve tek bir geçen test.
+
+    Hassas modüllerin testleri kopyalanır: kopyadaki gerçek kod coverage kapısını kendi
+    testleriyle geçer.
+    """
     shutil.copy2(ROOT / "pyproject.toml", tmp_path / "pyproject.toml")
     ignore = shutil.ignore_patterns("__pycache__")
     shutil.copytree(ROOT / "src", tmp_path / "src", ignore=ignore)
     shutil.copytree(ROOT / "tools", tmp_path / "tools", ignore=ignore)
+    (tmp_path / "tests").mkdir()
+    for name in ("__init__.py", "conftest.py"):
+        shutil.copy2(ROOT / "tests" / name, tmp_path / "tests" / name)
+    for module in SENSITIVE_MODULES:
+        if (ROOT / "tests" / module).is_dir():
+            shutil.copytree(ROOT / "tests" / module, tmp_path / "tests" / module, ignore=ignore)
     copy = Project(tmp_path)
     copy.write("tests/test_ok.py", "def test_ok() -> None:\n    assert True\n")
     return copy
