@@ -2,11 +2,9 @@
 
 import pytest
 
-from tests.tooling.conftest import Project
+from tests.tooling.conftest import SENSITIVE_MODULES, Project
 
 pytestmark = pytest.mark.slow
-
-SENSITIVE_MODULES = ["risk", "execution", "portfolio"]
 
 UNTESTED_BRANCHES = '''"""Bilerek eksik test edilen dallı kod."""
 
