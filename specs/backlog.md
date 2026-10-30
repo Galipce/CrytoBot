@@ -38,3 +38,8 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   bir parametre (`huge_entry`) — Deferred by: Galip Badem, 2026-10-31, karar doğru (ret, fail-closed), girdi
   gerçekçi değil; son fix turu VERIFY'a saklanıyor. Ret mesajını sahibe ilk gösterecek spec'te (`approve_trade`'i
   `strategy` ya da kanallara bağlayan) kapanır.
+- **B-6** — `approve_trade` hash'lenemeyen bir çift (ör. liste) alırsa `TypeError` fırlatıyor; R-1'in "sonuç ya
+  miktar ya adlandırılmış ret" sözü bu uçta karşılanmıyor (fail-closed, `pair: str` tipi mypy ile korunuyor) —
+  Source: spec 0003, VERIFY round 1 G-3 (`src/crytobot/risk/_approval.py:124`) — Severity: Low — Recommendation:
+  `isinstance(intent.pair, str)` değilse `NOT_WHITELISTED` ve örnek test — Deferred by: Galip Badem, 2026-10-31,
+  çağıran yok; `approve_trade`'i `strategy`'ye bağlayan spec'te B-5 ile birlikte kapanır.
