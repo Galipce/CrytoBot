@@ -27,3 +27,12 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   — Recommendation: `RiskLimits.__post_init__` içinde tür, alt sınır ve `HARD_CAPS` kontrolü (`HARD_CAPS`'in kendisi
   için ayrı sabit ya da istisna) — Deferred by: Galip Badem, 2026-10-30, bugün hiçbir kriteri bozmuyor; limitleri
   `load_limits` dışında ilk kuracak spec (0003 / `control`) doğru yer.
+- **B-4** — Spec 0002 testleri üç davranışı regresyona karşı korumuyor (kod bugün doğru): (G-7) `decide_change`'de
+  boşluklu kanal/limit adı (`" cli"`, `" per_trade_risk"`) → `UNKNOWN_CHANNEL`/`UNKNOWN_LIMIT`; `strip` eklenirse
+  bilinmeyen kanaldan artırma kabul edilir. (G-8) config'te açıkça yazılmış, varsayılana eşit değer `defaulted`
+  sayılmaz. (G-9) oran limitine verilen bool `INVALID_VALUE` ile reddedilir, `ABOVE_CAP` ile değil — Source: spec
+  0002, VERIFY round 4 (`src/crytobot/risk/_limits.py:70,137,174,177`) — Severity: Low — Recommendation: üç örnek
+  test (`channel_space`, `limit_space`, `ratio_bool` satırları; varsayılan değerleri açıkça yazan config) ve kök
+  neden için AC-10 property testine beklenen-sonuç modeli (oracle); G-7, kanalları `decide_change`'e bağlayan
+  spec'ten önce kapanmalı — Deferred by: Galip Badem, 2026-10-30, A-5 gereği yeni fix turu yok; tek tek mutant
+  kapatmak yerine sorun sınıfını oracle kapatır.
