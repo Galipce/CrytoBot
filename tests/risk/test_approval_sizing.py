@@ -141,3 +141,15 @@ def test_budget_equal_to_loss_beyond_sixty_digits_is_approved(entry: Decimal) ->
     result = approve_one_unit(entry, equity_for_one_unit(entry))
 
     assert result.approved and result.amount == Decimal("1")
+
+
+def test_tiny_step_gives_a_result_not_an_error() -> None:
+    """R-1: 60 basamağı aşan adım sayısında da sonuç bir onay ya da adlandırılmış rettir."""
+    result = approve(
+        intent=TradeIntent(PAIR, "buy", Decimal("1"), Decimal("0.5")),
+        account=AccountState(Decimal("100000"), Decimal("100000"), 0),
+        rules=PairRules(Decimal("1E-60"), Decimal("0"), Decimal("0")),
+        fee=Decimal("0"),
+    )
+
+    assert result.approved and result.amount == Decimal("2000")  # budget 1000 / loss 0.5 per unit
