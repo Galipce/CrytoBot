@@ -22,11 +22,6 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   — Severity: Low — Recommendation: önce `docs/domain.md`'ye iş kuralı olarak eklenip (insan kararı) sonraki bir
   spec'te zorlanması — Deferred by: Galip Badem, 2026-10-30, `docs/domain.md`'de böyle bir kural yok; spec'e
   eklemek kural uydurmak olurdu.
-- **B-3** — `RiskLimits` yapıcısı doğrulama yapmıyor: `load_limits`/`decide_change` dışından kurulan limitler üst
-  sınırları aşabilir — Source: spec 0002, review round 1 (`src/crytobot/risk/_limits.py:100-106`) — Severity: Low
-  — Recommendation: `RiskLimits.__post_init__` içinde tür, alt sınır ve `HARD_CAPS` kontrolü (`HARD_CAPS`'in kendisi
-  için ayrı sabit ya da istisna) — Deferred by: Galip Badem, 2026-10-30, bugün hiçbir kriteri bozmuyor; limitleri
-  `load_limits` dışında ilk kuracak spec (0003 / `control`) doğru yer.
 - **B-4** — Spec 0002 testleri üç davranışı regresyona karşı korumuyor (kod bugün doğru): (G-7) `decide_change`'de
   boşluklu kanal/limit adı (`" cli"`, `" per_trade_risk"`) → `UNKNOWN_CHANNEL`/`UNKNOWN_LIMIT`; `strip` eklenirse
   bilinmeyen kanaldan artırma kabul edilir. (G-8) config'te açıkça yazılmış, varsayılana eşit değer `defaulted`
