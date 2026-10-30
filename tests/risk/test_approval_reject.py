@@ -263,3 +263,12 @@ def test_open_position_in_same_pair_is_not_a_reason() -> None:
     result = approve(account=replace(ACCOUNT, open_positions=1))
 
     assert result.approved and result.amount == Decimal("19.249")
+
+
+@pytest.mark.parametrize("whitelist", ["BTC/USDT", ["BTC/USDT"]], ids=["str", "list"])
+def test_whitelist_must_be_a_set_of_pairs(whitelist: Any) -> None:
+    """AC-8 (BR-2): beyaz liste küme değilse (ör. dize: alt dize eşleşmesi) girdi geçersizdir."""
+    result = approve(replace(INTENT, pair="BTC"), whitelist=whitelist)
+
+    assert result.reason is ApprovalReason.INVALID_INPUT and result.amount is None
+    assert "beyaz liste" in result.message

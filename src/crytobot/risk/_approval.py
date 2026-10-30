@@ -1,6 +1,6 @@
 """İşlem önerisi onayı: zorunlu stop, risk temelli boyutlama, pozisyon sayısı (spec 0003)."""
 
-from collections.abc import Collection
+from collections.abc import Set
 from dataclasses import dataclass
 from decimal import MAX_PREC, Decimal, Inexact, localcontext
 from enum import Enum
@@ -74,9 +74,11 @@ def _number(value: object) -> Decimal | None:
 
 
 def _input_problems(
-    limits: RiskLimits, account: AccountState, rules: PairRules, fee: object
+    limits: RiskLimits, account: AccountState, rules: PairRules, whitelist: object, fee: object
 ) -> list[str]:
     problems = _limit_problems(limits)
+    if not isinstance(whitelist, Set):  # a str would match pairs by substring (BR-2)
+        problems.append(f"beyaz liste {whitelist!r} bir çift kümesi olmalı")
     equity = _number(account.equity)
     if equity is None or equity <= 0:
         problems.append(f"kasa {account.equity!r} sıfırdan büyük bir sayı olmalı")
@@ -106,7 +108,7 @@ def approve_trade(
     limits: RiskLimits,
     account: AccountState,
     rules: PairRules,
-    whitelist: Collection[str],
+    whitelist: Set[str],
     fee: object,
 ) -> TradeApproval:
     """BR-2, BR-3, BR-4, BR-7: alım önerisini onaylar ve miktarını belirler ya da reddeder."""
@@ -114,7 +116,7 @@ def approve_trade(
     def reject(reason: ApprovalReason, detail: str) -> TradeApproval:
         return TradeApproval(None, reason, False, f"{intent.pair!r}: {detail}")
 
-    problems = _input_problems(limits, account, rules, fee)
+    problems = _input_problems(limits, account, rules, whitelist, fee)
     if problems:
         return reject(ApprovalReason.INVALID_INPUT, "geçersiz girdi: " + "; ".join(problems))
     if intent.side != BUY:
