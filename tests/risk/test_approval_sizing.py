@@ -1,7 +1,7 @@
 """Spec 0003 AC-1…AC-4: onaylı miktar risk bütçesi, serbest bakiye ve borsa kurallarıyla (BR-4)."""
 
 from dataclasses import replace
-from decimal import Decimal
+from decimal import MAX_PREC, Context, Decimal
 
 import pytest
 
@@ -102,3 +102,42 @@ def test_minimums_inclusive_and_one_step_below_rejected(case: str) -> None:
     assert at_minimum.approved and at_minimum.amount == Decimal("19.249")
     assert below.reason is ApprovalReason.BELOW_MINIMUM and below.amount is None
     assert PAIR in below.message and "19.249" in below.message
+
+
+EXACT = Context(prec=MAX_PREC)
+STOP_ONE = Decimal("1")
+# 70 digits: past any 28- or 60-digit context, rounding down (3s) or up (6s)
+LONG_ENTRIES = [Decimal("1." + "3" * 70), Decimal("1." + "6" * 70)]
+
+
+def equity_for_one_unit(entry: Decimal, short_by: Decimal = Decimal(0)) -> Decimal:
+    """Equity whose 2% budget is one unit's loss (fee 0), less `short_by` of equity."""
+    return EXACT.subtract(EXACT.multiply(Decimal(50), EXACT.subtract(entry, STOP_ONE)), short_by)
+
+
+def approve_one_unit(entry: Decimal, equity: Decimal) -> TradeApproval:
+    limits = replace(DEFAULT_LIMITS, per_trade_risk=Decimal("0.02"))
+    return approve_trade(
+        TradeIntent(PAIR, "buy", entry, STOP_ONE),
+        limits,
+        AccountState(equity, equity, 0),
+        PairRules(Decimal("1"), Decimal("0"), Decimal("0")),
+        frozenset({PAIR}),
+        Decimal("0"),
+    )
+
+
+@pytest.mark.parametrize("entry", LONG_ENTRIES, ids=["round_down", "round_up"])
+def test_budget_short_by_digits_beyond_sixty_is_rejected(entry: Decimal) -> None:
+    """AC-2 (BR-4): bütçe tek birimin kaybından ancak 70. basamakta küçükse onay yoktur."""
+    result = approve_one_unit(entry, equity_for_one_unit(entry, short_by=Decimal("1E-69")))
+
+    assert result.reason is ApprovalReason.BELOW_MINIMUM and result.amount is None
+
+
+@pytest.mark.parametrize("entry", LONG_ENTRIES, ids=["round_down", "round_up"])
+def test_budget_equal_to_loss_beyond_sixty_digits_is_approved(entry: Decimal) -> None:
+    """AC-2: kayıp bütçeye 70 basamakta tam eşitse o birim onaylanır (en büyük miktar)."""
+    result = approve_one_unit(entry, equity_for_one_unit(entry))
+
+    assert result.approved and result.amount == Decimal("1")

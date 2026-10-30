@@ -169,23 +169,11 @@ def _size(
         budget = equity * limits.per_trade_risk
         unit_loss = (entry - stop) + entry * rate + stop * rate
         unit_cost = entry * (1 + rate)
-
-        def within_risk(steps: int) -> bool:
-            return steps * step * unit_loss <= budget
-
-        def within_balance(steps: int) -> bool:
-            return steps * step * unit_cost <= free
-
-        with localcontext() as rounded:  # the division only gives a candidate, fixed below
-            rounded.prec = 60
-            rounded.traps[Inexact] = False
-            steps = int(min(budget // (step * unit_loss), free // (step * unit_cost)))
-        while steps > 0 and not (within_risk(steps) and within_balance(steps)):
-            steps -= 1
-        while within_risk(steps + 1) and within_balance(steps + 1):
-            steps += 1
-        limited_by_balance = within_risk(steps + 1)
-        amount = steps * step
+        # integer division is never rounded here: the quotient is the largest step count that fits
+        by_risk = budget // (step * unit_loss)
+        by_balance = free // (step * unit_cost)
+        limited_by_balance = by_balance < by_risk
+        amount = min(by_risk, by_balance) * step
         notional = amount * entry
     if amount <= 0 or amount < min_amount or notional < min_notional:
         return TradeApproval(
