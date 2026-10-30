@@ -48,7 +48,8 @@ BROKEN: dict[str, list[Any]] = {
     "intent.stop": JUNK,
 }
 
-# measured: at 400 every reason occurs, with ~75 approvals of which ~12 balance-limited
+# measured at 400 (VERIFY round 1): ~70 approvals per test, ~12 of them balance-limited; a test may
+# draw no NOT_BUY case, so the reason order (R-8) is proven by test_first_reason_in_order_wins
 EXAMPLES = 400
 
 type Case = tuple[TradeIntent, RiskLimits, AccountState, PairRules, Any]
