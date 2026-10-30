@@ -55,7 +55,15 @@ def test_missing_limits_take_defaults_and_are_named() -> None:
 
 
 @pytest.mark.parametrize(
-    "toml_text", ["[risk]\n", '[exchange]\nname = "binance"\n'], ids=["empty", "no_table"]
+    "toml_text",
+    [
+        "[risk]\n",
+        '[exchange]\nname = "binance"\n',
+        # limit names outside [risk] are not limits
+        "per_trade_risk = 0.02\n",
+        "[exchange]\nper_trade_risk = 0.02\n",
+    ],
+    ids=["empty", "no_table", "top_level_name", "other_table_name"],
 )
 def test_no_limits_or_no_risk_table_gives_all_defaults(toml_text: str) -> None:
     """AC-2: limit içermeyen veya risk tablosu olmayan config'te dördü de varsayılandır."""
