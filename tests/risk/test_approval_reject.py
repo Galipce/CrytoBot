@@ -236,3 +236,30 @@ def test_first_reason_in_order_wins(case: str) -> None:
 
     assert result.reason is reason
     assert result.amount is None
+
+
+def test_far_stop_is_accepted() -> None:
+    """AC-5 (BR-3): stop'un girişe uzaklığına üst sınır yok; uzak stop yalnız miktarı küçültür."""
+    result = approve(replace(INTENT, stop=Decimal("0.01")))
+
+    near_stop = approve().amount
+
+    assert result.approved and result.amount is not None and near_stop is not None
+    assert result.amount < near_stop
+
+
+def test_position_below_limit_is_approved() -> None:
+    """AC-7 (BR-7): açık pozisyon limitin bir altındayken yeni pozisyon açılabilir."""
+    positions = DEFAULT_LIMITS.max_open_positions - 1
+
+    result = approve(account=replace(ACCOUNT, open_positions=positions))
+
+    assert result.approved
+
+
+def test_open_position_in_same_pair_is_not_a_reason() -> None:
+    """AC-7: aynı çiftte açık pozisyon ayrıca ret nedeni değil; yalnız toplam sayıya girer."""
+    # the BTC/USDT position already open is the one counted here; nothing else refers to the pair
+    result = approve(account=replace(ACCOUNT, open_positions=1))
+
+    assert result.approved and result.amount == Decimal("19.249")

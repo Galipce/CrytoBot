@@ -2,7 +2,7 @@
 
 from collections.abc import Collection
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import MAX_PREC, Decimal, Inexact, localcontext
 from enum import Enum
 from typing import cast
 
@@ -138,4 +138,62 @@ def approve_trade(
             ApprovalReason.POSITION_LIMIT,
             f"açık pozisyon {positions}, limit {limits.max_open_positions}",
         )
-    raise NotImplementedError("sizing: plan 0003/2")
+    return _size(intent.pair, entry, stop, limits, account, rules, fee)
+
+
+def _size(
+    pair: str,
+    entry: Decimal,
+    stop: Decimal,
+    limits: RiskLimits,
+    account: AccountState,
+    rules: PairRules,
+    fee: object,
+) -> TradeApproval:
+    """R-5, R-6: risk bütçesine ve serbest bakiyeye sığan, adıma aşağı yuvarlı en büyük miktar."""
+    equity, free, rate, step, min_amount, min_notional = (
+        cast(Decimal, _number(value))  # validated by _input_problems
+        for value in (
+            account.equity,
+            account.free_balance,
+            fee,
+            rules.amount_step,
+            rules.min_amount,
+            rules.min_notional,
+        )
+    )
+    # exact arithmetic: a rounded comparison could approve one step more than the budget allows
+    with localcontext() as exact:
+        exact.prec = MAX_PREC
+        exact.traps[Inexact] = True
+        budget = equity * limits.per_trade_risk
+        unit_loss = (entry - stop) + entry * rate + stop * rate
+        unit_cost = entry * (1 + rate)
+
+        def within_risk(steps: int) -> bool:
+            return steps * step * unit_loss <= budget
+
+        def within_balance(steps: int) -> bool:
+            return steps * step * unit_cost <= free
+
+        with localcontext() as rounded:  # the division only gives a candidate, fixed below
+            rounded.prec = 60
+            rounded.traps[Inexact] = False
+            steps = int(min(budget // (step * unit_loss), free // (step * unit_cost)))
+        while steps > 0 and not (within_risk(steps) and within_balance(steps)):
+            steps -= 1
+        while within_risk(steps + 1) and within_balance(steps + 1):
+            steps += 1
+        limited_by_balance = within_risk(steps + 1)
+        amount = steps * step
+        notional = amount * entry
+    if amount <= 0 or amount < min_amount or notional < min_notional:
+        return TradeApproval(
+            None,
+            ApprovalReason.BELOW_MINIMUM,
+            False,
+            f"{pair!r}: miktar {amount} (tutar {notional}) borsa asgarisinin altında"
+            f" (asgari miktar {min_amount}, asgari tutar {min_notional})",
+        )
+    note = " (serbest bakiyeyle sınırlı)" if limited_by_balance else ""
+    return TradeApproval(amount, None, limited_by_balance, f"{pair!r}: {amount} onaylandı{note}")
