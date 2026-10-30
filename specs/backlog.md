@@ -31,3 +31,10 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   neden için AC-10 property testine beklenen-sonuç modeli (oracle); G-7, kanalları `decide_change`'e bağlayan
   spec'ten önce kapanmalı — Deferred by: Galip Badem, 2026-10-30, A-5 gereği yeni fix turu yok; tek tek mutant
   kapatmak yerine sorun sınıfını oracle kapatır.
+- **B-5** — Ölçek reddi mesajı (`INVALID_INPUT`, "ölçek hesaplanamıyor") taşmanın kaynağına bakmadan her zaman adımı
+  ve kasayı adlandırıyor; taşmayı giriş fiyatı tetiklediğinde (ör. `9.999E+999999`) asıl değer mesajda yok (AC-9)
+  — Source: spec 0003, review round 3 F-8 (`src/crytobot/risk/_approval.py:186`) — Severity: Low — Recommendation:
+  mesaja hesaba giren tüm değerleri (giriş, stop, ücret, serbest bakiye, adım, kasa) eklemek ve teste giriş kaynaklı
+  bir parametre (`huge_entry`) — Deferred by: Galip Badem, 2026-10-31, karar doğru (ret, fail-closed), girdi
+  gerçekçi değil; son fix turu VERIFY'a saklanıyor. Ret mesajını sahibe ilk gösterecek spec'te (`approve_trade`'i
+  `strategy` ya da kanallara bağlayan) kapanır.
