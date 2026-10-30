@@ -23,6 +23,12 @@ LOWER = {
     "max_drawdown": Decimal("0.1"),
     "max_open_positions": 3,
 }
+BETWEEN_LOWER_AND_CURRENT = {
+    "per_trade_risk": Decimal("0.008"),
+    "daily_loss_limit": Decimal("0.025"),
+    "max_drawdown": Decimal("0.12"),
+    "max_open_positions": 4,
+}
 HIGHER = {
     "per_trade_risk": Decimal("0.015"),
     "daily_loss_limit": Decimal("0.04"),
@@ -62,6 +68,19 @@ def test_telegram_increase_is_rejected(name: str) -> None:
     assert decision.reason is RejectReason.TELEGRAM_INCREASE
     assert decision.limits == CURRENT
     assert name in decision.message
+
+
+@pytest.mark.parametrize("name", sorted(LOWER))
+def test_telegram_increase_from_lowered_value_is_rejected(name: str) -> None:
+    """AC-7 (BR-13): güncel değerle karşılaştırılır; düşürülen limit Telegram'dan geri çıkmaz."""
+    lowered = with_limit(CURRENT, name, LOWER[name])
+
+    decision = decide_change(
+        lowered, LimitChange(name, BETWEEN_LOWER_AND_CURRENT[name], "telegram")
+    )
+
+    assert decision.reason is RejectReason.TELEGRAM_INCREASE
+    assert decision.limits == lowered
 
 
 @pytest.mark.parametrize("name", sorted(HIGHER))

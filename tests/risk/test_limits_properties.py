@@ -59,6 +59,19 @@ changes = st.sampled_from([*LIMIT_NAMES, "bogus"]).flatmap(
 )
 
 
+# any starting point inside the caps, so a raise is judged against the current value, not a default
+start_limits = st.builds(
+    RiskLimits,
+    **{
+        name: st.decimals(
+            min_value=Decimal("0.0000001"), max_value=getattr(HARD_CAPS, name), places=7
+        )
+        for name in LIMIT_NAMES[:3]
+    },
+    max_open_positions=st.integers(min_value=1, max_value=HARD_CAPS.max_open_positions),
+)
+
+
 def within_caps(limits: RiskLimits) -> bool:
     return all(
         getattr(limits, name) <= getattr(HARD_CAPS, name)
@@ -81,12 +94,12 @@ def test_loaded_limits_never_exceed_caps(table: dict[str, str]) -> None:
     assert within_caps(loaded.limits)
 
 
-@given(st.lists(changes, max_size=20))
+@given(st.one_of(st.just(DEFAULT_LIMITS), start_limits), st.lists(changes, max_size=20))
 def test_change_sequences_never_exceed_caps_or_raise_via_telegram(
-    requests: list[LimitChange],
+    start: RiskLimits, requests: list[LimitChange]
 ) -> None:
     """AC-10 (BR-13): limitler hep kapsam içinde; Telegram'dan kabul edilen istek yükseltmez."""
-    limits = DEFAULT_LIMITS
+    limits = start
 
     for request in requests:
         decision = decide_change(limits, request)
