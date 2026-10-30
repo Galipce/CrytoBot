@@ -119,33 +119,60 @@ def test_position_limit_reached_is_rejected(offset: int) -> None:
     assert_rejected(result, ApprovalReason.POSITION_LIMIT, positions)
 
 
-INVALID_INPUTS: dict[str, tuple[dict[str, Any], object]] = {
-    "equity_zero": ({"account": replace(ACCOUNT, equity=Decimal("0"))}, "0"),
-    "equity_negative": ({"account": replace(ACCOUNT, equity=Decimal("-1"))}, "-1"),
-    "equity_nan": ({"account": replace(ACCOUNT, equity=Decimal("NaN"))}, "NaN"),
-    "free_negative": ({"account": replace(ACCOUNT, free_balance=Decimal("-1"))}, "-1"),
-    "free_above_equity": ({"account": replace(ACCOUNT, free_balance=Decimal("10001"))}, "10001"),
-    "free_inf": ({"account": replace(ACCOUNT, free_balance=Decimal("Infinity"))}, "Infinity"),
-    "positions_negative": ({"account": replace(ACCOUNT, open_positions=-1)}, "-1"),
-    "positions_fraction": ({"account": replace(ACCOUNT, open_positions=Decimal("1.5"))}, "1.5"),
-    "positions_bool": ({"account": replace(ACCOUNT, open_positions=True)}, "True"),
-    "fee_negative": ({"fee": Decimal("-0.001")}, "-0.001"),
-    "fee_one": ({"fee": Decimal("1")}, "1"),
-    "fee_float": ({"fee": 0.001}, "0.001"),
-    "step_zero": ({"rules": replace(RULES, amount_step=Decimal("0"))}, "0"),
-    "min_amount_negative": ({"rules": replace(RULES, min_amount=Decimal("-1"))}, "-1"),
-    "min_notional_nan": ({"rules": replace(RULES, min_notional=Decimal("NaN"))}, "NaN"),
+# each case names the field and its value together: a bare "0" or "-1" would also match another
+# field's message, so a rejection for the wrong reason could pass (VERIFY G-1)
+INVALID_INPUTS: dict[str, tuple[dict[str, Any], str]] = {
+    # free balance 0 too, or "free balance above equity" would reject it instead of the equity check
+    "equity_zero": (
+        {"account": replace(ACCOUNT, equity=Decimal("0"), free_balance=Decimal("0"))},
+        "kasa Decimal('0')",
+    ),
+    "equity_negative": ({"account": replace(ACCOUNT, equity=Decimal("-1"))}, "kasa Decimal('-1')"),
+    "equity_nan": ({"account": replace(ACCOUNT, equity=Decimal("NaN"))}, "kasa Decimal('NaN')"),
+    "free_negative": (
+        {"account": replace(ACCOUNT, free_balance=Decimal("-1"))},
+        "serbest bakiye Decimal('-1')",
+    ),
+    "free_above_equity": (
+        {"account": replace(ACCOUNT, free_balance=Decimal("10001"))},
+        "serbest bakiye 10001 kasadan",
+    ),
+    "free_inf": (
+        {"account": replace(ACCOUNT, free_balance=Decimal("Infinity"))},
+        "serbest bakiye Decimal('Infinity')",
+    ),
+    "positions_negative": ({"account": replace(ACCOUNT, open_positions=-1)}, "açık pozisyon -1"),
+    "positions_fraction": (
+        {"account": replace(ACCOUNT, open_positions=Decimal("1.5"))},
+        "açık pozisyon Decimal('1.5')",
+    ),
+    "positions_bool": ({"account": replace(ACCOUNT, open_positions=True)}, "açık pozisyon True"),
+    "fee_negative": ({"fee": Decimal("-0.001")}, "ücret Decimal('-0.001')"),
+    "fee_one": ({"fee": Decimal("1")}, "ücret Decimal('1')"),
+    "fee_float": ({"fee": 0.001}, "ücret 0.001"),
+    "step_zero": (
+        {"rules": replace(RULES, amount_step=Decimal("0"))},
+        "miktar adımı Decimal('0')",
+    ),
+    "min_amount_negative": (
+        {"rules": replace(RULES, min_amount=Decimal("-1"))},
+        "asgari miktar Decimal('-1')",
+    ),
+    "min_notional_nan": (
+        {"rules": replace(RULES, min_notional=Decimal("NaN"))},
+        "asgari tutar Decimal('NaN')",
+    ),
 }
 
 
 @pytest.mark.parametrize("case", list(INVALID_INPUTS))
 def test_invalid_input_is_rejected_naming_it(case: str) -> None:
-    """AC-8: kendi içinde geçersiz onay girdisi reddedilir ve adlandırılır."""
-    overrides, value = INVALID_INPUTS[case]
+    """AC-8: kendi içinde geçersiz onay girdisi reddedilir; mesaj alanı ve değerini adlandırır."""
+    overrides, named = INVALID_INPUTS[case]
 
     result = approve(**overrides)
 
-    assert_rejected(result, ApprovalReason.INVALID_INPUT, value)
+    assert_rejected(result, ApprovalReason.INVALID_INPUT, named)
 
 
 ABOVE_CAP = {
