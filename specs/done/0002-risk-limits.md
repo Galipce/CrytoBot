@@ -1,6 +1,6 @@
 # Spec 0002 — Risk limitleri ve sabit üst sınırlar
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0002-plan.md`
 
@@ -64,43 +64,43 @@ mesajlarıdır; komutlar `control` spec'inde gelir.)
 - Para/oran değerleri `decimal.Decimal`, asla `float` (`docs/conventions.md`, Data rules).
 
 ## Acceptance criteria
-- [ ] AC-1 — Dört limitin de üst sınır içinde yazıldığı bir config yüklenince limitler tam yazılan değerlerdir
+- [x] AC-1 — Dört limitin de üst sınır içinde yazıldığı bir config yüklenince limitler tam yazılan değerlerdir
   (ör. `0.1` drawdown tam olarak 0,1); hiçbiri "varsayılandan" işaretlenmez. (R-1, R-3, R-4)
-- [ ] AC-2 — Bazı limitleri eksik config'te eksikler BR varsayılanlarını alır ve yükleme sonucu tam olarak
+- [x] AC-2 — Bazı limitleri eksik config'te eksikler BR varsayılanlarını alır ve yükleme sonucu tam olarak
   onları "varsayılandan" diye adlandırır; limit içermeyen config'te ve risk bölümü hiç olmayan config'te
   dördü de varsayılandır. (R-3)
-- [ ] AC-3 — Her limit için: üst sınıra eşit değer kabul edilir; üst sınırın en küçük ondalık adım üstü
+- [x] AC-3 — Her limit için: üst sınıra eşit değer kabul edilir; üst sınırın en küçük ondalık adım üstü
   (ör. `0.0200001`, pozisyon için `9`) reddedilir ve hata limiti, değeri ve üst sınırı adlandırır. (R-2, R-5)
-- [ ] AC-4 — Geçersiz değerler reddedilir ve hata limiti adlandırır: sayı olmayan, `NaN`, sonsuz, sıfır,
+- [x] AC-4 — Geçersiz değerler reddedilir ve hata limiti adlandırır: sayı olmayan, `NaN`, sonsuz, sıfır,
   negatif oran; `0`, negatif, tam sayı olmayan veya mantıksal (`true`/`false`) pozisyon sayısı. Çok küçük
   pozitif oran (`0.0000001`) ve bilimsel gösterim (`1e-2`) kabul edilir. (R-4, R-5)
-- [ ] AC-5 — Bilinmeyen limit adı (yazım hatası, büyük/küçük harf veya boşluk farkı, ya da bir üst sınırı
+- [x] AC-5 — Bilinmeyen limit adı (yazım hatası, büyük/küçük harf veya boşluk farkı, ya da bir üst sınırı
   ayarlamaya çalışan anahtar) içeren config
   reddedilir ve hata adı söyler; birden fazla hatalı config'te tüm hatalar birlikte bildirilir. (R-2, R-5)
-- [ ] AC-6 — Değiştirme: düşürme ve aynı değer CLI'den de Telegram'dan da kabul edilir; yalnızca istenen limit
+- [x] AC-6 — Değiştirme: düşürme ve aynı değer CLI'den de Telegram'dan da kabul edilir; yalnızca istenen limit
   değişir, diğerleri aynı kalır. (R-6)
-- [ ] AC-7 — Telegram'dan artırma isteği (üst sınırın altında olsa bile) reddedilir, neden "Telegram'dan
+- [x] AC-7 — Telegram'dan artırma isteği (üst sınırın altında olsa bile) reddedilir, neden "Telegram'dan
   artırma" olarak adlandırılır ve limitler değişmez. (R-6, BR-13)
-- [ ] AC-8 — CLI'den artırma üst sınıra kadar (eşit dahil) kabul edilir; üst sınırı aşan değer her iki kanaldan
+- [x] AC-8 — CLI'den artırma üst sınıra kadar (eşit dahil) kabul edilir; üst sınırı aşan değer her iki kanaldan
   da reddedilir, neden "üst sınır aşımı" olarak adlandırılır ve limitler değişmez. (R-2, R-6)
-- [ ] AC-9 — Geçersiz değer, bilinmeyen limit adı veya bilinmeyen kanal taşıyan istek reddedilir, neden
+- [x] AC-9 — Geçersiz değer, bilinmeyen limit adı veya bilinmeyen kanal taşıyan istek reddedilir, neden
   adlandırılır ve limitler değişmez. (R-6)
-- [ ] AC-10 — Property testi: rastgele config girdileri ve rastgele (kanal, limit, değer) değiştirme istek
+- [x] AC-10 — Property testi: rastgele config girdileri ve rastgele (kanal, limit, değer) değiştirme istek
   dizileri için, kabul edilen her durumda tüm limitler üst sınır içindedir ve Telegram'dan gelen hiçbir kabul
   edilmiş istek bir limiti yükseltmemiştir. (R-7)
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation) — AC-1 / AC-9 regresyon boşlukları G-7…G-9 → B-4 (A-6)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 onay sonrası (sapmalar plan amendment A-1…A-6) |
+| Fix rounds | 4 (fix-1 review r1, fix-2 VERIFY r1, fix-3 VERIFY r2, fix-4 VERIFY r3 — R-06 istisna turu, A-5) |
+| Review findings: real / noise / deferred | 9 / 3 / 4 (r1: F-1, F-2, F-5/1 real; F-4, F-5/2 noise; F-3 defer B-3 · VERIFY r1…r3: G-1…G-6 real · VERIFY r4: G-7…G-9 defer B-4 · r5: Info-1 noise; r2…r4 temiz) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (henüz üretim yok) |
