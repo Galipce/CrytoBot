@@ -170,3 +170,22 @@ def test_scale_past_exact_range_is_a_named_rejection(step: Decimal, equity: Deci
 
     assert result.reason is ApprovalReason.INVALID_INPUT and result.amount is None
     assert PAIR in result.message and str(step) in result.message
+
+
+@pytest.mark.parametrize(
+    ("free", "amount", "limited"),
+    [
+        (Decimal("1926.8249"), Decimal("19.249"), False),
+        (Decimal("1926.8248"), Decimal("19.248"), True),
+    ],
+    ids=["same_steps", "one_step_fewer"],
+)
+def test_balance_limits_only_when_it_allows_fewer_steps(
+    free: Decimal, amount: Decimal, limited: bool
+) -> None:
+    """AC-3 (R-5): bakiye risk bütçesiyle aynı miktara izin veriyorsa sınırlayan o değildir."""
+    # AC-1 inputs: the budget allows 19.249, which costs exactly 1926.8249 with the fee
+    result = approve(account=replace(ACCOUNT, free_balance=free))
+
+    assert result.approved and result.amount == amount
+    assert result.limited_by_balance is limited
