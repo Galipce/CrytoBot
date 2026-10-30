@@ -122,7 +122,9 @@ def test_above_cap_is_rejected_from_any_channel(channel: str, name: str) -> None
 
     assert decision.reason is RejectReason.ABOVE_CAP
     assert decision.limits == CURRENT
-    assert name in decision.message and str(getattr(HARD_CAPS, name)) in decision.message
+    # the cap must be named on its own: "0.02" is also a prefix of the value "0.0200001"
+    without_value = decision.message.replace(str(ABOVE_CAP[name]), "")
+    assert name in decision.message and str(getattr(HARD_CAPS, name)) in without_value
 
 
 @pytest.mark.parametrize(

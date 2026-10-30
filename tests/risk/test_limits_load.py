@@ -86,7 +86,9 @@ def test_value_just_above_cap_is_rejected_naming_limit_value_cap(name: str) -> N
 
     [problem] = problems_of(risk_table(**{name: value}))
 
-    assert name in problem and value in problem and str(getattr(HARD_CAPS, name)) in problem
+    assert name in problem and value in problem
+    # the cap must be named on its own: "0.02" is also a prefix of the value "0.0200001"
+    assert str(getattr(HARD_CAPS, name)) in problem.replace(value, "")
 
 
 def test_hard_caps_are_the_spec_values() -> None:
