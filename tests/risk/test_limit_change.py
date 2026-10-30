@@ -35,6 +35,12 @@ HIGHER = {
     "max_drawdown": Decimal("0.2"),
     "max_open_positions": 7,
 }
+BETWEEN_CURRENT_AND_HIGHER = {
+    "per_trade_risk": Decimal("0.012"),
+    "daily_loss_limit": Decimal("0.035"),
+    "max_drawdown": Decimal("0.18"),
+    "max_open_positions": 6,
+}
 ABOVE_CAP = {
     "per_trade_risk": Decimal("0.0200001"),
     "daily_loss_limit": Decimal("0.0500001"),
@@ -77,6 +83,18 @@ def test_lowering_or_same_value_accepted_from_any_channel(
 
 
 @pytest.mark.parametrize("name", sorted(HIGHER))
+@pytest.mark.parametrize("channel", CHANNELS)
+def test_lowering_from_raised_value_accepted_from_any_channel(channel: str, name: str) -> None:
+    """AC-6 (BR-13): CLI'den yükseltilmiş limit, varsayılanın üstünde de olsa her kanaldan düşer."""
+    raised = with_limit(CURRENT, name, HIGHER[name])
+
+    decision = decide_change(raised, LimitChange(name, BETWEEN_CURRENT_AND_HIGHER[name], channel))
+
+    assert decision.accepted
+    assert decision.limits == with_limit(raised, name, BETWEEN_CURRENT_AND_HIGHER[name])
+
+
+@pytest.mark.parametrize("name", sorted(HIGHER))
 def test_telegram_increase_is_rejected(name: str) -> None:
     """AC-7 (BR-13): Telegram'dan artırma, üst sınırın altında olsa bile reddedilir."""
     decision = decide_change(CURRENT, LimitChange(name, HIGHER[name], "telegram"))
@@ -112,6 +130,20 @@ def test_cli_increase_up_to_cap_is_accepted(name: str, start: str) -> None:
 
     assert raised.accepted and raised.limits == with_limit(current, name, HIGHER[name])
     assert at_cap.accepted and at_cap.limits == with_limit(current, name, cap)
+
+
+@pytest.mark.parametrize("name", sorted(LOWER))
+def test_cli_increase_from_lowered_value_is_accepted(name: str) -> None:
+    """AC-8: düşürülmüş limit CLI'den geri artırılır: varsayılanın altına da, üst sınıra da."""
+    lowered = with_limit(CURRENT, name, LOWER[name])
+    cap = getattr(HARD_CAPS, name)
+
+    partly = decide_change(lowered, LimitChange(name, BETWEEN_LOWER_AND_CURRENT[name], "cli"))
+    at_cap = decide_change(lowered, LimitChange(name, cap, "cli"))
+
+    assert partly.accepted
+    assert partly.limits == with_limit(lowered, name, BETWEEN_LOWER_AND_CURRENT[name])
+    assert at_cap.accepted and at_cap.limits == with_limit(lowered, name, cap)
 
 
 @pytest.mark.parametrize("name", sorted(ABOVE_CAP))
