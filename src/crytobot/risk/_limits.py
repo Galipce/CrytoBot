@@ -188,3 +188,13 @@ def decide_change(current: RiskLimits, change: LimitChange) -> ChangeDecision:
         )
     values[change.limit] = checked
     return ChangeDecision(_build(values), None, f"{change.limit}: {checked} kabul edildi")
+
+
+def _limit_problems(limits: RiskLimits) -> list[str]:
+    """Limitleri nereden kurulmuş olursa olsun alan alan doğrular (spec 0003 R-7, B-3)."""
+    problems = []
+    for name, value in _values(limits).items():
+        checked = _validate(name, value)
+        if isinstance(checked, _Problem):
+            problems.append(checked.message)
+    return problems

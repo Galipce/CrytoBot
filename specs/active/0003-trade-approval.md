@@ -1,6 +1,6 @@
 # Spec 0003 — İşlem önerisi onayı: stop, boyutlama, pozisyon sayısı
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0003-plan.md`
 
