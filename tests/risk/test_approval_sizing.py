@@ -153,3 +153,20 @@ def test_tiny_step_gives_a_result_not_an_error() -> None:
     )
 
     assert result.approved and result.amount == Decimal("2000")  # budget 1000 / loss 0.5 per unit
+
+
+@pytest.mark.parametrize(
+    ("step", "equity"),
+    [(Decimal("1E-999999"), Decimal("100000")), (Decimal("0.001"), Decimal("1E+999999"))],
+    ids=["tiny_step", "huge_equity"],
+)
+def test_scale_past_exact_range_is_a_named_rejection(step: Decimal, equity: Decimal) -> None:
+    """R-1: tam hesabın üs sınırını aşan girdi istisna değil, "geçersiz girdi" reddidir."""
+    result = approve(
+        intent=TradeIntent(PAIR, "buy", Decimal("1"), Decimal("0.5")),
+        account=AccountState(equity, equity, 0),
+        rules=PairRules(step, Decimal("0"), Decimal("0")),
+    )
+
+    assert result.reason is ApprovalReason.INVALID_INPUT and result.amount is None
+    assert PAIR in result.message and str(step) in result.message

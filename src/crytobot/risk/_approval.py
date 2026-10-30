@@ -2,7 +2,7 @@
 
 from collections.abc import Set
 from dataclasses import dataclass
-from decimal import MAX_PREC, Decimal, Inexact, localcontext
+from decimal import MAX_PREC, Decimal, DecimalException, Inexact, localcontext
 from enum import Enum
 from typing import cast
 
@@ -165,18 +165,26 @@ def _size(
         )
     )
     # exact arithmetic: a rounded comparison could approve one step more than the budget allows
-    with localcontext() as exact:
-        exact.prec = MAX_PREC
-        exact.traps[Inexact] = True
-        budget = equity * limits.per_trade_risk
-        unit_loss = (entry - stop) + entry * rate + stop * rate
-        unit_cost = entry * (1 + rate)
-        # integer division is never rounded here: the quotient is the largest step count that fits
-        by_risk = budget // (step * unit_loss)
-        by_balance = free // (step * unit_cost)
-        limited_by_balance = by_balance < by_risk
-        amount = min(by_risk, by_balance) * step
-        notional = amount * entry
+    try:
+        with localcontext() as exact:
+            exact.prec = MAX_PREC
+            exact.traps[Inexact] = True
+            budget = equity * limits.per_trade_risk
+            unit_loss = (entry - stop) + entry * rate + stop * rate
+            unit_cost = entry * (1 + rate)
+            # integer division is never rounded here: the quotient is the largest fitting step count
+            by_risk = budget // (step * unit_loss)
+            by_balance = free // (step * unit_cost)
+            limited_by_balance = by_balance < by_risk
+            amount = min(by_risk, by_balance) * step
+            notional = amount * entry
+    except DecimalException:  # a value past the context's exponent range: no exact answer exists
+        return TradeApproval(
+            None,
+            ApprovalReason.INVALID_INPUT,
+            False,
+            f"{pair!r}: geçersiz girdi: ölçek hesaplanamıyor (adım {step}, kasa {equity})",
+        )
     if amount <= 0 or amount < min_amount or notional < min_notional:
         return TradeApproval(
             None,
