@@ -94,6 +94,28 @@ def test_lowering_from_raised_value_accepted_from_any_channel(channel: str, name
     assert decision.limits == with_limit(raised, name, BETWEEN_CURRENT_AND_HIGHER[name])
 
 
+HELD = {
+    "raised": HIGHER,
+    "lowered": LOWER,
+    "cap": {name: getattr(HARD_CAPS, name) for name in HIGHER},
+}
+
+
+@pytest.mark.parametrize("held", sorted(HELD))
+@pytest.mark.parametrize("name", sorted(HIGHER))
+@pytest.mark.parametrize("channel", CHANNELS)
+def test_same_value_off_default_accepted_from_any_channel(
+    channel: str, name: str, held: str
+) -> None:
+    """AC-6 (BR-13): aynı değer, limit varsayılanında değilken de her kanaldan kabul edilir."""
+    value = HELD[held][name]
+    current = with_limit(CURRENT, name, value)
+
+    decision = decide_change(current, LimitChange(name, value, channel))
+
+    assert decision.accepted and decision.limits == current
+
+
 @pytest.mark.parametrize("name", sorted(HIGHER))
 def test_telegram_increase_is_rejected(name: str) -> None:
     """AC-7 (BR-13): Telegram'dan artırma, üst sınırın altında olsa bile reddedilir."""
