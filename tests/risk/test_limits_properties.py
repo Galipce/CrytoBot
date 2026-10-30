@@ -107,7 +107,13 @@ def test_change_sequences_never_exceed_caps_or_raise_via_telegram(
         assert within_caps(decision.limits)
         if not decision.accepted:
             assert decision.limits == limits
-        elif request.channel == "telegram":
+        else:  # AC-6: only the requested limit may change
+            assert all(
+                getattr(decision.limits, name) == getattr(limits, name)
+                for name in LIMIT_NAMES
+                if name != request.limit
+            )
+        if decision.accepted and request.channel == "telegram":
             assert all(
                 getattr(decision.limits, name) <= getattr(limits, name) for name in LIMIT_NAMES
             )

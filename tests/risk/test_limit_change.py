@@ -47,16 +47,33 @@ def with_limit(limits: RiskLimits, name: str, value: Any) -> RiskLimits:
     return replace(limits, **{name: value})
 
 
+def start_for(name: str, start: str) -> RiskLimits:
+    """Defaults, or every limit but `name` already lowered: a change must leave them alone."""
+    limits = CURRENT
+    if start == "others_lowered":
+        for other in LOWER.keys() - {name}:
+            limits = with_limit(limits, other, LOWER[other])
+    return limits
+
+
+STARTS = ["default", "others_lowered"]
+
+
+@pytest.mark.parametrize("start", STARTS)
 @pytest.mark.parametrize("name", sorted(LOWER))
 @pytest.mark.parametrize("channel", CHANNELS)
-def test_lowering_or_same_value_accepted_from_any_channel(channel: str, name: str) -> None:
+def test_lowering_or_same_value_accepted_from_any_channel(
+    channel: str, name: str, start: str
+) -> None:
     """AC-6 (BR-13): düşürme ve aynı değer her kanaldan kabul; yalnızca istenen limit değişir."""
-    lowered = decide_change(CURRENT, LimitChange(name, LOWER[name], channel))
-    same = decide_change(CURRENT, LimitChange(name, getattr(CURRENT, name), channel))
+    current = start_for(name, start)
+
+    lowered = decide_change(current, LimitChange(name, LOWER[name], channel))
+    same = decide_change(current, LimitChange(name, getattr(current, name), channel))
 
     assert lowered.accepted and lowered.reason is None
-    assert lowered.limits == with_limit(CURRENT, name, LOWER[name])
-    assert same.accepted and same.limits == CURRENT
+    assert lowered.limits == with_limit(current, name, LOWER[name])
+    assert same.accepted and same.limits == current
 
 
 @pytest.mark.parametrize("name", sorted(HIGHER))
@@ -83,16 +100,18 @@ def test_telegram_increase_from_lowered_value_is_rejected(name: str) -> None:
     assert decision.limits == lowered
 
 
+@pytest.mark.parametrize("start", STARTS)
 @pytest.mark.parametrize("name", sorted(HIGHER))
-def test_cli_increase_up_to_cap_is_accepted(name: str) -> None:
-    """AC-8: CLI'den artırma üst sınıra kadar (eşit dahil) kabul edilir."""
+def test_cli_increase_up_to_cap_is_accepted(name: str, start: str) -> None:
+    """AC-8: CLI'den artırma üst sınıra kadar (eşit dahil) kabul; diğer limitler aynı kalır."""
+    current = start_for(name, start)
     cap = getattr(HARD_CAPS, name)
 
-    raised = decide_change(CURRENT, LimitChange(name, HIGHER[name], "cli"))
-    at_cap = decide_change(CURRENT, LimitChange(name, cap, "cli"))
+    raised = decide_change(current, LimitChange(name, HIGHER[name], "cli"))
+    at_cap = decide_change(current, LimitChange(name, cap, "cli"))
 
-    assert raised.accepted and raised.limits == with_limit(CURRENT, name, HIGHER[name])
-    assert at_cap.accepted and at_cap.limits == with_limit(CURRENT, name, cap)
+    assert raised.accepted and raised.limits == with_limit(current, name, HIGHER[name])
+    assert at_cap.accepted and at_cap.limits == with_limit(current, name, cap)
 
 
 @pytest.mark.parametrize("name", sorted(ABOVE_CAP))
