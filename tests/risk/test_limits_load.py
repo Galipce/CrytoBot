@@ -1,5 +1,6 @@
 """Spec 0002 AC-1…AC-5: risk limitlerinin config'ten yüklenmesi ve doğrulanması (BR-4…BR-7)."""
 
+import tomllib
 from decimal import Decimal
 
 import pytest
@@ -132,9 +133,11 @@ def test_hard_caps_are_the_spec_values() -> None:
 )
 def test_invalid_value_is_rejected_naming_limit(name: str, value: str) -> None:
     """AC-4: sayı olmayan, NaN, sonsuz, sıfır, negatif, kesirli veya mantıksal değer reddedilir."""
+    written = tomllib.loads(f"v = {value}", parse_float=Decimal)["v"]
+
     [problem] = problems_of(risk_table(**{name: value}))
 
-    assert name in problem
+    assert name in problem and str(written) in problem  # R-5: limit and the given value
 
 
 @pytest.mark.parametrize("value", ["0.0000001", "1e-2", "2E-2"])
@@ -161,7 +164,7 @@ def test_unknown_limit_name_is_rejected(key: str) -> None:
     """AC-5: adlar birebir eşleşir; üst sınırı ayarlamaya çalışan anahtar da bilinmeyendir."""
     [problem] = problems_of(f"[risk]\n{key} = 0.01\n")
 
-    assert key.strip('"') in problem and "bilinmeyen" in problem
+    assert key.strip('"') in problem and "0.01" in problem and "bilinmeyen" in problem
 
 
 def test_all_problems_reported_together() -> None:

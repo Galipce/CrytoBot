@@ -119,7 +119,11 @@ def load_limits(toml_text: str) -> LoadedLimits:
     section = document.get("risk", {})
     if not isinstance(section, dict):
         raise RiskConfigError(("risk: bir tablo olmalı",))
-    problems = [f"{key!r}: bilinmeyen limit adı" for key in section if key not in LIMIT_NAMES]
+    problems = [
+        f"{key!r} = {value}: bilinmeyen limit adı"
+        for key, value in section.items()
+        if key not in LIMIT_NAMES
+    ]
     values = _values(DEFAULT_LIMITS)
     for name in LIMIT_NAMES:
         if name in section:
