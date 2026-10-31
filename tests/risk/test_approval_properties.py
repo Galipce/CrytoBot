@@ -2,6 +2,7 @@
 onaylanan öneri hiçbir kuralı ihlal etmez."""
 
 from dataclasses import replace
+from datetime import UTC, datetime
 from decimal import Decimal
 from fractions import Fraction
 from math import floor
@@ -11,14 +12,17 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from crytobot.risk import (
+    EMPTY_STATE,
     HARD_CAPS,
     AccountState,
     ApprovalReason,
     PairRules,
     RiskLimits,
+    RiskState,
     TradeApproval,
     TradeIntent,
     approve_trade,
+    observe,
 )
 
 WHITELIST = frozenset({"BTC/USDT", "ETH/USDT"})
@@ -27,6 +31,15 @@ RATIO_CAPS = {
     "daily_loss_limit": HARD_CAPS.daily_loss_limit,
     "max_drawdown": HARD_CAPS.max_drawdown,
 }
+
+
+# spec 0004 R-7: approval takes a risk state; a fresh one (no lock, same equity) keeps 0003 as is
+NOW = datetime(2026, 11, 2, 10, 0, tzinfo=UTC)
+
+
+def fresh_state(account: AccountState, limits: RiskLimits) -> RiskState:
+    return observe(EMPTY_STATE, NOW, account.equity, limits).state
+
 
 # values that break a field: wrong type, not finite, negative, zero, or just past a bound
 JUNK = [Decimal("NaN"), Decimal("Infinity"), Decimal("-1"), Decimal("0"), True, 0.5, "1", None]
@@ -195,7 +208,8 @@ def test_approval_matches_exact_oracle(
 ) -> None:
     """AC-10 (R-5, R-8): her girdide neden, miktar ve bakiye sınırı modelinkiyle birebir aynı."""
     intent, limits, account, rules, fee = case
-    result = approve_trade(intent, limits, account, rules, WHITELIST, fee)
+    state = fresh_state(account, limits)
+    result = approve_trade(intent, limits, account, rules, WHITELIST, fee, state, NOW)
 
     assert actual(result) == oracle(case)
 
@@ -207,7 +221,8 @@ def test_approved_trades_hold_invariants(
 ) -> None:
     """AC-10 (R-9, BR-2…BR-4, BR-7): onaylanan öneri sınırlar içinde; bir adım fazlası taşar."""
     intent, limits, account, rules, fee = case
-    result = approve_trade(intent, limits, account, rules, WHITELIST, fee)
+    state = fresh_state(account, limits)
+    result = approve_trade(intent, limits, account, rules, WHITELIST, fee, state, NOW)
     if not result.approved:
         assert result.amount is None
         return

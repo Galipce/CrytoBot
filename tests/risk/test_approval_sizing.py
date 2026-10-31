@@ -1,18 +1,23 @@
 """Spec 0003 AC-1…AC-4: onaylı miktar risk bütçesi, serbest bakiye ve borsa kurallarıyla (BR-4)."""
 
 from dataclasses import replace
+from datetime import UTC, datetime
 from decimal import MAX_PREC, Context, Decimal
 
 import pytest
 
 from crytobot.risk import (
     DEFAULT_LIMITS,
+    EMPTY_STATE,
     AccountState,
     ApprovalReason,
     PairRules,
+    RiskLimits,
+    RiskState,
     TradeApproval,
     TradeIntent,
     approve_trade,
+    observe,
 )
 
 PAIR = "BTC/USDT"
@@ -23,13 +28,22 @@ RULES = PairRules(STEP, Decimal("0.001"), Decimal("5"))
 FEE = Decimal("0.001")
 
 
+# spec 0004 R-7: approval takes a risk state; a fresh one (no lock, same equity) keeps 0003 as is
+NOW = datetime(2026, 11, 2, 10, 0, tzinfo=UTC)
+
+
+def fresh_state(account: AccountState, limits: RiskLimits) -> RiskState:
+    return observe(EMPTY_STATE, NOW, account.equity, limits).state
+
+
 def approve(
     intent: TradeIntent = INTENT,
     account: AccountState = ACCOUNT,
     rules: PairRules = RULES,
     fee: Decimal = FEE,
 ) -> TradeApproval:
-    return approve_trade(intent, DEFAULT_LIMITS, account, rules, frozenset({PAIR}), fee)
+    state = fresh_state(account, DEFAULT_LIMITS)
+    return approve_trade(intent, DEFAULT_LIMITS, account, rules, frozenset({PAIR}), fee, state, NOW)
 
 
 def loss_at_stop(amount: Decimal, intent: TradeIntent, fee: Decimal) -> Decimal:
@@ -117,13 +131,16 @@ def equity_for_one_unit(entry: Decimal, short_by: Decimal = Decimal(0)) -> Decim
 
 def approve_one_unit(entry: Decimal, equity: Decimal) -> TradeApproval:
     limits = replace(DEFAULT_LIMITS, per_trade_risk=Decimal("0.02"))
+    account = AccountState(equity, equity, 0)
     return approve_trade(
         TradeIntent(PAIR, "buy", entry, STOP_ONE),
         limits,
-        AccountState(equity, equity, 0),
+        account,
         PairRules(Decimal("1"), Decimal("0"), Decimal("0")),
         frozenset({PAIR}),
         Decimal("0"),
+        fresh_state(account, limits),
+        NOW,
     )
 
 

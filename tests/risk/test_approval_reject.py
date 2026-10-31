@@ -1,6 +1,7 @@
 """Spec 0003 AC-5…AC-9: işlem önerisinin reddi ve ret nedeninin sırası (BR-2, BR-3, BR-7)."""
 
 from dataclasses import replace
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -8,14 +9,17 @@ import pytest
 
 from crytobot.risk import (
     DEFAULT_LIMITS,
+    EMPTY_STATE,
     HARD_CAPS,
     AccountState,
     ApprovalReason,
     PairRules,
     RiskLimits,
+    RiskState,
     TradeApproval,
     TradeIntent,
     approve_trade,
+    observe,
 )
 
 PAIR = "BTC/USDT"
@@ -26,6 +30,14 @@ RULES = PairRules(Decimal("0.001"), Decimal("0.001"), Decimal("5"))
 FEE = Decimal("0.001")
 
 
+# spec 0004 R-7: approval takes a risk state; a fresh one (no lock, same equity) keeps 0003 as is
+NOW = datetime(2026, 11, 2, 10, 0, tzinfo=UTC)
+
+
+def fresh_state(account: AccountState, limits: RiskLimits) -> RiskState:
+    return observe(EMPTY_STATE, NOW, account.equity, limits).state
+
+
 def approve(
     intent: TradeIntent = INTENT,
     limits: RiskLimits = DEFAULT_LIMITS,
@@ -34,7 +46,8 @@ def approve(
     whitelist: frozenset[str] = WHITELIST,
     fee: Any = FEE,
 ) -> TradeApproval:
-    return approve_trade(intent, limits, account, rules, whitelist, fee)
+    state = fresh_state(account, limits)
+    return approve_trade(intent, limits, account, rules, whitelist, fee, state, NOW)
 
 
 def with_limit(name: str, value: Any) -> RiskLimits:
