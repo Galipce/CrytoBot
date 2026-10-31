@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests.tooling.conftest import Project
+from tests.tooling.conftest import Project, check_step
 
 pytestmark = pytest.mark.slow
 
@@ -93,3 +93,10 @@ def test_same_flow_is_red_when_indirect_imports_are_forbidden(project: Project) 
     broken = [line.split(":", 1)[0] for line in result.stdout.splitlines() if "BROKEN" in line]
     assert result.returncode != 0
     assert {"R-3a", "R-3b"} <= set(broken)
+
+
+def test_clean_tree_passes_with_output_discarded(project: Project) -> None:
+    """B-7: çıktısı atılan (`>/dev/null`) sınır adımı da yeşil; Windows CI ile aynı sonucu verir."""
+    result = project.run(check_step("boundaries") + " >/dev/null 2>&1")
+
+    assert result.returncode == 0

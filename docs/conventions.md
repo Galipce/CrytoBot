@@ -50,6 +50,9 @@
   çalışmaz — `git update-index --chmod=+x <yol>`, modu `git ls-files -s` ile doğrula; pathspec'li commit
   (`git commit -- <yol>`) index'teki mod değişikliğini görmez, yalnız o dosya staged iken index'ten commit'le
   — from bug-001, review round 1 L-1
+- Windows'ta `NUL` (`/dev/null`) bir karakter aygıtıdır ve `isatty()` `True` döner: rich kullanan araçlar
+  (import-linter) çıktı atılınca terminal sanıp spinner/emoji çizer, cp1254 ile yazamaz (`UnicodeEncodeError`)
+  ve adım yanlış kırmızı olur — bu tür adımlara `PYTHONUTF8=1` — from B-7 (spec 0003, review round 4 F-9)
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
