@@ -4,6 +4,9 @@ Risk limitleri config'in `[risk]` tablosundan okunur: `per_trade_risk`, `daily_l
 `max_drawdown` (kasaya oran, `0.01` = %1) ve `max_open_positions` (tam sayı).
 Sabit üst sınırlar: `HARD_CAPS`. Alım önerileri `approve_trade` ile onaylanır: stop zorunlu, miktar
 risk bütçesi ve serbest bakiyeyle sınırlı, borsa adımına aşağı yuvarlanmış.
+Kasa `observe` ile `RiskState`'e gözlenir (gün başı, zirve, drawdown durdurması); onay bu
+durumu ister ve günlük zarar ya da drawdown limitinde reddeder; durdurmayı yalnızca CLI `resume`
+ile kaldırır.
 """
 
 from crytobot.risk._approval import (
