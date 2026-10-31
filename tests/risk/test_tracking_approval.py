@@ -146,3 +146,14 @@ def test_fresh_state_matches_spec_0003() -> None:
     result = approve(observed("10000"), "10000")
 
     assert result.approved and result.amount == Decimal("19.249")
+
+
+def test_equity_past_the_default_exponent_range_is_a_named_rejection() -> None:
+    """R-7 (spec 0003 R-1): aşırı ölçekli kasa istisna değil, spec 0003'teki "ölçek" reddidir."""
+    huge = "1E+999999999"
+    state = observe(EMPTY_STATE, NOW, Decimal(huge), DEFAULT_LIMITS).state
+
+    result = approve(state, huge)
+
+    assert result.reason is ApprovalReason.INVALID_INPUT and result.amount is None
+    assert "ölçek hesaplanamıyor" in result.message

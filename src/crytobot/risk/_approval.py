@@ -3,7 +3,7 @@
 from collections.abc import Set
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import MAX_PREC, Decimal, DecimalException, Inexact, localcontext
+from decimal import MAX_EMAX, MAX_PREC, MIN_EMIN, Decimal, DecimalException, Inexact, localcontext
 from enum import Enum
 from typing import TYPE_CHECKING, cast
 
@@ -83,6 +83,8 @@ def _reached(reference: Decimal, equity: Decimal, limit: Decimal) -> bool:
     """(referans - kasa) / referans >= limit; bölmeden, tam çarpımla (sınırda yuvarlama yok)."""
     with localcontext() as exact:
         exact.prec = MAX_PREC
+        # the exponent range too: a finite equity past the default Emax would raise Overflow
+        exact.Emax, exact.Emin = MAX_EMAX, MIN_EMIN
         exact.traps[Inexact] = True
         return reference - equity >= limit * reference
 

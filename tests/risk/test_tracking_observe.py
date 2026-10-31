@@ -140,3 +140,10 @@ def test_observation_with_invalid_limits_is_rejected() -> None:
 
     assert update.reason is TrackingReason.INVALID_OBSERVATION and update.state == state
     assert "max_drawdown" in update.message
+
+
+def test_equity_past_the_default_exponent_range_is_observed() -> None:
+    """R-6: sonlu, pozitif her kasa bir sonuç verir; varsayılan üs sınırını aşan kasa da."""
+    update = observe(EMPTY_STATE, T0, Decimal("1E+999999999"), DEFAULT_LIMITS)
+
+    assert update.accepted and update.state.peak_equity == Decimal("1E+999999999")
