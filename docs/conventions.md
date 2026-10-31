@@ -56,6 +56,9 @@
 - Tam decimal bağlamı (`MAX_PREC` + `Inexact` trap) üs aralığını genişletmez: varsayılan `Emax`'ı aşan sonlu bir
   değer `Overflow` fırlatır — riskteki her tam hesap ya `MAX_EMAX`/`MIN_EMIN` ayarlar ya da `DecimalException`'ı
   adlandırılmış rede çevirir — from spec 0004, review round 1 F-1
+- Üs aralığını genişletmek tam toplama/çıkarmayı güvenli kılmaz: `1E+N - 1` ~N basamak üretir, büyük N'de
+  `MemoryError` (yakalanmaz, fail-closed değil) — değerin ölçeği girişte sınırlanır (riskte `_in_scale`, ±999999)
+  — from spec 0004, review round 2 F-6
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
