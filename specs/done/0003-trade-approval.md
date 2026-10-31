@@ -1,6 +1,6 @@
 # Spec 0003 — İşlem önerisi onayı: stop, boyutlama, pozisyon sayısı
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0003-plan.md`
 
@@ -73,48 +73,48 @@ sonraki spec'lerde bağlanır. Sahibin göreceği tek yüzey ret mesajlarıdır.
 - Para/oran/fiyat/miktar değerleri `decimal.Decimal`, asla `float` (`docs/conventions.md`, Data rules).
 
 ## Acceptance criteria
-- [ ] AC-1 — Mutlu yol: kasa `10000`, serbest bakiye `5000`, işlem başına risk `0.01`, giriş `100`, stop `95`,
+- [x] AC-1 — Mutlu yol: kasa `10000`, serbest bakiye `5000`, işlem başına risk `0.01`, giriş `100`, stop `95`,
   ücret `0.001`, adım `0.001`, asgari miktar `0.001`, asgari tutar `5`, açık pozisyon `0`, limit `5`,
   çift beyaz listede → onaylı miktar tam olarak `19.249`; serbest bakiyeyle sınırlanmadığı belirtilir. (R-5)
-- [ ] AC-2 — Aşağı yuvarlama ve en büyüklük: AC-1'de onaylı miktarın kaybı (`99.998555`) risk bütçesi
+- [x] AC-2 — Aşağı yuvarlama ve en büyüklük: AC-1'de onaylı miktarın kaybı (`99.998555`) risk bütçesi
   `100`'ü aşmaz, bir adım fazlası (`19.250`, kayıp `100.00375`) aşar. Kayıp tam olarak bütçeye eşit
   olduğunda o miktar onaylanır: kasa `10000`, serbest bakiye `5000`, risk `0.01`, giriş `100`, stop `90`,
   ücret `0` → miktar tam olarak `10`. (R-5)
-- [ ] AC-3 — Serbest bakiye sınırı: AC-1 girdileri, serbest bakiye `1000` → onaylı miktar `9.990` ve sonuç
+- [x] AC-3 — Serbest bakiye sınırı: AC-1 girdileri, serbest bakiye `1000` → onaylı miktar `9.990` ve sonuç
   serbest bakiyeyle sınırlandığını belirtir; serbest bakiye `0` → "borsa asgarisinin altında" reddi. (R-5, R-6)
-- [ ] AC-4 — Borsa asgarisi: onaylı miktar asgari miktara veya miktar × giriş asgari tutara eşitse onaylanır;
+- [x] AC-4 — Borsa asgarisi: onaylı miktar asgari miktara veya miktar × giriş asgari tutara eşitse onaylanır;
   bir adım altıysa "borsa asgarisinin altında" nedeniyle reddedilir. (R-6)
-- [ ] AC-5 — Stop zorunlu: stop yok, `0`, negatif, girişe eşit, girişin üstünde, `NaN`, sonsuz → "geçersiz
+- [x] AC-5 — Stop zorunlu: stop yok, `0`, negatif, girişe eşit, girişin üstünde, `NaN`, sonsuz → "geçersiz
   stop" reddi; giriş `0`, negatif, `NaN`, sonsuz → "geçersiz giriş" reddi. Girişin çok altında (ör. `0.01`)
   stop kabul edilir. (R-3)
-- [ ] AC-6 — Yön ve beyaz liste: satış önerisi "alım dışı yön"; beyaz listede olmayan, büyük/küçük harf veya
+- [x] AC-6 — Yön ve beyaz liste: satış önerisi "alım dışı yön"; beyaz listede olmayan, büyük/küçük harf veya
   boşluk farkı olan çift "beyaz liste dışı" nedeniyle reddedilir. (R-2)
-- [ ] AC-7 — Pozisyon limiti: açık pozisyon = limit − 1 → onay; = limit veya üstü → "pozisyon limiti dolu"
+- [x] AC-7 — Pozisyon limiti: açık pozisyon = limit − 1 → onay; = limit veya üstü → "pozisyon limiti dolu"
   reddi; aynı çiftte açık pozisyon olması tek başına ret nedeni değildir. (R-4)
-- [ ] AC-8 — Geçersiz girdiler: kasa `0`/negatif, serbest bakiye negatif, açık pozisyon negatif veya tam
+- [x] AC-8 — Geçersiz girdiler: kasa `0`/negatif, serbest bakiye negatif, açık pozisyon negatif veya tam
   sayı olmayan, serbest bakiye kasadan büyük, ücret negatif veya `≥ 1`, adım `0`, sonsuz/`NaN` değerler,
   sabit üst sınırı aşan ya da geçersiz bir risk limiti → "geçersiz girdi" reddi ve geçersiz girdi
   adlandırılır. (R-7)
-- [ ] AC-9 — Her ret nedeninde miktar üretilmez ve mesaj çifti ve ilgili değeri adlandırır; birden fazla
+- [x] AC-9 — Her ret nedeninde miktar üretilmez ve mesaj çifti ve ilgili değeri adlandırır; birden fazla
   sorunu olan öneride R-8'deki sıradaki ilk neden döner (ör. satış yönlü ve stop'suz öneri → "alım dışı
   yön"; geçersiz kasa ve beyaz liste dışı çift → "geçersiz girdi"). (R-8)
-- [ ] AC-10 — Property testi: rastgele öneri ve girdiler için sonuç, beklenen sonucu bağımsız hesaplayan
+- [x] AC-10 — Property testi: rastgele öneri ve girdiler için sonuç, beklenen sonucu bağımsız hesaplayan
   modelle aynıdır; onaylanan her öneride stop'ta ücret dahil kayıp ≤ kasa × işlem başına risk, alış tutarı
   ücret dahil ≤ serbest bakiye, miktar adımın katı ve asgarilerin üstünde, stop < giriş, çift beyaz listede,
   açık pozisyon < limit; ve bir adım fazlası bu sınırlardan birini ihlal eder. (R-5, R-9)
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 onay sonrası (sapmalar plan amendment A-1…A-6) |
+| Fix rounds | 3 (fix-1 review r1, fix-2 review r2, fix-3 VERIFY r1) |
+| Review findings: real / noise / deferred | 9 / 3 / 4 (r1: F-1…F-5 real · r2: F-6, F-7 real · r3: F-8 defer B-5 · r4: temiz, F-9 defer B-7 · VERIFY r1: G-1, G-2 real; G-3 defer B-6; G-4, G-5 noise · VERIFY r2: G-6 defer B-8; G-7 noise) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (henüz üretim yok) |
