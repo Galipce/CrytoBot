@@ -142,8 +142,28 @@ def test_observation_with_invalid_limits_is_rejected() -> None:
     assert "max_drawdown" in update.message
 
 
-def test_equity_past_the_default_exponent_range_is_observed() -> None:
-    """R-6: sonlu, pozitif her kasa bir sonuç verir; varsayılan üs sınırını aşan kasa da."""
-    update = observe(EMPTY_STATE, T0, Decimal("1E+999999999"), DEFAULT_LIMITS)
+@pytest.mark.parametrize(
+    ("equity", "accepted"),
+    [("9.99E+999999", True), ("1E+1000000", False), ("1E-999999", True), ("9.9E-1000000", False)],
+    ids=["huge_in_range", "huge_past_range", "tiny_in_range", "tiny_past_range"],
+)
+def test_equity_scale_is_bounded_by_the_default_exponent_range(equity: str, accepted: bool) -> None:
+    """R-6 (A-2): üssü varsayılan decimal aralığı (±999999) dışındaki kasa adlandırılmış rettir."""
+    update = observe(EMPTY_STATE, T0, Decimal(equity), DEFAULT_LIMITS)
 
-    assert update.accepted and update.state.peak_equity == Decimal("1E+999999999")
+    assert update.accepted is accepted
+    if not accepted:
+        assert update.reason is TrackingReason.INVALID_OBSERVATION and update.state == EMPTY_STATE
+        assert "ölçeği" in update.message
+
+
+@pytest.mark.parametrize(
+    "equities",
+    [("1E+999999", "1"), ("10000", "1E-999999"), ("1E+999999", "1E-999999")],
+    ids=["huge_peak_then_one", "peak_then_tiny", "range_ends"],
+)
+def test_equities_far_apart_in_scale_give_a_result(equities: tuple[str, str]) -> None:
+    """R-6 (A-2): aralık içindeki kasa çifti MemoryError değil, sonuç verir (durdurma)."""
+    state = observed(*equities)
+
+    assert state.halted

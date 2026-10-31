@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import Enum
 
-from crytobot.risk._approval import _number, _reached
+from crytobot.risk._approval import SCALE, _in_scale, _number, _reached
 from crytobot.risk._limits import Channel, RiskLimits, _limit_problems
 
 
@@ -58,6 +58,8 @@ def observe(state: RiskState, at: object, equity: object, limits: RiskLimits) ->
     number = _number(equity)
     if number is None or number <= 0:
         return reject(f"kasa {equity!r} sıfırdan büyük bir sayı olmalı")
+    if not _in_scale(number):  # spec 0004 A-2: past it, the exact drawdown check grows unbounded
+        return reject(f"kasa {number} ölçeği varsayılan üs aralığı (±{SCALE}) dışında")
     problems = _limit_problems(limits)
     if problems:
         return reject("limitler geçersiz: " + "; ".join(problems))

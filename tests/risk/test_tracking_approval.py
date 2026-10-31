@@ -156,15 +156,41 @@ def test_fresh_state_matches_spec_0003() -> None:
     assert result.approved and result.amount == Decimal("19.249")
 
 
-def test_equity_past_the_default_exponent_range_is_a_named_rejection() -> None:
-    """R-7 (spec 0003 R-1): aşırı ölçekli kasa istisna değil, spec 0003'teki "ölçek" reddidir."""
-    huge = "1E+999999999"
-    state = observe(EMPTY_STATE, NOW, Decimal(huge), DEFAULT_LIMITS).state
+def test_largest_in_range_equity_is_a_named_result() -> None:
+    """R-7 (spec 0003 R-1, A-2): aralığın en büyük kasası adlandırılmış bir sonuç verir."""
+    huge = "9.99E+999999"
 
-    result = approve(state, huge)
+    result = approve(observed(huge), huge)
 
     assert result.reason is ApprovalReason.INVALID_INPUT and result.amount is None
     assert "ölçek hesaplanamıyor" in result.message
+
+
+HAND_BUILT = {
+    "huge_peak": RiskState(
+        NOW.date(), Decimal("1"), Decimal("1E+999999999999"), NOW, Decimal("1"), False
+    ),
+    "tiny_equity": RiskState(
+        NOW.date(),
+        Decimal("1E-999999999999"),
+        Decimal("10000"),
+        NOW,
+        Decimal("1E-999999999999"),
+        False,
+    ),
+    "no_peak": RiskState(NOW.date(), Decimal("1"), None, NOW, Decimal("1"), False),
+}
+
+
+@pytest.mark.parametrize("case", list(HAND_BUILT))
+def test_hand_built_state_past_the_range_is_invalid_input(case: str) -> None:
+    """R-7 (A-2): aralık dışı ya da eksik kasalı durum geçersiz girdidir."""
+    state = HAND_BUILT[case]
+
+    result = approve(state, str(state.last_equity))
+
+    assert result.reason is ApprovalReason.INVALID_INPUT and result.amount is None
+    assert "risk durumu geçersiz" in result.message
 
 
 def test_non_utc_now_on_the_same_utc_day_is_fresh() -> None:
