@@ -1,12 +1,16 @@
-"""İşlem önerisi onayı: zorunlu stop, risk temelli boyutlama, pozisyon sayısı (spec 0003)."""
+"""İşlem önerisi onayı: stop, boyutlama, pozisyon sayısı (0003); zarar kilitleri (0004)."""
 
 from collections.abc import Set
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import MAX_PREC, Decimal, DecimalException, Inexact, localcontext
 from enum import Enum
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from crytobot.risk._limits import RiskLimits, _limit_problems
+
+if TYPE_CHECKING:  # _tracking imports this module; the state is only read here
+    from crytobot.risk._tracking import RiskState
 
 BUY = "buy"
 
@@ -43,6 +47,8 @@ class ApprovalReason(Enum):
     """Ret nedenleri; birden fazla sorun varsa bu sıradaki ilki döner (R-8)."""
 
     INVALID_INPUT = "invalid_input"
+    DRAWDOWN_HALT = "drawdown_halt"
+    DAILY_LOSS_LIMIT = "daily_loss_limit"
     NOT_BUY = "not_buy"
     NOT_WHITELISTED = "not_whitelisted"
     INVALID_ENTRY = "invalid_entry"
@@ -111,6 +117,21 @@ def _input_problems(
     return problems
 
 
+def _state_problems(state: "RiskState", now: object, equity: object) -> list[str]:
+    """Spec 0004 R-7: durum boş, başka günden ya da başka bir kasayla güncellenmişse bayattır."""
+    if state.day is None or state.last_equity is None:
+        return ["risk durumu boş: önce kasa gözlenmeli"]
+    if not isinstance(now, datetime) or now.utcoffset() is None:
+        return [f"şu anki zaman {now!r} zaman dilimi taşımalı"]
+    problems = []
+    if now.astimezone(UTC).date() != state.day:
+        problems.append(f"risk durumu bayat: gün {state.day}, bugün {now.astimezone(UTC).date()}")
+    number = _number(equity)
+    if number is not None and number != state.last_equity:
+        problems.append(f"risk durumu bayat: son kasa {state.last_equity}, onaydaki kasa {number}")
+    return problems
+
+
 def approve_trade(
     intent: TradeIntent,
     limits: RiskLimits,
@@ -118,15 +139,31 @@ def approve_trade(
     rules: PairRules,
     whitelist: Set[str],
     fee: object,
+    state: "RiskState",
+    now: object,
 ) -> TradeApproval:
-    """BR-2, BR-3, BR-4, BR-7: alım önerisini onaylar ve miktarını belirler ya da reddeder."""
+    """BR-2…BR-7: alım önerisini onaylar ve miktarını belirler ya da reddeder."""
 
     def reject(reason: ApprovalReason, detail: str) -> TradeApproval:
         return TradeApproval(None, reason, False, f"{intent.pair!r}: {detail}")
 
     problems = _input_problems(limits, account, rules, whitelist, fee)
+    problems += _state_problems(state, now, account.equity)
     if problems:
         return reject(ApprovalReason.INVALID_INPUT, "geçersiz girdi: " + "; ".join(problems))
+    equity = cast(Decimal, _number(account.equity))  # validated above, equal to the state's
+    peak, day_start = cast(Decimal, state.peak_equity), cast(Decimal, state.day_start_equity)
+    if state.halted or _reached(peak, equity, limits.max_drawdown):
+        return reject(
+            ApprovalReason.DRAWDOWN_HALT,
+            f"drawdown durdurması: zirve {peak}, kasa {equity}, limit {limits.max_drawdown}",
+        )
+    if _reached(day_start, equity, limits.daily_loss_limit):
+        return reject(
+            ApprovalReason.DAILY_LOSS_LIMIT,
+            f"günlük zarar limiti: gün başı {day_start}, kasa {equity},"
+            f" limit {limits.daily_loss_limit}",
+        )
     if intent.side != BUY:
         return reject(ApprovalReason.NOT_BUY, f"yön {intent.side!r}: yalnızca alım onaylanır")
     if intent.pair not in whitelist:
