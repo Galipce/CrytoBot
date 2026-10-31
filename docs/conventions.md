@@ -53,6 +53,9 @@
 - Windows'ta `NUL` (`/dev/null`) bir karakter aygıtıdır ve `isatty()` `True` döner: rich kullanan araçlar
   (import-linter) çıktı atılınca terminal sanıp spinner/emoji çizer, cp1254 ile yazamaz (`UnicodeEncodeError`)
   ve adım yanlış kırmızı olur — bu tür adımlara `PYTHONUTF8=1` — from B-7 (spec 0003, review round 4 F-9)
+- Tam decimal bağlamı (`MAX_PREC` + `Inexact` trap) üs aralığını genişletmez: varsayılan `Emax`'ı aşan sonlu bir
+  değer `Overflow` fırlatır — riskteki her tam hesap ya `MAX_EMAX`/`MIN_EMIN` ayarlar ya da `DecimalException`'ı
+  adlandırılmış rede çevirir — from spec 0004, review round 1 F-1
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
