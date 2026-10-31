@@ -132,10 +132,12 @@ def _state_problems(state: "RiskState", now: object, equity: object) -> list[str
     """Spec 0004 R-7: durum boş, başka günden ya da başka bir kasayla güncellenmişse bayattır."""
     if state.day is None or state.last_equity is None:
         return ["risk durumu boş: önce kasa gözlenmeli"]
+    # observe never builds such a state; a hand-built one would break or blow up _reached
     equities = (state.day_start_equity, state.peak_equity, state.last_equity)
-    if not all(isinstance(e, Decimal) and e.is_finite() and _in_scale(e) for e in equities):
-        # observe never builds such a state; a hand-built one would make _reached grow unbounded
-        return ["risk durumu geçersiz: kasa ölçeği varsayılan üs aralığı dışında"]
+    if not all(isinstance(e, Decimal) and e.is_finite() for e in equities):
+        return ["risk durumu geçersiz: gün başı, zirve ya da son kasa eksik"]
+    if not all(_in_scale(cast(Decimal, e)) for e in equities):
+        return [f"risk durumu geçersiz: kasa ölçeği varsayılan üs aralığı (±{SCALE}) dışında"]
     if not isinstance(now, datetime) or now.utcoffset() is None:
         return [f"şu anki zaman {now!r} zaman dilimi taşımalı"]
     problems = []

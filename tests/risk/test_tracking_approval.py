@@ -166,31 +166,30 @@ def test_largest_in_range_equity_is_a_named_result() -> None:
     assert "ölçek hesaplanamıyor" in result.message
 
 
-HAND_BUILT = {
-    "huge_peak": RiskState(
-        NOW.date(), Decimal("1"), Decimal("1E+999999999999"), NOW, Decimal("1"), False
+TINY = Decimal("1E-999999999999")
+SCALE_NAMED = "risk durumu geçersiz: kasa ölçeği"
+MISSING_NAMED = "risk durumu geçersiz: gün başı, zirve ya da son kasa eksik"
+HAND_BUILT: dict[str, tuple[RiskState, str]] = {
+    "huge_peak": (
+        RiskState(NOW.date(), Decimal("1"), Decimal("1E+999999999999"), NOW, Decimal("1"), False),
+        SCALE_NAMED,
     ),
-    "tiny_equity": RiskState(
-        NOW.date(),
-        Decimal("1E-999999999999"),
-        Decimal("10000"),
-        NOW,
-        Decimal("1E-999999999999"),
-        False,
-    ),
-    "no_peak": RiskState(NOW.date(), Decimal("1"), None, NOW, Decimal("1"), False),
+    "tiny_equity": (RiskState(NOW.date(), TINY, Decimal("10000"), NOW, TINY, False), SCALE_NAMED),
+    "no_peak": (RiskState(NOW.date(), Decimal("1"), None, NOW, Decimal("1"), False), MISSING_NAMED),
 }
 
 
 @pytest.mark.parametrize("case", list(HAND_BUILT))
 def test_hand_built_state_past_the_range_is_invalid_input(case: str) -> None:
-    """R-7 (A-2): aralık dışı ya da eksik kasalı durum geçersiz girdidir."""
-    state = HAND_BUILT[case]
+    """R-7 (A-2, A-3): aralık dışı ya da eksik kasalı durum, kendi nedeniyle geçersiz girdidir."""
+    state, named = HAND_BUILT[case]
 
     result = approve(state, str(state.last_equity))
 
     assert result.reason is ApprovalReason.INVALID_INPUT and result.amount is None
-    assert "risk durumu geçersiz" in result.message
+    assert named in result.message
+    other = MISSING_NAMED if named == SCALE_NAMED else SCALE_NAMED
+    assert other not in result.message
 
 
 def test_non_utc_now_on_the_same_utc_day_is_fresh() -> None:
