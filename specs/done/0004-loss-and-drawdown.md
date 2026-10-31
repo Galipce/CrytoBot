@@ -1,6 +1,6 @@
 # Spec 0004 — Günlük zarar ve drawdown takibi
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0004-plan.md`
 
@@ -104,8 +104,8 @@ spec'inde gelir.)
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 onay sonrası (sapmalar plan amendment A-1…A-4) |
+| Fix rounds | 3 (fix-1 review r1, fix-2 review r2, fix-3 review r3); review r4 fix turu getirmedi |
+| Review findings: real / noise / deferred | 7 / 3 / 4 (r1: F-1, F-2 real; F-3 real, yalnız kayıt; F-4, F-5 noise · r2: F-6 real · r3: F-7 defer B-8; F-8, F-9 real; F-10 defer B-9; F-11 real, yalnız kayıt; F-12 noise · r4: N-1, N-2 defer B-10; N-3 yalnız kayıt · VERIFY: gap yok; I-1, I-2 Info ship öncesi kapandı) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (henüz üretim yok) |
