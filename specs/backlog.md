@@ -43,3 +43,9 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   Source: spec 0003, VERIFY round 1 G-3 (`src/crytobot/risk/_approval.py:124`) — Severity: Low — Recommendation:
   `isinstance(intent.pair, str)` değilse `NOT_WHITELISTED` ve örnek test — Deferred by: Galip Badem, 2026-10-31,
   çağıran yok; `approve_trade`'i `strategy`'ye bağlayan spec'te B-5 ile birlikte kapanır.
+- **B-7** — Windows'ta `./scripts/check` çıktısı `/dev/null`'a (NUL) yönlendirilince `boundaries` adımı kırmızı
+  biter: import-linter'ın kullandığı rich legacy Windows konsol yoluna girer, cp1254 ile yazamaz
+  (`UnicodeEncodeError`); çıktı yakalanınca ya da pipe'a verilince aynı ağaç yeşil, CI'da (Linux) görünmez —
+  Source: spec 0003, review round 4 F-9 (`scripts/check.conf`, `boundaries`) — Severity: Low — Recommendation:
+  `boundaries` adımına `PYTHONUTF8=1` ve `docs/conventions.md` Known traps'e bir satır — Deferred by: Galip Badem,
+  2026-10-31, spec 0003 kapsamı dışında tooling; 0003 ship edildikten sonra trivial change (`/change`) ile kapanır.
