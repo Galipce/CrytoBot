@@ -73,6 +73,14 @@ def _number(value: object) -> Decimal | None:
     return number if number.is_finite() else None
 
 
+def _reached(reference: Decimal, equity: Decimal, limit: Decimal) -> bool:
+    """(referans - kasa) / referans >= limit; bölmeden, tam çarpımla (sınırda yuvarlama yok)."""
+    with localcontext() as exact:
+        exact.prec = MAX_PREC
+        exact.traps[Inexact] = True
+        return reference - equity >= limit * reference
+
+
 def _input_problems(
     limits: RiskLimits, account: AccountState, rules: PairRules, whitelist: object, fee: object
 ) -> list[str]:

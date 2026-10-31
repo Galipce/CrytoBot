@@ -1,6 +1,6 @@
 # Spec 0004 — Günlük zarar ve drawdown takibi
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0004-plan.md`
 

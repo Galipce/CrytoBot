@@ -28,9 +28,11 @@ from crytobot.risk._limits import (
     decide_change,
     load_limits,
 )
+from crytobot.risk._tracking import EMPTY_STATE, RiskState, StateUpdate, TrackingReason, observe
 
 __all__: list[str] = [
     "DEFAULT_LIMITS",
+    "EMPTY_STATE",
     "HARD_CAPS",
     "AccountState",
     "ApprovalReason",
@@ -43,9 +45,13 @@ __all__: list[str] = [
     "RiskConfigError",
     "RiskError",
     "RiskLimits",
+    "RiskState",
+    "StateUpdate",
+    "TrackingReason",
     "TradeApproval",
     "TradeIntent",
     "approve_trade",
     "decide_change",
     "load_limits",
+    "observe",
 ]
