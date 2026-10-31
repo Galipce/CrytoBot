@@ -1,7 +1,7 @@
 """Spec 0004 AC-2, AC-4, AC-7…AC-9: onay günlük zarar ve drawdown kilitlerine uyar (BR-5, BR-6)."""
 
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -23,6 +23,7 @@ from crytobot.risk import (
 
 PAIR = "BTC/USDT"
 NOW = datetime(2026, 11, 2, 10, 0, tzinfo=UTC)
+NEW_YORK, ISTANBUL = timezone(timedelta(hours=-5)), timezone(timedelta(hours=3))
 INTENT = TradeIntent(PAIR, "buy", Decimal("100"), Decimal("95"))
 RULES = PairRules(Decimal("0.001"), Decimal("0.001"), Decimal("5"))
 
@@ -127,6 +128,13 @@ STALE: dict[str, tuple[RiskState, str, Any, str]] = {
     "other_day": (observed("10000"), "10000", NOW + timedelta(days=1), "risk durumu bayat: gün"),
     "other_equity": (observed("10000"), "9990", NOW, "risk durumu bayat: son kasa 10000"),
     "naive_now": (observed("10000"), "10000", datetime(2026, 11, 2, 10, 0), "şu anki zaman"),
+    # 2026-11-03 03:00 UTC: the next UTC day, though its local date is still the state's day
+    "next_utc_day_local_same": (
+        observed("10000"),
+        "10000",
+        datetime(2026, 11, 2, 22, 0, tzinfo=NEW_YORK),
+        "risk durumu bayat: gün",
+    ),
 }
 
 
@@ -157,3 +165,10 @@ def test_equity_past_the_default_exponent_range_is_a_named_rejection() -> None:
 
     assert result.reason is ApprovalReason.INVALID_INPUT and result.amount is None
     assert "ölçek hesaplanamıyor" in result.message
+
+
+def test_non_utc_now_on_the_same_utc_day_is_fresh() -> None:
+    """AC-8 (R-7): gün UTC'ye göre karşılaştırılır; aynı UTC günündeki +03:00 zaman tazedir."""
+    result = approve(observed("10000"), "10000", now=datetime(2026, 11, 2, 13, 0, tzinfo=ISTANBUL))
+
+    assert result.approved
