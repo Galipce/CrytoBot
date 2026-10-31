@@ -28,7 +28,14 @@ from crytobot.risk._limits import (
     decide_change,
     load_limits,
 )
-from crytobot.risk._tracking import EMPTY_STATE, RiskState, StateUpdate, TrackingReason, observe
+from crytobot.risk._tracking import (
+    EMPTY_STATE,
+    RiskState,
+    StateUpdate,
+    TrackingReason,
+    observe,
+    resume,
+)
 
 __all__: list[str] = [
     "DEFAULT_LIMITS",
@@ -54,4 +61,5 @@ __all__: list[str] = [
     "decide_change",
     "load_limits",
     "observe",
+    "resume",
 ]
