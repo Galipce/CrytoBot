@@ -49,4 +49,15 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   round 2 G-6 (`src/crytobot/risk/_approval.py:181`) — Severity: Low — Recommendation: girdi doğrulamada
   `value.adjusted()` bağlamın Emin/Emax aralığı dışındaysa "geçersiz girdi"; örnek test (`huge_exponent_entry`);
   `MemoryError` yakalanmaz — Deferred by: Galip Badem, 2026-10-31, girdi gerçekçi değil, çağıran yok, fix turu
-  kalmadı; B-5 ve B-6 ile `approve_trade`'i `strategy`'ye bağlayan spec'te kapanır.
+  kalmadı; B-5 ve B-6 ile `approve_trade`'i `strategy`'ye bağlayan spec'te kapanır. Spec 0004 review round 3 F-7
+  ekler: aynı sınıf `_size`'ın toplama/çıkarmalarında da açık — stop ya da ücret `1E-999999999999` (taze durum,
+  kasa 10000) 0.01 s'de `MemoryError`; süre üs farkıyla doğrusal (10^8'de ~0.4–0.5 s); büyük giriş de aynı yol.
+  Spec 0004 kasaları `_in_scale` ile sınırladı; kalan girdiler (serbest bakiye, ücret, adım, asgari miktar/tutar →
+  `INVALID_INPUT`; giriş → `INVALID_ENTRY`; stop → `INVALID_STOP`) aynı helper'la sınırlanmalı, her biri için sınır
+  testi — Deferred again by: Galip Badem, 2026-10-31, spec 0004 round 3 triage.
+- **B-9** — Uç tarihli, zaman dilimi taşıyan zaman (`datetime.min` + `+01:00`, `datetime.max` + `-01:00`)
+  `observe`'ta ve `approve_trade`'de `astimezone(UTC)` içinde yakalanmayan `OverflowError` fırlatıyor (fail-closed,
+  durum değişmez, onay yok) — Source: spec 0004, review round 3 F-10 (`src/crytobot/risk/_tracking.py:66`,
+  `src/crytobot/risk/_approval.py:142`) — Severity: Low — Recommendation: UTC'ye çevrilemeyen zaman R-6/R-7
+  kapsamında adlandırılmış ret; iki örnek test — Deferred by: Galip Badem, 2026-10-31, zaman sistem saatinden
+  geliyor; zamanı dış kaynaktan alan ilk spec'te kapanır.
