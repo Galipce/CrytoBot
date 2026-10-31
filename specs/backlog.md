@@ -46,7 +46,7 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
 - **B-8** — Üssü bağlam sınırlarının çok ötesinde bir girdi (ör. giriş `3E-999999999999999990` ya da adım
   `1E-999999999999999990`) `approve_trade`'den adlandırılmış ret yerine `MemoryError` fırlatıyor; `MAX_PREC`
   bağlamında `//` trap'e ulaşmadan basamak üretmeye çalışıyor (fail-closed, onay yok) — Source: spec 0003, VERIFY
-  round 2 G-6 (`src/crytobot/risk/_approval.py:181`) — Severity: Low — Recommendation: girdi doğrulamada
+  round 2 G-6 (`src/crytobot/risk/_approval.py:181`) — Severity: Medium (spec 0004 round 4 triage; önce Low) — Recommendation: girdi doğrulamada
   `value.adjusted()` bağlamın Emin/Emax aralığı dışındaysa "geçersiz girdi"; örnek test (`huge_exponent_entry`);
   `MemoryError` yakalanmaz — Deferred by: Galip Badem, 2026-10-31, girdi gerçekçi değil, çağıran yok, fix turu
   kalmadı; B-5 ve B-6 ile `approve_trade`'i `strategy`'ye bağlayan spec'te kapanır. Spec 0004 review round 3 F-7
@@ -58,6 +58,14 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
 - **B-9** — Uç tarihli, zaman dilimi taşıyan zaman (`datetime.min` + `+01:00`, `datetime.max` + `-01:00`)
   `observe`'ta ve `approve_trade`'de `astimezone(UTC)` içinde yakalanmayan `OverflowError` fırlatıyor (fail-closed,
   durum değişmez, onay yok) — Source: spec 0004, review round 3 F-10 (`src/crytobot/risk/_tracking.py:66`,
-  `src/crytobot/risk/_approval.py:142`) — Severity: Low — Recommendation: UTC'ye çevrilemeyen zaman R-6/R-7
+  `src/crytobot/risk/_approval.py:144`) — Severity: Low — Recommendation: UTC'ye çevrilemeyen zaman R-6/R-7
   kapsamında adlandırılmış ret; iki örnek test — Deferred by: Galip Badem, 2026-10-31, zaman sistem saatinden
   geliyor; zamanı dış kaynaktan alan ilk spec'te kapanır.
+- **B-10** — `_state_problems`'taki `e.is_finite()` koşulunu hiçbir test sınamıyor (koşul kaldırılınca 0 test
+  kırılıyor; elle kurulmuş `NaN` zirveli durum o zaman `_reached`'te yakalanmayan `InvalidOperation`, `Infinity`
+  zirve `DRAWDOWN_HALT` verir); ayrıca "gün başı, zirve ya da son kasa eksik" mesajı `NaN`/`Infinity`/`int` kasa
+  için de dönüyor — bunlar eksik değil geçersiz. Bugünkü kod doğru (`INVALID_INPUT`); yalnız `observe`'un
+  üretemeyeceği elle kurulmuş durumlar — Source: spec 0004, review round 4 N-1, N-2
+  (`src/crytobot/risk/_approval.py:137`) — Severity: Low — Recommendation: HAND_BUILT'e `nan_peak` (ve `inf_peak`)
+  vakası, beklenen mesaj "eksik ya da geçersiz"; mesaj metni buna göre — Deferred by: Galip Badem, 2026-10-31, fix
+  turu kalmadı (R-06 orantısız); `RiskState`'i kalıcı depoya yazan/okuyan ilk spec'te kapanır.
