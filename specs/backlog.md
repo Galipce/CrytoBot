@@ -49,3 +49,10 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   Source: spec 0003, review round 4 F-9 (`scripts/check.conf`, `boundaries`) — Severity: Low — Recommendation:
   `boundaries` adımına `PYTHONUTF8=1` ve `docs/conventions.md` Known traps'e bir satır — Deferred by: Galip Badem,
   2026-10-31, spec 0003 kapsamı dışında tooling; 0003 ship edildikten sonra trivial change (`/change`) ile kapanır.
+- **B-8** — Üssü bağlam sınırlarının çok ötesinde bir girdi (ör. giriş `3E-999999999999999990` ya da adım
+  `1E-999999999999999990`) `approve_trade`'den adlandırılmış ret yerine `MemoryError` fırlatıyor; `MAX_PREC`
+  bağlamında `//` trap'e ulaşmadan basamak üretmeye çalışıyor (fail-closed, onay yok) — Source: spec 0003, VERIFY
+  round 2 G-6 (`src/crytobot/risk/_approval.py:181`) — Severity: Low — Recommendation: girdi doğrulamada
+  `value.adjusted()` bağlamın Emin/Emax aralığı dışındaysa "geçersiz girdi"; örnek test (`huge_exponent_entry`);
+  `MemoryError` yakalanmaz — Deferred by: Galip Badem, 2026-10-31, girdi gerçekçi değil, çağıran yok, fix turu
+  kalmadı; B-5 ve B-6 ile `approve_trade`'i `strategy`'ye bağlayan spec'te kapanır.
