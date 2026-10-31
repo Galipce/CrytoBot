@@ -5,7 +5,19 @@ from decimal import Decimal
 
 import pytest
 
-from crytobot.risk import DEFAULT_LIMITS, EMPTY_STATE, RiskState, TrackingReason, observe, resume
+from crytobot.risk import (
+    DEFAULT_LIMITS,
+    EMPTY_STATE,
+    AccountState,
+    ApprovalReason,
+    PairRules,
+    RiskState,
+    TrackingReason,
+    TradeIntent,
+    approve_trade,
+    observe,
+    resume,
+)
 
 T0 = datetime(2026, 11, 2, 10, 0, tzinfo=UTC)
 
@@ -66,3 +78,23 @@ def test_resume_on_empty_state_rejected() -> None:
     update = resume(EMPTY_STATE, "cli")
 
     assert update.reason is TrackingReason.EMPTY_STATE and update.state == EMPTY_STATE
+
+
+def test_resume_keeps_daily_lock() -> None:
+    """AC-6 (BR-5, BR-6): kaldırma yalnız durdurmayı kaldırır; aynı gün dolu günlük limit sürer."""
+    resumed = resume(HALTED, "cli").state
+    account = AccountState(Decimal("8400"), Decimal("5000"), 0)
+    now = T0 + timedelta(hours=1)  # the day of the last observation
+
+    result = approve_trade(
+        TradeIntent("BTC/USDT", "buy", Decimal("100"), Decimal("95")),
+        DEFAULT_LIMITS,
+        account,
+        PairRules(Decimal("0.001"), Decimal("0.001"), Decimal("5")),
+        frozenset({"BTC/USDT"}),
+        Decimal("0.001"),
+        resumed,
+        now,
+    )
+
+    assert result.reason is ApprovalReason.DAILY_LOSS_LIMIT
