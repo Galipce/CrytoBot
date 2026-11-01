@@ -64,6 +64,10 @@
   (`Fraction`, tuple, list) basmak ve tomllib'in uzun tam sayıyı okuması `ValueError` fırlatır — mesajda ham
   girdi her zaman `_show` ile, config'te `ValueError` → `RiskConfigError` — from spec 0005, review round 1 F-1,
   round 2 F-1
+- Ölçek içindeki değerler de toplamda dev sonuç üretir: `1 + oran` (oran `1E-999999`) ~1M basamaklıdır, `miktar %
+  adım` üs farkı büyükse dev bölüm ister — `execution`'da hesap 28 basamaklı, sonucu yuvarlamak yerine fırlatan
+  bağlamda (`BOUNDED`) yapılır, sığmayan sonuç "ölçek hesaplanamıyor" retti; mesajdaki uzun sayı basamak
+  sayısıyla yazılır — from spec 0006, plan Risk 3
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.

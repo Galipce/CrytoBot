@@ -63,12 +63,14 @@ class ApprovalReason(Enum):
 
 @dataclass(frozen=True)
 class TradeApproval:
-    """Onayda `amount` dolu ve `reason` `None`; retde tersi (R-1)."""
+    """Onayda `amount` dolu ve `reason` `None`; retde tersi (R-1). `intent`, karara bağlanan
+    önerinin kendisidir — değiştirilmeden taşınır (spec 0006 R-14)."""
 
     amount: Decimal | None
     reason: ApprovalReason | None
     limited_by_balance: bool
     message: str
+    intent: TradeIntent
 
     @property
     def approved(self) -> bool:
@@ -187,7 +189,7 @@ def approve_trade(
     """BR-2…BR-7: alım önerisini onaylar ve miktarını belirler ya da reddeder."""
 
     def reject(reason: ApprovalReason, detail: str) -> TradeApproval:
-        return TradeApproval(None, reason, False, f"{_show(intent.pair)}: {detail}")
+        return TradeApproval(None, reason, False, f"{_show(intent.pair)}: {detail}", intent)
 
     problems = _input_problems(limits, account, rules, whitelist, fee, spread, slippage)
     problems += _state_problems(state, now, account.equity)
@@ -253,7 +255,7 @@ def approve_trade(
             ApprovalReason.POSITION_LIMIT,
             f"açık pozisyon {_show(positions)}, limit {limits.max_open_positions}",
         )
-    return _size(intent.pair, entry, stop, target, costs, limits, account, rules)
+    return _size(intent, entry, stop, target, costs, limits, account, rules)
 
 
 def _edge(
@@ -277,7 +279,7 @@ def _edge(
 
 
 def _size(
-    pair: str,
+    intent: TradeIntent,
     entry: Decimal,
     stop: Decimal,
     target: Decimal,
@@ -288,6 +290,7 @@ def _size(
 ) -> TradeApproval:
     """R-5, R-6: risk bütçesine ve serbest bakiyeye sığan, adıma aşağı yuvarlı en büyük miktar."""
     rate, spread, slippage = costs
+    pair = intent.pair
     equity, free, step, min_amount, min_notional = (
         cast(Decimal, _number(value))  # validated by _input_problems
         for value in (
@@ -320,6 +323,7 @@ def _size(
             f"{_show(pair)}: geçersiz girdi: ölçek hesaplanamıyor (giriş {entry}, stop {stop},"
             f" hedef {target}, ücret {rate}, spread {spread}, slippage {slippage},"
             f" serbest bakiye {free}, adım {step}, kasa {equity})",
+            intent,
         )
     if amount <= 0 or amount < min_amount or notional < min_notional:
         return TradeApproval(
@@ -328,8 +332,9 @@ def _size(
             False,
             f"{_show(pair)}: miktar {amount} (tutar {notional}) borsa asgarisinin altında"
             f" (asgari miktar {min_amount}, asgari tutar {min_notional})",
+            intent,
         )
     note = " (serbest bakiyeyle sınırlı)" if limited_by_balance else ""
     return TradeApproval(
-        amount, None, limited_by_balance, f"{_show(pair)}: {amount} onaylandı{note}"
+        amount, None, limited_by_balance, f"{_show(pair)}: {amount} onaylandı{note}", intent
     )

@@ -57,14 +57,27 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   turu kalmadı (R-06 orantısız); `RiskState`'i kalıcı depoya yazan/okuyan ilk spec'te kapanır. Not (spec 0005,
   review round 2 F-2): elle kurulmuş `day=10**4300` durumu `_approval.py:168`'deki mesajda `ValueError`
   fırlatır — aynı sınıf, aynı yerde kapanır.
-- **B-11** — Ölçek sınırı içindeki uç girdiler sınırlı ama yavaş: `_size` ~2,4 s ve ~1 MB'lık onay mesajı
-  (giriş `1E+999999`, adım `1E-999999`); ~1M basamaklı `int` girdinin `Decimal`'e çevrilmesi ~27 s — Source: spec
-  0005, review round 1 F-4 (`src/crytobot/risk/_approval.py:302-314`) — Severity: Info — Recommendation: onaylı
-  miktarı borsa hassasiyetine yuvarlayan spec'te miktar/mesaj uzunluğu ve `int` girdinin basamak sayısı sınırlanır —
-  Deferred by: Galip Badem, 2026-11-01, yalnız gerçekçi olmayan girdiler; R-7 tutuyor (istisna yok, süre sonlu).
+- **B-11** — `risk` tarafı: ölçek sınırı içindeki uç girdiler sınırlı ama yavaş — `_size` ~2,4 s ve ~1 MB'lık onay
+  mesajı (giriş `1E+999999`, adım `1E-999999`); ~1M basamaklı `int` girdinin `Decimal`'e çevrilmesi ~27 s. Execution
+  tarafı spec 0006 ile kapandı (emir miktarı ve fiyat ≤ 28 anlamlı basamak, 28 basamaklı sınırlı hesap, kısa mesaj)
+  — Source: spec 0005, review round 1 F-4 (`src/crytobot/risk/_approval.py:302-314`) — Severity: Info —
+  Recommendation: `risk`'te de execution'daki gibi sınırlı bağlam ve basamak sayısıyla yazılan mesaj — Deferred by:
+  Galip Badem, 2026-11-01, yalnız gerçekçi olmayan girdiler; R-7 tutuyor (istisna yok, süre sonlu); spec 0006'da
+  risk tarafına daraltıldı.
 - **B-12** — `./scripts/residue` kalan süreçleri check'e ebeveyn ağacıyla bağlamıyor: boşta olmayan makinede sistem
   süreçleri (svchost, SearchProtocolHost/SearchFilterHost, WmiPrvSE, tarayıcı) her koşuda `RESIDUE FOUND`, rc=1 verir
   ve her spec'te elle değerlendirilir — Source: spec 0005, VERIFY (`scripts/residue`) — Severity: Info —
   Recommendation: survivor'ları check'in başlattığı süreç ağacına (ebeveyn PID) göre süz; ağaç dışındakileri ayrı,
   bilgi satırı olarak yaz — Deferred by: Galip Badem, 2026-11-01, spec'i bloklamıyor; araç değişikliği kendi
   bug/change akışında.
+- **B-13** — `query_order`, durumu `bilinmiyor` olup `quotes` girdisi olmayan elle kurulmuş bir `ExecutionState`'te
+  `KeyError` fırlatır (`src/crytobot/execution/_orders.py:436`); bugün durum yalnız `place_order`'dan geldiği için
+  ulaşılamaz — Source: spec 0006, review round 1 F-6 — Severity: Info — Recommendation: kalıcılık spec'inde quote
+  `Order` üzerinde taşınsın ya da emirle birlikte yazılsın; ya da `.get` + "geçersiz girdi" — Deferred by: Galip
+  Badem, 2026-11-01, bu spec'te ulaşılamaz; davranışı kalıcılık spec'i tanımlar.
+- **B-14** — `_judged_differently`'deki "çift/yön metin değil" guard'ını (`src/crytobot/execution/_orders.py:269-270`)
+  hiçbir test korumuyor: `None` çiftli vaka guard olmadan da reddediliyor. Guard silinirse elle kurulmuş bir onayda
+  `__eq__`'i istisna fırlatan çift `TypeError` (R-12), hep True dönen çift emir oluşturur (R-2) — Source: spec 0006,
+  VERIFY ikinci geçiş F-1 — Severity: Low — Recommendation: AC-2'ye `__eq__`'i hep True dönen ve istisna fırlatan çift
+  nesneli iki vaka, beklenen "onaysız öneri" — Deferred by: Galip Badem, 2026-11-02, fix turu kalmadı (R-06
+  orantısız); bugün davranış doğru, yalnız elle kurulmuş onayda; execution'a dokunan sonraki spec'te kapanır.
