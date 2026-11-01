@@ -89,6 +89,10 @@ def _reached(reference: Decimal, equity: Decimal, limit: Decimal) -> bool:
         return reference - equity >= limit * reference
 
 
+def _out_of_scale(label: str, number: Decimal) -> str:
+    return f"{label} {number} ölçeği varsayılan üs aralığı (±{SCALE}) dışında"
+
+
 def _input_problems(
     limits: RiskLimits, account: AccountState, rules: PairRules, whitelist: object, fee: object
 ) -> list[str]:
@@ -98,9 +102,13 @@ def _input_problems(
     equity = _number(account.equity)
     if equity is None or equity <= 0:
         problems.append(f"kasa {account.equity!r} sıfırdan büyük bir sayı olmalı")
+    elif not _in_scale(equity):
+        problems.append(_out_of_scale("kasa", equity))
     free = _number(account.free_balance)
     if free is None or free < 0:
         problems.append(f"serbest bakiye {account.free_balance!r} negatif olmayan bir sayı olmalı")
+    elif not _in_scale(free):
+        problems.append(_out_of_scale("serbest bakiye", free))
     elif equity is not None and free > equity:
         problems.append(f"serbest bakiye {free} kasadan ({equity}) büyük")
     positions = account.open_positions
@@ -109,13 +117,19 @@ def _input_problems(
     rate = _number(fee)
     if rate is None or not 0 <= rate < 1:
         problems.append(f"ücret {fee!r} 0 ile 1 arasında (1 hariç) olmalı")
+    elif not _in_scale(rate):
+        problems.append(_out_of_scale("ücret", rate))
     step = _number(rules.amount_step)
     if step is None or step <= 0:
         problems.append(f"miktar adımı {rules.amount_step!r} sıfırdan büyük olmalı")
+    elif not _in_scale(step):
+        problems.append(_out_of_scale("miktar adımı", step))
     for label, value in (("asgari miktar", rules.min_amount), ("asgari tutar", rules.min_notional)):
         number = _number(value)
         if number is None or number < 0:
             problems.append(f"{label} {value!r} negatif olmayan bir sayı olmalı")
+        elif not _in_scale(number):
+            problems.append(_out_of_scale(label, number))
     return problems
 
 
@@ -179,6 +193,8 @@ def approve_trade(
     entry = _number(intent.entry)
     if entry is None or entry <= 0:
         return reject(ApprovalReason.INVALID_ENTRY, f"giriş {intent.entry!r} sıfırdan büyük olmalı")
+    if not _in_scale(entry):
+        return reject(ApprovalReason.INVALID_ENTRY, _out_of_scale("giriş", entry))
     if intent.stop is None:
         return reject(ApprovalReason.INVALID_STOP, "stop-loss yok")
     stop = _number(intent.stop)
@@ -187,6 +203,8 @@ def approve_trade(
             ApprovalReason.INVALID_STOP,
             f"stop {intent.stop!r} sıfırdan büyük ve girişten ({entry}) küçük olmalı",
         )
+    if not _in_scale(stop):
+        return reject(ApprovalReason.INVALID_STOP, _out_of_scale("stop", stop))
     positions = cast(int, account.open_positions)  # validated above
     if positions >= limits.max_open_positions:
         return reject(
@@ -236,7 +254,8 @@ def _size(
             None,
             ApprovalReason.INVALID_INPUT,
             False,
-            f"{pair!r}: geçersiz girdi: ölçek hesaplanamıyor (adım {step}, kasa {equity})",
+            f"{pair!r}: geçersiz girdi: ölçek hesaplanamıyor (giriş {entry}, stop {stop},"
+            f" ücret {rate}, serbest bakiye {free}, adım {step}, kasa {equity})",
         )
     if amount <= 0 or amount < min_amount or notional < min_notional:
         return TradeApproval(
