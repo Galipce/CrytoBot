@@ -31,30 +31,11 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   neden için AC-10 property testine beklenen-sonuç modeli (oracle); G-7, kanalları `decide_change`'e bağlayan
   spec'ten önce kapanmalı — Deferred by: Galip Badem, 2026-10-30, A-5 gereği yeni fix turu yok; tek tek mutant
   kapatmak yerine sorun sınıfını oracle kapatır.
-- **B-5** — Ölçek reddi mesajı (`INVALID_INPUT`, "ölçek hesaplanamıyor") taşmanın kaynağına bakmadan her zaman adımı
-  ve kasayı adlandırıyor; taşmayı giriş fiyatı tetiklediğinde (ör. `9.999E+999999`) asıl değer mesajda yok (AC-9)
-  — Source: spec 0003, review round 3 F-8 (`src/crytobot/risk/_approval.py:186`) — Severity: Low — Recommendation:
-  mesaja hesaba giren tüm değerleri (giriş, stop, ücret, serbest bakiye, adım, kasa) eklemek ve teste giriş kaynaklı
-  bir parametre (`huge_entry`) — Deferred by: Galip Badem, 2026-10-31, karar doğru (ret, fail-closed), girdi
-  gerçekçi değil; son fix turu VERIFY'a saklanıyor. Ret mesajını sahibe ilk gösterecek spec'te (`approve_trade`'i
-  `strategy` ya da kanallara bağlayan) kapanır.
 - **B-6** — `approve_trade` hash'lenemeyen bir çift (ör. liste) alırsa `TypeError` fırlatıyor; R-1'in "sonuç ya
   miktar ya adlandırılmış ret" sözü bu uçta karşılanmıyor (fail-closed, `pair: str` tipi mypy ile korunuyor) —
   Source: spec 0003, VERIFY round 1 G-3 (`src/crytobot/risk/_approval.py:124`) — Severity: Low — Recommendation:
   `isinstance(intent.pair, str)` değilse `NOT_WHITELISTED` ve örnek test — Deferred by: Galip Badem, 2026-10-31,
-  çağıran yok; `approve_trade`'i `strategy`'ye bağlayan spec'te B-5 ile birlikte kapanır.
-- **B-8** — Üssü bağlam sınırlarının çok ötesinde bir girdi (ör. giriş `3E-999999999999999990` ya da adım
-  `1E-999999999999999990`) `approve_trade`'den adlandırılmış ret yerine `MemoryError` fırlatıyor; `MAX_PREC`
-  bağlamında `//` trap'e ulaşmadan basamak üretmeye çalışıyor (fail-closed, onay yok) — Source: spec 0003, VERIFY
-  round 2 G-6 (`src/crytobot/risk/_approval.py:181`) — Severity: Medium (spec 0004 round 4 triage; önce Low) — Recommendation: girdi doğrulamada
-  `value.adjusted()` bağlamın Emin/Emax aralığı dışındaysa "geçersiz girdi"; örnek test (`huge_exponent_entry`);
-  `MemoryError` yakalanmaz — Deferred by: Galip Badem, 2026-10-31, girdi gerçekçi değil, çağıran yok, fix turu
-  kalmadı; B-5 ve B-6 ile `approve_trade`'i `strategy`'ye bağlayan spec'te kapanır. Spec 0004 review round 3 F-7
-  ekler: aynı sınıf `_size`'ın toplama/çıkarmalarında da açık — stop ya da ücret `1E-999999999999` (taze durum,
-  kasa 10000) 0.01 s'de `MemoryError`; süre üs farkıyla doğrusal (10^8'de ~0.4–0.5 s); büyük giriş de aynı yol.
-  Spec 0004 kasaları `_in_scale` ile sınırladı; kalan girdiler (serbest bakiye, ücret, adım, asgari miktar/tutar →
-  `INVALID_INPUT`; giriş → `INVALID_ENTRY`; stop → `INVALID_STOP`) aynı helper'la sınırlanmalı, her biri için sınır
-  testi — Deferred again by: Galip Badem, 2026-10-31, spec 0004 round 3 triage.
+  çağıran yok; `approve_trade`'i `strategy`'ye bağlayan spec'te kapanır (B-5 spec 0005'te kapandı).
 - **B-9** — Uç tarihli, zaman dilimi taşıyan zaman (`datetime.min` + `+01:00`, `datetime.max` + `-01:00`)
   `observe`'ta ve `approve_trade`'de `astimezone(UTC)` içinde yakalanmayan `OverflowError` fırlatıyor (fail-closed,
   durum değişmez, onay yok) — Source: spec 0004, review round 3 F-10 (`src/crytobot/risk/_tracking.py:66`,

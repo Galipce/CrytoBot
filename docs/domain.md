@@ -34,12 +34,12 @@
 - BR-5: Günlük zarar limiti %3 (config; sabit üst sınır %5). Aşılınca o UTC günü yeni pozisyon açılmaz.
 - BR-6: Drawdown %15 (config; sabit üst sınır %25). Aşılınca bot tüm yeni işlemleri durdurur; yalnızca insan yeniden başlatır.
 - BR-7: Aynı anda en fazla 5 açık pozisyon (config; sabit üst sınır 8).
-- BR-8: Beklenen kâr, efektif maliyetin (komisyon + spread + slippage) config'teki katını geçmiyorsa işlem açılmaz.
+- BR-8: Beklenen kâr, efektif maliyetin (komisyon + spread + slippage) config'teki katını geçmiyorsa işlem açılmaz (varsayılan kat 2; sabit alt sınır 1).
 - BR-9: Her işlem önerisi `risk` onayından geçer; onaysız hiçbir emir borsaya gitmez.
 - BR-10: Aşama geçişi (backtest→paper→live) metrik eşiği + insan onayı ister; strateji paper'a ancak komisyon/slippage dahil out-of-sample backtest sonucu ile geçer.
 - BR-11: Durum belirsizse (emir durumu bilinmiyor, bakiye mutabakatı tutmuyor, veri bayat) bot yeni işlem açmaz, güvenli tarafa geçer ve bildirim gönderir.
 - BR-12: Borsa seçimi efektif maliyet ölçümüyle yapılır; ücretler config'te tutulur, kodda değil.
-- BR-13: Risk limitleri Telegram'dan yalnızca düşürülebilir; artırma yalnızca CLI'den yapılır.
+- BR-13: Risk limitleri Telegram'dan yalnızca sıkılaştırılabilir; gevşetme yalnızca CLI'den yapılır (oran ve pozisyon limitlerinde sıkılaştırmak düşürmek, kâr/maliyet katında yükseltmektir).
 
 ## Key domain invariants
 
