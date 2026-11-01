@@ -75,3 +75,9 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   ulaşılamaz — Source: spec 0006, review round 1 F-6 — Severity: Info — Recommendation: kalıcılık spec'inde quote
   `Order` üzerinde taşınsın ya da emirle birlikte yazılsın; ya da `.get` + "geçersiz girdi" — Deferred by: Galip
   Badem, 2026-11-01, bu spec'te ulaşılamaz; davranışı kalıcılık spec'i tanımlar.
+- **B-14** — `_judged_differently`'deki "çift/yön metin değil" guard'ını (`src/crytobot/execution/_orders.py:269-270`)
+  hiçbir test korumuyor: `None` çiftli vaka guard olmadan da reddediliyor. Guard silinirse elle kurulmuş bir onayda
+  `__eq__`'i istisna fırlatan çift `TypeError` (R-12), hep True dönen çift emir oluşturur (R-2) — Source: spec 0006,
+  VERIFY ikinci geçiş F-1 — Severity: Low — Recommendation: AC-2'ye `__eq__`'i hep True dönen ve istisna fırlatan çift
+  nesneli iki vaka, beklenen "onaysız öneri" — Deferred by: Galip Badem, 2026-11-02, fix turu kalmadı (R-06
+  orantısız); bugün davranış doğru, yalnız elle kurulmuş onayda; execution'a dokunan sonraki spec'te kapanır.
