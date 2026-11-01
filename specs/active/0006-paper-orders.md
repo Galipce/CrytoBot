@@ -1,6 +1,6 @@
 # Spec 0006 — Onaylı öneriden paper emir ve belirsiz emir durumunda güvenli mod
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0006-plan.md`
 

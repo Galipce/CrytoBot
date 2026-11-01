@@ -8,7 +8,8 @@ risk bütçesi ve serbest bakiyeyle sınırlı, borsa adımına aşağı yuvarla
 Kasa `observe` ile `RiskState`'e gözlenir (gün başı, zirve, drawdown durdurması); onay bu
 durumu ister ve günlük zarar ya da drawdown limitinde reddeder; durdurmayı yalnızca CLI `resume`
 ile kaldırır. Önerinin hedefe kadar beklenen kârı, efektif maliyetin (komisyon + spread +
-slippage) katını geçmiyorsa öneri reddedilir.
+slippage) katını geçmiyorsa öneri reddedilir. Onay sonucu karara bağladığı öneriyi değiştirmeden
+taşır (`TradeApproval.intent`); `execution` emri yalnızca o öneriden oluşturur.
 """
 
 from crytobot.risk._approval import (
