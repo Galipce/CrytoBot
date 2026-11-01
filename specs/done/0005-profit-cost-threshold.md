@@ -1,6 +1,6 @@
 # Spec 0005 — Kâr / maliyet eşiği ve onay girdilerinin ölçeği
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0005-plan.md`
 
@@ -124,8 +124,8 @@ spec'inde gelir.)
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 onay sonrası (sapmalar plan amendment A-1…A-3) |
+| Fix rounds | 2 (fix-1 review r1, fix-2 review r2); review r3 fix turu getirmedi |
+| Review findings: real / noise / deferred | 8 / 1 / 4 (r1: F-1, F-2, F-3, F-5 real; F-4 defer B-11; F-6 defer B-4 · r2: F-1, F-3, F-4 real; F-2 real (`_limits.py`) + `state.day` kısmı defer B-10 · r3: F-1, F-2 defer B-4; F-3 noise · VERIFY: gap yok; residue önerisi B-12) |
+| Regressions introduced | 1 (fix-2: Telegram mesajında `Decimal(current)` elle kurulmuş `Fraction` limitte `TypeError` — r3 F-1, defer B-4) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
