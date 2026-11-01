@@ -1,6 +1,6 @@
 # Spec 0005 — Kâr / maliyet eşiği ve onay girdilerinin ölçeği
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0005-plan.md`
 
