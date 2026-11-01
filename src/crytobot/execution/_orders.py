@@ -2,7 +2,7 @@
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal, DecimalException, localcontext
 from enum import Enum
@@ -50,6 +50,7 @@ class OrderOutcome(Enum):
     INVALID_INPUT = "invalid_input"
     UNSUPPORTED_MODE = "unsupported_mode"
     ID_CONFLICT = "id_conflict"
+    STATUS_UNKNOWN = "status_unknown"
     UNAPPROVED = "unapproved"
     EXCHANGE_RULE = "exchange_rule"
 
@@ -74,12 +75,35 @@ class Order:
 
 @dataclass(frozen=True)
 class ExecutionState:
-    """Emirler `clientOrderId`'ye göre, oluşturulma sırasıyla; değer değişmez (R-13)."""
+    """Emirler `clientOrderId`'ye göre, oluşturulma sırasıyla; değer değişmez (R-13). `quotes`,
+    durumu bilinmeyen emrin dolarsa alacağı dolum fiyatı ve komisyondur (plan 0006 Risk 5)."""
 
     orders: Mapping[str, Order]
+    quotes: Mapping[str, tuple[Decimal, Decimal]]
+
+    @property
+    def unknown(self) -> tuple[str, ...]:
+        """Durumu bilinmeyen emirler; biri bile varsa güvenli mod (R-9)."""
+        return tuple(i for i, order in self.orders.items() if order.status is OrderStatus.UNKNOWN)
 
 
-EMPTY_EXECUTION = ExecutionState(MappingProxyType({}))
+EMPTY_EXECUTION = ExecutionState(MappingProxyType({}), MappingProxyType({}))
+
+
+class NotificationKind(Enum):
+    SAFE_MODE_ENTERED = "safe_mode_entered"
+    SAFE_MODE_EXITED = "safe_mode_exited"
+
+
+@dataclass(frozen=True)
+class Notification:
+    """Güvenli mod geçişi (R-10); gönderimi `reporting`'in işidir."""
+
+    kind: NotificationKind
+    client_order_id: str
+    pair: str
+    at: datetime
+    message: str
 
 
 @dataclass(frozen=True)
@@ -90,10 +114,29 @@ class OrderResult:
     outcome: OrderOutcome
     order: Order | None
     message: str
+    notifications: tuple[Notification, ...] = ()
 
     @property
     def created(self) -> bool:
         return self.outcome is OrderOutcome.CREATED
+
+
+class QueryOutcome(Enum):
+    UPDATED = "updated"
+    UNCHANGED = "unchanged"
+    UNKNOWN_ORDER = "unknown_order"
+    INVALID_INPUT = "invalid_input"
+
+
+@dataclass(frozen=True)
+class QueryResult:
+    """Sorgu sonrası durum; yalnızca `UPDATED` durumu değiştirir."""
+
+    state: ExecutionState
+    outcome: QueryOutcome
+    order: Order | None
+    message: str
+    notifications: tuple[Notification, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -268,6 +311,12 @@ def place_order(
             OrderOutcome.ID_CONFLICT,
             f"kimlik çakışması: {client_order_id} başka bir içerikle oluşturulmuş",
         )
+    if state.unknown:
+        return reject(
+            OrderOutcome.STATUS_UNKNOWN,
+            "durum belirsiz: durumu bilinmeyen emir var (" + ", ".join(state.unknown) + ");"
+            " yeni emir oluşturulmaz",
+        )
     approval = request.approval
     if not isinstance(approval, TradeApproval) or approval.reason is not None:
         return reject(OrderOutcome.UNAPPROVED, "onaysız öneri: risk onayı yok ya da ret")
@@ -326,9 +375,83 @@ def place_order(
     )
     orders = dict(state.orders)
     orders[client_order_id] = order
+    quotes = dict(state.quotes)
+    notifications: tuple[Notification, ...] = ()
+    if status is OrderStatus.UNKNOWN:
+        quotes[client_order_id] = (fill, fee)
+        notifications = (
+            _notify(NotificationKind.SAFE_MODE_ENTERED, order, now, "güvenli moda geçildi"),
+        )
     return OrderResult(
-        ExecutionState(MappingProxyType(orders)),
+        ExecutionState(MappingProxyType(orders), MappingProxyType(quotes)),
         OrderOutcome.CREATED,
         order,
         f"{_show(pair)}: {client_order_id} {status.value}: miktar {amount}, dolum fiyatı {fill}",
+        notifications,
+    )
+
+
+def _notify(kind: NotificationKind, order: Order, now: datetime, what: str) -> Notification:
+    return Notification(
+        kind,
+        order.client_order_id,
+        order.pair,
+        now,
+        f"{order.pair}: {what}: {order.client_order_id} durumu {order.status.value}",
+    )
+
+
+def query_order(
+    state: ExecutionState, client_order_id: object, exchange: PaperExchange, now: object
+) -> QueryResult:
+    """R-9: durumu bilinmeyen emrin durumunu simülatörden sorar; son bilinmeyen emir netleşince
+    güvenli mod biter ve bir çıkış bildirimi üretilir."""
+    if not isinstance(now, datetime) or now.utcoffset() is None:
+        return QueryResult(
+            state,
+            QueryOutcome.INVALID_INPUT,
+            None,
+            f"geçersiz girdi: şu anki zaman {_show(now)} zaman dilimi taşımalı",
+        )
+    order = state.orders.get(client_order_id) if isinstance(client_order_id, str) else None
+    if order is None:
+        return QueryResult(
+            state, QueryOutcome.UNKNOWN_ORDER, None, f"bilinmeyen emir: {_show(client_order_id)}"
+        )
+    if order.status is not OrderStatus.UNKNOWN:
+        return QueryResult(
+            state,
+            QueryOutcome.UNCHANGED,
+            order,
+            f"{order.pair}: {order.client_order_id} zaten {order.status.value}",
+        )
+    status = exchange.query(order.client_order_id)
+    if status is OrderStatus.UNKNOWN:
+        return QueryResult(
+            state,
+            QueryOutcome.UNCHANGED,
+            order,
+            f"{order.pair}: {order.client_order_id} durumu hâlâ bilinmiyor",
+        )
+    fill, fee = state.quotes[order.client_order_id]
+    filled = status is OrderStatus.FILLED
+    resolved = replace(
+        order, status=status, fill_price=fill if filled else None, fee=fee if filled else None
+    )
+    orders = dict(state.orders)
+    orders[order.client_order_id] = resolved
+    quotes = dict(state.quotes)
+    del quotes[order.client_order_id]
+    after = ExecutionState(MappingProxyType(orders), MappingProxyType(quotes))
+    notifications: tuple[Notification, ...] = ()
+    if not after.unknown:
+        notifications = (
+            _notify(NotificationKind.SAFE_MODE_EXITED, resolved, now, "güvenli moddan çıkıldı"),
+        )
+    return QueryResult(
+        after,
+        QueryOutcome.UPDATED,
+        resolved,
+        f"{order.pair}: {order.client_order_id} durumu {status.value}",
+        notifications,
     )
