@@ -1,6 +1,6 @@
 # Spec 0006 — Onaylı öneriden paper emir ve belirsiz emir durumunda güvenli mod
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0006-plan.md`
 
@@ -145,8 +145,8 @@ none — no user interface. (Bildirimlerin Telegram'a gönderimi ve emirlerin CL
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 onay sonrası (sapmalar plan amendment A-1…A-5) |
+| Fix rounds | 3 (fix-1 review r1, fix-2 review r2, fix-3 VERIFY); review r3 ve r4 temiz |
+| Review findings: real / noise / deferred | 10 / 0 / 2 (r1: F-1…F-5, F-7 real; F-6 defer B-13 · r2: B-1 real · r3, r4: bulgu yok · VERIFY: F-1, F-2, F-3 real · VERIFY ikinci geçiş: F-1 defer B-14) |
+| Regressions introduced | 0 davranış regresyonu; build `test_coverage_gate.py` ön koşulunu bozdu (full check yakaladı, A-1); iki fix testi eksik kaldı (r2 B-1, VERIFY ikinci geçiş F-1) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
