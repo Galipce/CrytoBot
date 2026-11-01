@@ -263,6 +263,17 @@ INVALID: dict[str, tuple[dict[str, Any], str]] = {
     "rules-missing": ({"rules": None}, "borsa kuralları"),
     "intent-missing": ({"intent": None}, "öneri"),
     "entry-tiny": ({"intent": replace(INTENT, entry=Decimal("1E-1000000"))}, "giriş"),
+    # each named by its own rule, not by the bounded calculation that would also refuse it
+    "fee-tiny": ({"fee": Decimal("1E-1000000")}, "ücret 1E-1000000 ölçeği"),
+    "min_amount-huge": (
+        {"rules": replace(RULES, min_amount=Decimal("1E+1000000"))},
+        "asgari miktar 1E+1000000 ölçeği",
+    ),
+    "amount-out_of_scale": (
+        {"approval": replace(APPROVAL, amount=Decimal("1E+1000000"))},
+        "miktar 1E+1000000 ölçeği",
+    ),
+    "pair-not_text": ({"intent": replace(INTENT, pair=NOTHING)}, "çift None ve yön 'buy' metin"),
 }
 
 
