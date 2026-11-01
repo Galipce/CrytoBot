@@ -32,7 +32,10 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   spec'ten önce kapanmalı — Deferred by: Galip Badem, 2026-10-30, A-5 gereği yeni fix turu yok; tek tek mutant
   kapatmak yerine sorun sınıfını oracle kapatır. Not (spec 0005, review round 1 F-6): `decide_change` `current`'ı
   doğrulamıyor — elle kurulmuş `NaN` limit `InvalidOperation`, `str` limit `TypeError`; aynı spec'te `current`
-  için `_limit_problems` ön kontrolü.
+  için `_limit_problems` ön kontrolü. Not (spec 0005, review round 3 F-1, F-2): Telegram ret mesajı `current`'ı
+  `Decimal(...)` ile yazar (`_limits.py:251,261`) — elle kurulmuş `Fraction` limit `TypeError`, `float` limit uzun
+  ikili açılım yazar; artırma dalının (`:261`) dev `int` `current` testi yok (aynası: `test_telegram_cannot_lower_a_
+  huge_int_multiple`); ön kontrol ikisini de kapatır.
 - **B-6** — `approve_trade` hash'lenemeyen bir çift (ör. liste) alırsa `TypeError` fırlatıyor; R-1'in "sonuç ya
   miktar ya adlandırılmış ret" sözü bu uçta karşılanmıyor (fail-closed, `pair: str` tipi mypy ile korunuyor) —
   Source: spec 0003, VERIFY round 1 G-3 (`src/crytobot/risk/_approval.py:124`) — Severity: Low — Recommendation:
