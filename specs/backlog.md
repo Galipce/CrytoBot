@@ -51,9 +51,11 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   üretemeyeceği elle kurulmuş durumlar — Source: spec 0004, review round 4 N-1, N-2
   (`src/crytobot/risk/_approval.py:137`) — Severity: Low — Recommendation: HAND_BUILT'e `nan_peak` (ve `inf_peak`)
   vakası, beklenen mesaj "eksik ya da geçersiz"; mesaj metni buna göre — Deferred by: Galip Badem, 2026-10-31, fix
-  turu kalmadı (R-06 orantısız); `RiskState`'i kalıcı depoya yazan/okuyan ilk spec'te kapanır.
+  turu kalmadı (R-06 orantısız); `RiskState`'i kalıcı depoya yazan/okuyan ilk spec'te kapanır. Not (spec 0005,
+  review round 2 F-2): elle kurulmuş `day=10**4300` durumu `_approval.py:168`'deki mesajda `ValueError`
+  fırlatır — aynı sınıf, aynı yerde kapanır.
 - **B-11** — Ölçek sınırı içindeki uç girdiler sınırlı ama yavaş: `_size` ~2,4 s ve ~1 MB'lık onay mesajı
   (giriş `1E+999999`, adım `1E-999999`); ~1M basamaklı `int` girdinin `Decimal`'e çevrilmesi ~27 s — Source: spec
-  0005, review round 1 F-4 (`src/crytobot/risk/_approval.py:298-310`) — Severity: Info — Recommendation: onaylı
+  0005, review round 1 F-4 (`src/crytobot/risk/_approval.py:302-314`) — Severity: Info — Recommendation: onaylı
   miktarı borsa hassasiyetine yuvarlayan spec'te miktar/mesaj uzunluğu ve `int` girdinin basamak sayısı sınırlanır —
   Deferred by: Galip Badem, 2026-11-01, yalnız gerçekçi olmayan girdiler; R-7 tutuyor (istisna yok, süre sonlu).

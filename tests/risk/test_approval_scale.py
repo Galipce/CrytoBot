@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
+from fractions import Fraction
 from typing import Any
 
 import pytest
@@ -123,15 +124,34 @@ def test_tiny_limit_stays_bounded() -> None:
 BIG: Any = 10**4300  # past Python 3.12's 4300-digit int -> str limit (review round 1 F-1)
 
 
+# a positive huge input is valid where nothing bounds it above; every negative one is invalid
+HUGE_OUTCOME: dict[tuple[str, int], ApprovalReason | None] = {
+    ("target", 1): None,
+    ("target", -1): ApprovalReason.INVALID_TARGET,
+    ("entry", -1): ApprovalReason.INVALID_ENTRY,
+    ("equity", 1): None,  # limited by the free balance
+    ("entry", 1): ApprovalReason.INVALID_TARGET,
+    ("stop", 1): ApprovalReason.INVALID_STOP,
+    ("stop", -1): ApprovalReason.INVALID_STOP,
+    ("step", 1): ApprovalReason.BELOW_MINIMUM,
+    ("min_amount", 1): ApprovalReason.BELOW_MINIMUM,
+    ("min_notional", 1): ApprovalReason.BELOW_MINIMUM,
+    ("positions", 1): ApprovalReason.POSITION_LIMIT,
+}
+UNNAMED = {("step", 1)}  # the minimum's message names the amount, not the step
+
+
 @pytest.mark.parametrize("sign", [1, -1], ids=["big", "negative_big"])
 @pytest.mark.parametrize("name", list(BASE))
 def test_huge_int_input_is_a_named_rejection(name: str, sign: int) -> None:
-    """AC-8, AC-11 (R-7): 4300 basamağı aşan `int` girdi `ValueError` değil, bir sonuç verir."""
+    """AC-8, AC-11 (R-7): 4300 basamağı aşan `int` girdi `ValueError` değil, bir sonuç verir;
+    reddedilirse değer mesajda tam yazılır."""
     result = approve({name: sign * BIG})
 
+    assert result.reason is HUGE_OUTCOME.get((name, sign), ApprovalReason.INVALID_INPUT)
     assert (result.amount is None) is (result.reason is not None)
-    if sign < 0:  # no input may be negative
-        assert result.reason is not None
+    if result.reason is not None and (name, sign) not in UNNAMED:
+        assert f"1{'0' * 4300}" in result.message
 
 
 def test_huge_int_multiple_is_shown_in_the_message() -> None:
@@ -152,3 +172,45 @@ def test_huge_int_observation_is_a_named_rejection(at: Any, equity: Any) -> None
     update = observe(EMPTY_STATE, at, equity, DEFAULT_LIMITS)
 
     assert update.reason is not None and update.state == EMPTY_STATE
+
+
+HIDDEN: Any = Fraction(10**4300)  # its repr writes the int out: past the limit, it raises
+HIDDEN_PAIR: Any = (BIG,)  # hashable, so it reaches the side check and the message
+WRAPPED: dict[str, dict[str, Any]] = {
+    "fee": {"fee": HIDDEN},
+    "now": {"now": (BIG,)},
+    "whitelist": {"whitelist": [BIG]},
+    "pair": {
+        "intent": TradeIntent(HIDDEN_PAIR, "sell", Decimal("100"), Decimal("95"), Decimal("200"))
+    },
+}
+
+
+@pytest.mark.parametrize("case", list(WRAPPED))
+def test_repr_hiding_a_huge_int_is_a_named_rejection(case: str) -> None:
+    """AC-11 (R-7): `repr`'i dev `int` yazan `int` dışı girdi `ValueError` değil, adlandırılmış
+    ret."""
+    arguments: dict[str, Any] = {
+        "intent": TradeIntent(PAIR, "buy", Decimal("100"), Decimal("95"), Decimal("200")),
+        "limits": DEFAULT_LIMITS,
+        "account": AccountState(Decimal("10000"), Decimal("5000"), 0),
+        "rules": PairRules(Decimal("0.001"), Decimal("0.001"), Decimal("5")),
+        "whitelist": frozenset({PAIR}),
+        "fee": Decimal("0.001"),
+        "spread": Decimal(0),
+        "slippage": Decimal(0),
+        "state": observe(EMPTY_STATE, NOW, Decimal("10000"), DEFAULT_LIMITS).state,
+        "now": NOW,
+    } | WRAPPED[case]
+
+    result = approve_trade(**arguments)
+
+    assert result.reason is not None and result.amount is None
+    assert "gösterilemiyor" in result.message
+
+
+def test_repr_hiding_a_huge_int_is_a_rejected_observation() -> None:
+    """Spec 0004 R-7: `repr`'i dev `int` yazan kasa gözlemi `ValueError` değil, gözlem reddi."""
+    update = observe(EMPTY_STATE, NOW, [BIG], DEFAULT_LIMITS)
+
+    assert update.reason is not None and "gösterilemiyor" in update.message

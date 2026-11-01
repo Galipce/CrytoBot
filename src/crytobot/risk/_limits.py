@@ -28,11 +28,15 @@ def _in_scale(number: Decimal) -> bool:
 
 
 def _show(value: object) -> str:
-    """Ret mesajı için `repr`; `int` `Decimal` üzerinden: 3.12'de 4300 basamağı aşan `str(int)`
-    `ValueError` fırlatır (spec 0005 F-1)."""
+    """Ret mesajı için `repr`; 3.12'de 4300 basamağı aşan `int` `str`'e çevrilirken `ValueError`
+    fırlatır — çıplaksa `Decimal` üzerinden yazılır, `Fraction`/tuple içindeyse yerine tür adı
+    (spec 0005)."""
     if isinstance(value, int) and not isinstance(value, bool):
         return str(Decimal(value))
-    return repr(value)
+    try:
+        return repr(value)
+    except ValueError:
+        return f"<{type(value).__name__}: gösterilemiyor>"
 
 
 @dataclass(frozen=True)
@@ -102,10 +106,10 @@ def _validate(name: str, value: object) -> LimitValue | _Problem:
     """Tek bir limit değerini doğrular; `name` bilinen bir limit adıdır."""
     number: LimitValue
     if isinstance(value, bool):
-        return _Problem(RejectReason.INVALID_VALUE, f"{name}: {value!r} sayı değil")
+        return _Problem(RejectReason.INVALID_VALUE, f"{name}: {_show(value)} sayı değil")
     if name == MAX_OPEN_POSITIONS:
         if not isinstance(value, int):
-            return _Problem(RejectReason.INVALID_VALUE, f"{name}: {value!r} tam sayı değil")
+            return _Problem(RejectReason.INVALID_VALUE, f"{name}: {_show(value)} tam sayı değil")
         if value < 1:
             return _Problem(RejectReason.INVALID_VALUE, f"{name}: {_show(value)} en az 1 olmalı")
         number = value
@@ -115,7 +119,7 @@ def _validate(name: str, value: object) -> LimitValue | _Problem:
         elif isinstance(value, Decimal):
             number = value
         else:
-            return _Problem(RejectReason.INVALID_VALUE, f"{name}: {value!r} sayı değil")
+            return _Problem(RejectReason.INVALID_VALUE, f"{name}: {_show(value)} sayı değil")
         # NaN/infinity first: NaN fails every comparison and would slip past the cap check
         if not number.is_finite():
             return _Problem(RejectReason.INVALID_VALUE, f"{name}: {number} sonlu bir sayı değil")
@@ -243,8 +247,8 @@ def decide_change(current: RiskLimits, change: LimitChange) -> ChangeDecision:
     ):
         return reject(
             RejectReason.TELEGRAM_DECREASE,
-            f"{change.limit}: Telegram'dan düşürme yapılamaz ({values[change.limit]} → {checked});"
-            " yalnızca CLI",
+            f"{change.limit}: Telegram'dan düşürme yapılamaz"
+            f" ({Decimal(values[change.limit])} → {checked}); yalnızca CLI",
         )
     if (
         channel is Channel.TELEGRAM
@@ -253,8 +257,8 @@ def decide_change(current: RiskLimits, change: LimitChange) -> ChangeDecision:
     ):
         return reject(
             RejectReason.TELEGRAM_INCREASE,
-            f"{change.limit}: Telegram'dan artırma yapılamaz ({values[change.limit]} → {checked});"
-            " yalnızca CLI",
+            f"{change.limit}: Telegram'dan artırma yapılamaz"
+            f" ({Decimal(values[change.limit])} → {checked}); yalnızca CLI",
         )
     values[change.limit] = checked
     return ChangeDecision(_build(values), None, f"{change.limit}: {checked} kabul edildi")

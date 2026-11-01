@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from decimal import Decimal
+from fractions import Fraction
 from typing import Any
 
 import pytest
@@ -154,3 +155,22 @@ def test_huge_int_name_is_rejected(field: str, reason: RejectReason) -> None:
     change = replace(LimitChange(NAME, Decimal("3"), "cli"), **{field: BIG})
 
     assert decide_change(DEFAULT_LIMITS, change).reason is reason
+
+
+@pytest.mark.parametrize("value", [Fraction(10**4300), [10**4300]], ids=["fraction", "list"])
+@pytest.mark.parametrize("limit", LIMITS)
+def test_repr_hiding_a_huge_int_is_an_invalid_value(limit: str, value: Any) -> None:
+    """R-4 (F-1): `repr`'i dev `int` yazan değer `ValueError` değil, "geçersiz değer"."""
+    decision = decide_change(DEFAULT_LIMITS, LimitChange(limit, value, "cli"))
+
+    assert decision.reason is RejectReason.INVALID_VALUE and "gösterilemiyor" in decision.message
+
+
+def test_telegram_cannot_lower_a_huge_int_multiple() -> None:
+    """R-5 (F-2): elle kurulmuş dev `int` kattan Telegram'la düşürme `ValueError` değil, ret."""
+    current = replace(DEFAULT_LIMITS, profit_cost_multiple=BIG)
+
+    decision = decide_change(current, LimitChange(NAME, Decimal("3"), "telegram"))
+
+    assert decision.reason is RejectReason.TELEGRAM_DECREASE and decision.limits == current
+    assert f"1{'0' * 4300} → 3" in decision.message
