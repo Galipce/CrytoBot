@@ -21,6 +21,7 @@ from crytobot.risk import (
     DEFAULT_LIMITS,
     EMPTY_STATE,
     AccountState,
+    ApprovalReason,
     PairRules,
     TradeApproval,
     TradeIntent,
@@ -87,12 +88,17 @@ LOW_EDGE = replace(INTENT, target=Decimal("100.3"))
 UNAPPROVED: dict[str, dict[str, Any]] = {
     # spec 0005: cost 0.4506, threshold 0.9012, profit 0.3 -> insufficient edge
     "rejected": {"approval": judge(LOW_EDGE), "intent": LOW_EDGE},
+    # a rejection that still carries an amount: the reason alone refuses it
+    "rejected_with_amount": {
+        "approval": replace(APPROVAL, reason=ApprovalReason.INSUFFICIENT_EDGE)
+    },
     "not_an_approval": {"approval": None},
     "no_amount": {"approval": replace(APPROVAL, amount=None)},
     "zero_amount": {"approval": replace(APPROVAL, amount=Decimal(0))},
     "negative_amount": {"approval": replace(APPROVAL, amount=Decimal(-1))},
     "nan_amount": {"approval": replace(APPROVAL, amount=Decimal("NaN"))},
     "other_pair": {"intent": ETH},
+    "other_side": {"intent": replace(INTENT, side="sell")},
     "other_entry": {"intent": replace(INTENT, entry=Decimal("101"))},
     "other_stop": {"intent": replace(INTENT, stop=Decimal("94"))},
     "other_target": {"intent": replace(INTENT, target=Decimal("111"))},
@@ -167,13 +173,18 @@ def test_same_intent_id_returns_the_existing_order() -> None:
 
 CONFLICTS: dict[str, dict[str, Any]] = {
     "amount": {"approval": replace(APPROVAL, amount=Decimal("19.248"))},
+    "pair": {"intent": ETH},
+    "side": {"intent": replace(INTENT, side="sell")},
+    "entry": {"intent": replace(INTENT, entry=Decimal("101"))},
+    "stop": {"intent": replace(INTENT, stop=Decimal("94"))},
     "target": {"intent": replace(INTENT, target=Decimal("120"))},
 }
 
 
 @pytest.mark.parametrize("field", list(CONFLICTS))
 def test_changed_content_is_an_id_conflict(field: str) -> None:
-    """AC-5 (R-7): aynı kimlik farklı miktar ya da hedefle → "kimlik çakışması", emir değişmez."""
+    """AC-5 (R-7): aynı kimlik farklı çift, yön, giriş, stop, hedef ya da miktarla → "kimlik
+    çakışması", emir değişmez."""
     overrides = CONFLICTS[field]
     if "intent" in overrides:
         overrides = overrides | {"approval": judge(overrides["intent"])}

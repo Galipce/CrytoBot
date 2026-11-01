@@ -28,6 +28,7 @@ from crytobot.risk import (
     DEFAULT_LIMITS,
     EMPTY_STATE,
     AccountState,
+    ApprovalReason,
     PairRules,
     TradeApproval,
     TradeIntent,
@@ -55,14 +56,18 @@ def judge(intent: TradeIntent) -> TradeApproval:
 
 
 APPROVAL = judge(INTENT)
-# (intent, approval): approved, approved with another amount, off the step, rejected by risk,
-# judged on another intent, approval without an amount
+# (intent, approval): approved, approved with another amount, off the step, rejected by risk, a
+# rejection carrying an amount, judged on another intent (target, entry, side), approval without
+# an amount
 VARIANTS: dict[str, tuple[TradeIntent, TradeApproval]] = {
     "ok": (INTENT, APPROVAL),
     "other_amount": (INTENT, replace(APPROVAL, amount=Decimal("19.248"))),
     "off_step": (INTENT, replace(APPROVAL, amount=Decimal("19.2495"))),
     "rejected": (LOW_EDGE, judge(LOW_EDGE)),
+    "reason_with_amount": (INTENT, replace(APPROVAL, reason=ApprovalReason.INSUFFICIENT_EDGE)),
     "mismatch": (replace(INTENT, target=Decimal("111")), APPROVAL),
+    "other_entry": (replace(INTENT, entry=Decimal("101")), APPROVAL),
+    "other_side": (replace(INTENT, side="sell"), APPROVAL),
     "no_amount": (INTENT, replace(APPROVAL, amount=None)),
 }
 IDS = ["a", "b", "c", "a b"]  # "a b" breaks the id format
@@ -87,7 +92,7 @@ class Query:
 places = st.builds(
     Place,
     st.sampled_from(IDS[:3] * 3 + IDS[3:]),
-    st.sampled_from(["ok"] * 5 + list(VARIANTS)),  # mostly approved: orders get created
+    st.sampled_from(["ok"] * 5 + list(VARIANTS)),  # approved weighted up: orders get created
     st.sampled_from([Decimal("100"), Decimal("99.5"), Decimal("120")] * 3 + [None]),
     st.sampled_from([Decimal(0), Decimal("0.001")]),
     # 19.249 * 100 * 1.001 = 1926.8249: the minimum notional sits around the boundary
@@ -103,7 +108,7 @@ settles = st.fixed_dictionaries(
     {f"cb-{i}": st.sampled_from([*STATUSES[:2] * 2, OrderStatus.UNKNOWN]) for i in "abc"}
 )
 cases = st.tuples(
-    st.lists(st.one_of(places, queries, queries), min_size=1, max_size=20), scripts, settles
+    st.lists(st.one_of(places, queries, queries), min_size=1, max_size=25), scripts, settles
 )
 
 
@@ -232,8 +237,9 @@ def test_no_input_raises(values: tuple[Any, ...], query_id: Any, placements: Any
     assert (result.order is not None) is (result.outcome is OrderOutcome.CREATED)
 
 
-# measured at 300 (build): created 159, invalid input 197, exchange rule 114, unapproved 120,
-# status unknown 51, id conflict 39, already exists 56, updated 31 (= safe mode exits 31)
+# measured at 300 (fix-1): created 191, invalid input 153, exchange rule 163, unapproved 264,
+# unsupported mode 81, status unknown 28, id conflict 81, already exists 118, updated 67 (= safe
+# mode exits 67)
 def test_decisions_are_not_vacuous() -> None:
     """AC-11: üreteç her sonucu yeterince üretir; güvenli moda giriş ve çıkış da olur."""
     record: Counter[str] = Counter()
