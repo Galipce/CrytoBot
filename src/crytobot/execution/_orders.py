@@ -390,8 +390,8 @@ def place_order(
         ExecutionState(MappingProxyType(orders), MappingProxyType(quotes)),
         OrderOutcome.CREATED,
         order,
-        f"{_show(pair)}: {client_order_id} {status.value}: miktar {_brief(amount)},"
-        f" dolum fiyatı {fill}",
+        f"{_show(pair)}: {client_order_id} {status.value}: miktar {_brief(amount)}"
+        + (f", dolum fiyatı {fill}" if filled else ""),
         notifications,
     )
 

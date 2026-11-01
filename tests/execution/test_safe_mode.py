@@ -76,6 +76,7 @@ def test_unknown_status_enters_safe_mode_once() -> None:
     order = entered.order
     assert entered.created and order is not None and order.status is UNKNOWN
     assert order.fill_price is None and order.fee is None
+    assert "dolum fiyatı" not in entered.message
     assert [n.kind for n in entered.notifications] == [NotificationKind.SAFE_MODE_ENTERED]
     note = entered.notifications[0]
     assert (note.client_order_id, note.pair, note.at) == ("cb-a", PAIR, NOW)
@@ -170,6 +171,7 @@ def test_rejected_order_is_not_safe_mode() -> None:
     order = rejected.order
     assert rejected.created and order is not None and order.status is REJECTED
     assert order.fill_price is None and rejected.notifications == ()
+    assert "dolum fiyatı" not in rejected.message
     assert rejected.state.unknown == ()
     assert again.outcome is OrderOutcome.ALREADY_EXISTS and again.order == order
     assert other.created

@@ -81,6 +81,7 @@ def test_approved_intent_fills_at_price_plus_slippage() -> None:
     assert (order.entry, order.stop, order.target) == (Decimal(100), Decimal(95), Decimal(110))
     assert order.created_at == NOW
     assert dict(result.state.orders) == {order.client_order_id: order}
+    assert "dolum fiyatı 100.1" in result.message
 
 
 ETH = replace(INTENT, pair="ETH/USDT")
