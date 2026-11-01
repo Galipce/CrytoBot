@@ -57,11 +57,13 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   turu kalmadı (R-06 orantısız); `RiskState`'i kalıcı depoya yazan/okuyan ilk spec'te kapanır. Not (spec 0005,
   review round 2 F-2): elle kurulmuş `day=10**4300` durumu `_approval.py:168`'deki mesajda `ValueError`
   fırlatır — aynı sınıf, aynı yerde kapanır.
-- **B-11** — Ölçek sınırı içindeki uç girdiler sınırlı ama yavaş: `_size` ~2,4 s ve ~1 MB'lık onay mesajı
-  (giriş `1E+999999`, adım `1E-999999`); ~1M basamaklı `int` girdinin `Decimal`'e çevrilmesi ~27 s — Source: spec
-  0005, review round 1 F-4 (`src/crytobot/risk/_approval.py:302-314`) — Severity: Info — Recommendation: onaylı
-  miktarı borsa hassasiyetine yuvarlayan spec'te miktar/mesaj uzunluğu ve `int` girdinin basamak sayısı sınırlanır —
-  Deferred by: Galip Badem, 2026-11-01, yalnız gerçekçi olmayan girdiler; R-7 tutuyor (istisna yok, süre sonlu).
+- **B-11** — `risk` tarafı: ölçek sınırı içindeki uç girdiler sınırlı ama yavaş — `_size` ~2,4 s ve ~1 MB'lık onay
+  mesajı (giriş `1E+999999`, adım `1E-999999`); ~1M basamaklı `int` girdinin `Decimal`'e çevrilmesi ~27 s. Execution
+  tarafı spec 0006 ile kapandı (emir miktarı ve fiyat ≤ 28 anlamlı basamak, 28 basamaklı sınırlı hesap, kısa mesaj)
+  — Source: spec 0005, review round 1 F-4 (`src/crytobot/risk/_approval.py:302-314`) — Severity: Info —
+  Recommendation: `risk`'te de execution'daki gibi sınırlı bağlam ve basamak sayısıyla yazılan mesaj — Deferred by:
+  Galip Badem, 2026-11-01, yalnız gerçekçi olmayan girdiler; R-7 tutuyor (istisna yok, süre sonlu); spec 0006'da
+  risk tarafına daraltıldı.
 - **B-12** — `./scripts/residue` kalan süreçleri check'e ebeveyn ağacıyla bağlamıyor: boşta olmayan makinede sistem
   süreçleri (svchost, SearchProtocolHost/SearchFilterHost, WmiPrvSE, tarayıcı) her koşuda `RESIDUE FOUND`, rc=1 verir
   ve her spec'te elle değerlendirilir — Source: spec 0005, VERIFY (`scripts/residue`) — Severity: Info —
