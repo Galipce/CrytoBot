@@ -86,6 +86,7 @@ def test_approved_intent_fills_at_price_plus_slippage() -> None:
 
 ETH = replace(INTENT, pair="ETH/USDT")
 LOW_EDGE = replace(INTENT, target=Decimal("100.3"))
+NOTHING: Any = None  # a field value outside its type, as a hand-built value may carry
 UNAPPROVED: dict[str, dict[str, Any]] = {
     # spec 0005: cost 0.4506, threshold 0.9012, profit 0.3 -> insufficient edge
     "rejected": {"approval": judge(LOW_EDGE), "intent": LOW_EDGE},
@@ -103,6 +104,9 @@ UNAPPROVED: dict[str, dict[str, Any]] = {
     "other_entry": {"intent": replace(INTENT, entry=Decimal("101"))},
     "other_stop": {"intent": replace(INTENT, stop=Decimal("94"))},
     "other_target": {"intent": replace(INTENT, target=Decimal("111"))},
+    # a hand-built approval whose judged intent is not one: refused, no exception (R-12)
+    "judged_not_an_intent": {"approval": replace(APPROVAL, intent=NOTHING)},
+    "judged_pair_not_text": {"approval": replace(APPROVAL, intent=replace(INTENT, pair=NOTHING))},
 }
 
 
