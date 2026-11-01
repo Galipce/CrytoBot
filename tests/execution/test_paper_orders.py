@@ -231,6 +231,7 @@ def test_invalid_intent_id_is_invalid_input(intent_id: Any) -> None:
 
 
 LONG = Decimal("1." + "2" * 28)  # 29 significant digits
+TOO_LONG = "<29 basamaklı sayı> 28 anlamlı basamaktan uzun"  # not the bounded calculation
 INVALID: dict[str, tuple[dict[str, Any], str]] = {
     "price-none": ({"price": None}, "fiyat"),
     "price-zero": ({"price": Decimal(0)}, "fiyat"),
@@ -239,9 +240,9 @@ INVALID: dict[str, tuple[dict[str, Any], str]] = {
     "price-float": ({"price": 100.0}, "fiyat"),
     "price-bool": ({"price": True}, "fiyat"),
     "price-out_of_scale": ({"price": Decimal("1E+1000000")}, "fiyat"),
-    "price-29_digits": ({"price": LONG}, "fiyat"),
+    "price-29_digits": ({"price": LONG}, "fiyat " + TOO_LONG),
     "price-negative_huge_int": ({"price": -(10**4300)}, "fiyat"),
-    "amount-29_digits": ({"approval": replace(APPROVAL, amount=LONG)}, "miktar"),
+    "amount-29_digits": ({"approval": replace(APPROVAL, amount=LONG)}, "miktar " + TOO_LONG),
     "fee-one": ({"fee": Decimal(1)}, "ücret"),
     "fee-negative": ({"fee": Decimal("-0.001")}, "ücret"),
     "fee-huge_int": ({"fee": 10**4300}, "ücret"),
