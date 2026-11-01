@@ -278,22 +278,48 @@ def test_time_without_zone_is_invalid_input(now: Any) -> None:
     assert result.outcome is OrderOutcome.INVALID_INPUT and "zaman" in result.message
 
 
-UNREPRESENTABLE: dict[str, dict[str, Any]] = {
-    "tiny_slippage": {"slippage": Decimal("1E-999999")},
-    "tiny_step": {"rules": replace(RULES, amount_step=Decimal("1E-999999"), min_amount=Decimal(0))},
-    "long_slippage": {"slippage": Decimal("0.001" + "0" * 999_990 + "1")},
+TINY_STEP = replace(RULES, amount_step=Decimal("1E-999999"), min_amount=Decimal(0))
+# in scale and within 28 significant digits, but a million digits written out (B-11)
+LONG_PRICE = Decimal("1" + "0" * 999_990)
+LONG_AMOUNT = Decimal("19249" + "0" * 999_990)
+UNREPRESENTABLE: dict[str, tuple[dict[str, Any], str]] = {
+    "tiny_slippage": ({"slippage": Decimal("1E-999999")}, "miktar 19.249"),
+    "tiny_step": ({"rules": TINY_STEP}, "miktar 19.249"),
+    "long_slippage": ({"slippage": Decimal("0.001" + "0" * 999_990 + "1")}, "miktar 19.249"),
+    "long_price": ({"price": LONG_PRICE, "rules": TINY_STEP}, "fiyat <999991 basamaklı sayı>"),
+    "long_amount": (
+        {"approval": replace(APPROVAL, amount=LONG_AMOUNT)},
+        "miktar <999995 basamaklı sayı>",
+    ),
 }
 
 
 @pytest.mark.parametrize("case", list(UNREPRESENTABLE))
 def test_unrepresentable_calculation_is_named(case: str) -> None:
     """AC-10 (R-5, R-12; plan 0006 Risk 3): tam sonucu 28 basamağa sığmayan hesap yuvarlanmaz,
-    "ölçek hesaplanamıyor" ile reddedilir; mesaj kısa kalır (B-11)."""
-    result = place(**UNREPRESENTABLE[case])
+    "ölçek hesaplanamıyor" ile reddedilir; mesaj kısa kalır, uzun sayı basamak sayısıyla (B-11)."""
+    overrides, number = UNREPRESENTABLE[case]
+
+    result = place(**overrides)
 
     assert result.outcome is OrderOutcome.INVALID_INPUT and result.order is None
-    assert "ölçek hesaplanamıyor" in result.message and "miktar 19.249" in result.message
+    assert "ölçek hesaplanamıyor" in result.message and number in result.message
     assert len(result.message) < 500
+
+
+@pytest.mark.parametrize("min_amount", [Decimal("0.001"), Decimal("20")], ids=["created", "rule"])
+def test_long_amount_is_short_in_the_message(min_amount: Decimal) -> None:
+    """AC-1, AC-4 (R-12, B-11): sondaki sıfırlarla milyon basamaklı miktar emir oluşturur ya da
+    borsa kuralına takılır; mesaj kısa kalır."""
+    amount = Decimal("19.249" + "0" * 999_990)
+
+    result = place(
+        approval=replace(APPROVAL, amount=amount), rules=replace(RULES, min_amount=min_amount)
+    )
+
+    assert result.outcome in (OrderOutcome.CREATED, OrderOutcome.EXCHANGE_RULE)
+    assert result.created is (min_amount < amount)
+    assert "miktar <999995 basamaklı sayı>" in result.message and len(result.message) < 500
 
 
 def test_unrepresentable_calculation_is_refused_first() -> None:

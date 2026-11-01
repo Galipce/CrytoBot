@@ -303,7 +303,8 @@ def place_order(
     except DecimalException:  # the exact result does not fit in 28 digits (plan 0006 Risk 3)
         return reject(
             OrderOutcome.INVALID_INPUT,
-            f"geçersiz girdi: ölçek hesaplanamıyor (miktar {amount}, fiyat {checked.price},"
+            "geçersiz girdi: ölçek hesaplanamıyor (miktar"
+            f" {'yok' if amount is None else _brief(amount)}, fiyat {_brief(checked.price)},"
             f" slippage {_brief(checked.slippage)}, ücret {_brief(checked.fee)},"
             f" adım {_brief(checked.step)})",
         )
@@ -345,17 +346,19 @@ def place_order(
     if off_step:
         return reject(
             OrderOutcome.EXCHANGE_RULE,
-            f"borsa kuralı: miktar {amount} miktar adımının ({_brief(checked.step)}) katı değil",
+            f"borsa kuralı: miktar {_brief(amount)} miktar adımının ({_brief(checked.step)}) katı"
+            " değil",
         )
     if amount < checked.min_amount:
         return reject(
             OrderOutcome.EXCHANGE_RULE,
-            f"borsa kuralı: miktar {amount} asgari miktarın ({_brief(checked.min_amount)}) altında",
+            f"borsa kuralı: miktar {_brief(amount)} asgari miktarın ({_brief(checked.min_amount)})"
+            " altında",
         )
     if notional < checked.min_notional:
         return reject(
             OrderOutcome.EXCHANGE_RULE,
-            f"borsa kuralı: tutar {notional} (miktar {amount} * dolum fiyatı {fill}) asgari"
+            f"borsa kuralı: tutar {notional} (miktar {_brief(amount)} * dolum fiyatı {fill}) asgari"
             f" tutarın ({_brief(checked.min_notional)}) altında",
         )
     status = exchange.place(client_order_id)
@@ -387,7 +390,8 @@ def place_order(
         ExecutionState(MappingProxyType(orders), MappingProxyType(quotes)),
         OrderOutcome.CREATED,
         order,
-        f"{_show(pair)}: {client_order_id} {status.value}: miktar {amount}, dolum fiyatı {fill}",
+        f"{_show(pair)}: {client_order_id} {status.value}: miktar {_brief(amount)},"
+        f" dolum fiyatı {fill}",
         notifications,
     )
 
