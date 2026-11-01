@@ -293,3 +293,26 @@ def test_unrepresentable_calculation_is_named(case: str) -> None:
     assert result.outcome is OrderOutcome.INVALID_INPUT and result.order is None
     assert "ölçek hesaplanamıyor" in result.message and "miktar 19.249" in result.message
     assert len(result.message) < 500
+
+
+def test_unrepresentable_calculation_is_refused_first() -> None:
+    """AC-10 (R-11, R-12): hesaplanamayan girdi "geçersiz girdi" olarak mod, tekrar, güvenli mod ve
+    onay kontrollerinden önce döner."""
+    tiny: dict[str, Any] = {"slippage": Decimal("1E-999999")}
+    filled = place()
+    unknown = place_order(
+        EMPTY_EXECUTION, request(intent_id="z"), PaperExchange({"cb-z": OrderStatus.UNKNOWN}), NOW
+    )
+    assert unknown.state.unknown == ("cb-z",)
+
+    results = [
+        place(mode="live", **tiny),
+        place(filled.state, **tiny),
+        place(unknown.state, **tiny),
+        place(approval=replace(APPROVAL, amount=None), **tiny),
+        place(approval=None, **tiny),
+    ]
+
+    for result in results:
+        assert result.outcome is OrderOutcome.INVALID_INPUT and result.order is None
+        assert "ölçek hesaplanamıyor" in result.message

@@ -292,6 +292,21 @@ def place_order(
     if isinstance(checked, list):
         return reject(OrderOutcome.INVALID_INPUT, "geçersiz girdi: " + "; ".join(checked))
     assert isinstance(now, datetime)  # checked above
+    amount = checked.amount
+    try:  # before every other check: an incalculable input is invalid input first (R-11)
+        with localcontext(BOUNDED):
+            size = Decimal(0) if amount is None else amount  # no amount: refused as unapproved
+            fill = checked.price * (1 + checked.slippage)
+            notional = size * fill
+            fee = notional * checked.fee
+            off_step = size % checked.step != 0
+    except DecimalException:  # the exact result does not fit in 28 digits (plan 0006 Risk 3)
+        return reject(
+            OrderOutcome.INVALID_INPUT,
+            f"geçersiz girdi: ölçek hesaplanamıyor (miktar {amount}, fiyat {checked.price},"
+            f" slippage {_brief(checked.slippage)}, ücret {_brief(checked.fee)},"
+            f" adım {_brief(checked.step)})",
+        )
     if not (isinstance(request.mode, str) and request.mode == PAPER):
         return reject(
             OrderOutcome.UNSUPPORTED_MODE,
@@ -320,27 +335,13 @@ def place_order(
     approval = request.approval
     if not isinstance(approval, TradeApproval) or approval.reason is not None:
         return reject(OrderOutcome.UNAPPROVED, "onaysız öneri: risk onayı yok ya da ret")
-    if checked.amount is None:
+    if amount is None:
         return reject(
             OrderOutcome.UNAPPROVED,
             f"onaysız öneri: onaylı miktar {_show(approval.amount)} sıfırdan büyük bir sayı değil",
         )
     if _judged_differently(approval.intent, checked):
         return reject(OrderOutcome.UNAPPROVED, "onaysız öneri: onay başka bir öneri için verilmiş")
-    amount = checked.amount
-    try:
-        with localcontext(BOUNDED):
-            fill = checked.price * (1 + checked.slippage)
-            notional = amount * fill
-            fee = notional * checked.fee
-            off_step = amount % checked.step != 0
-    except DecimalException:  # the exact result does not fit in 28 digits (plan 0006 Risk 3)
-        return reject(
-            OrderOutcome.INVALID_INPUT,
-            f"geçersiz girdi: ölçek hesaplanamıyor (miktar {amount}, fiyat {checked.price},"
-            f" slippage {_brief(checked.slippage)}, ücret {_brief(checked.fee)},"
-            f" adım {_brief(checked.step)})",
-        )
     if off_step:
         return reject(
             OrderOutcome.EXCHANGE_RULE,
