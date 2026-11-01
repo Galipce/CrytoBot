@@ -311,19 +311,35 @@ def test_unrepresentable_calculation_is_named(case: str) -> None:
     assert len(result.message) < 500
 
 
-@pytest.mark.parametrize("min_amount", [Decimal("0.001"), Decimal("20")], ids=["created", "rule"])
-def test_long_amount_is_short_in_the_message(min_amount: Decimal) -> None:
+ZEROS = "0" * 999_990
+# (amount, rules, outcome): every message that names the amount
+LONG_AMOUNTS: dict[str, tuple[Decimal, PairRules, OrderOutcome]] = {
+    "created": (Decimal("19.249" + ZEROS), RULES, OrderOutcome.CREATED),
+    "off_step": (Decimal("19.2495" + ZEROS), RULES, OrderOutcome.EXCHANGE_RULE),
+    "below_min_amount": (
+        Decimal("19.249" + ZEROS),
+        replace(RULES, min_amount=Decimal("20")),
+        OrderOutcome.EXCHANGE_RULE,
+    ),
+    "below_min_notional": (
+        Decimal("19.249" + ZEROS),
+        replace(RULES, min_notional=Decimal("1E+10")),
+        OrderOutcome.EXCHANGE_RULE,
+    ),
+}
+
+
+@pytest.mark.parametrize("case", list(LONG_AMOUNTS))
+def test_long_amount_is_short_in_the_message(case: str) -> None:
     """AC-1, AC-4 (R-12, B-11): sondaki sıfırlarla milyon basamaklı miktar emir oluşturur ya da
     borsa kuralına takılır; mesaj kısa kalır."""
-    amount = Decimal("19.249" + "0" * 999_990)
+    amount, rules, outcome = LONG_AMOUNTS[case]
 
-    result = place(
-        approval=replace(APPROVAL, amount=amount), rules=replace(RULES, min_amount=min_amount)
-    )
+    result = place(approval=replace(APPROVAL, amount=amount), rules=rules)
 
-    assert result.outcome in (OrderOutcome.CREATED, OrderOutcome.EXCHANGE_RULE)
-    assert result.created is (min_amount < amount)
-    assert "miktar <999995 basamaklı sayı>" in result.message and len(result.message) < 500
+    assert result.outcome is outcome
+    digits = len(amount.as_tuple().digits)
+    assert f"miktar <{digits} basamaklı sayı>" in result.message and len(result.message) < 500
 
 
 def test_unrepresentable_calculation_is_refused_first() -> None:
