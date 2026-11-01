@@ -70,3 +70,8 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   Recommendation: survivor'ları check'in başlattığı süreç ağacına (ebeveyn PID) göre süz; ağaç dışındakileri ayrı,
   bilgi satırı olarak yaz — Deferred by: Galip Badem, 2026-11-01, spec'i bloklamıyor; araç değişikliği kendi
   bug/change akışında.
+- **B-13** — `query_order`, durumu `bilinmiyor` olup `quotes` girdisi olmayan elle kurulmuş bir `ExecutionState`'te
+  `KeyError` fırlatır (`src/crytobot/execution/_orders.py:436`); bugün durum yalnız `place_order`'dan geldiği için
+  ulaşılamaz — Source: spec 0006, review round 1 F-6 — Severity: Info — Recommendation: kalıcılık spec'inde quote
+  `Order` üzerinde taşınsın ya da emirle birlikte yazılsın; ya da `.get` + "geçersiz girdi" — Deferred by: Galip
+  Badem, 2026-11-01, bu spec'te ulaşılamaz; davranışı kalıcılık spec'i tanımlar.
