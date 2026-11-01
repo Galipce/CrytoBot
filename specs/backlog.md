@@ -62,3 +62,9 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   0005, review round 1 F-4 (`src/crytobot/risk/_approval.py:302-314`) — Severity: Info — Recommendation: onaylı
   miktarı borsa hassasiyetine yuvarlayan spec'te miktar/mesaj uzunluğu ve `int` girdinin basamak sayısı sınırlanır —
   Deferred by: Galip Badem, 2026-11-01, yalnız gerçekçi olmayan girdiler; R-7 tutuyor (istisna yok, süre sonlu).
+- **B-12** — `./scripts/residue` kalan süreçleri check'e ebeveyn ağacıyla bağlamıyor: boşta olmayan makinede sistem
+  süreçleri (svchost, SearchProtocolHost/SearchFilterHost, WmiPrvSE, tarayıcı) her koşuda `RESIDUE FOUND`, rc=1 verir
+  ve her spec'te elle değerlendirilir — Source: spec 0005, VERIFY (`scripts/residue`) — Severity: Info —
+  Recommendation: survivor'ları check'in başlattığı süreç ağacına (ebeveyn PID) göre süz; ağaç dışındakileri ayrı,
+  bilgi satırı olarak yaz — Deferred by: Galip Badem, 2026-11-01, spec'i bloklamıyor; araç değişikliği kendi
+  bug/change akışında.
