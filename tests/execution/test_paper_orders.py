@@ -215,9 +215,11 @@ def test_rejected_request_does_not_use_up_the_id() -> None:
 
 
 def test_client_order_id_is_prefixed_intent_id() -> None:
-    """AC-6 (R-6): `clientOrderId` = `cb-` + kimlik; aynı kimlik aynı değeri verir; 32 karakter."""
+    """AC-6 (R-6): `clientOrderId` = `cb-` + kimlik; aynı kimlik iki ayrı durumda aynı değeri
+    verir; 32 karakter."""
+    other = place(intent_id="zz-9")  # a second state: one that already holds another order
     one = place(intent_id="a1-B_2").order
-    two = place(EMPTY_EXECUTION, intent_id="a1-B_2").order
+    two = place(other.state, intent_id="a1-B_2").order
     longest = place(intent_id="x" * 32).order
 
     assert one is not None and two is not None and longest is not None
