@@ -120,3 +120,37 @@ def test_other_limits_keep_their_direction(channel: str) -> None:
 
     assert lowered.accepted
     assert raised.accepted is (channel == "cli")
+
+
+BIG: Any = 10**4300  # past Python 3.12's 4300-digit int -> str limit (review round 1 F-1)
+
+
+def test_integer_past_the_str_limit_is_a_config_error() -> None:
+    """AC-6 (R-4): tomllib'in okuyamadığı uzun tam sayı çıplak `ValueError` değil, config hatası."""
+    problems = problems_of(f"[risk]\n{NAME} = 1{'0' * 4300}\n")
+
+    assert len(problems) == 1 and "TOML olarak okunamadı" in problems[0]
+
+
+LIMITS = ["per_trade_risk", "daily_loss_limit", "max_drawdown", "max_open_positions", NAME]
+
+
+@pytest.mark.parametrize("sign", [1, -1], ids=["big", "negative_big"])
+@pytest.mark.parametrize("channel", ["cli", "telegram"])
+@pytest.mark.parametrize("limit", LIMITS)
+def test_huge_int_change_is_decided(limit: str, channel: str, sign: int) -> None:
+    """AC-6, AC-7 (R-4, R-5): dev `int` istek istisna değil karardır; yalnız kat yükseltilir."""
+    decision = decide_change(DEFAULT_LIMITS, LimitChange(limit, sign * BIG, channel))
+
+    assert decision.accepted is (limit == NAME and sign > 0)
+
+
+@pytest.mark.parametrize(
+    ("field", "reason"),
+    [("limit", RejectReason.UNKNOWN_LIMIT), ("channel", RejectReason.UNKNOWN_CHANNEL)],
+)
+def test_huge_int_name_is_rejected(field: str, reason: RejectReason) -> None:
+    """R-5: limit ya da kanal adı yerine dev `int` bilinmeyen ad olarak reddedilir."""
+    change = replace(LimitChange(NAME, Decimal("3"), "cli"), **{field: BIG})
+
+    assert decide_change(DEFAULT_LIMITS, change).reason is reason

@@ -30,7 +30,9 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   test (`channel_space`, `limit_space`, `ratio_bool` satırları; varsayılan değerleri açıkça yazan config) ve kök
   neden için AC-10 property testine beklenen-sonuç modeli (oracle); G-7, kanalları `decide_change`'e bağlayan
   spec'ten önce kapanmalı — Deferred by: Galip Badem, 2026-10-30, A-5 gereği yeni fix turu yok; tek tek mutant
-  kapatmak yerine sorun sınıfını oracle kapatır.
+  kapatmak yerine sorun sınıfını oracle kapatır. Not (spec 0005, review round 1 F-6): `decide_change` `current`'ı
+  doğrulamıyor — elle kurulmuş `NaN` limit `InvalidOperation`, `str` limit `TypeError`; aynı spec'te `current`
+  için `_limit_problems` ön kontrolü.
 - **B-6** — `approve_trade` hash'lenemeyen bir çift (ör. liste) alırsa `TypeError` fırlatıyor; R-1'in "sonuç ya
   miktar ya adlandırılmış ret" sözü bu uçta karşılanmıyor (fail-closed, `pair: str` tipi mypy ile korunuyor) —
   Source: spec 0003, VERIFY round 1 G-3 (`src/crytobot/risk/_approval.py:124`) — Severity: Low — Recommendation:
@@ -50,3 +52,8 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   (`src/crytobot/risk/_approval.py:137`) — Severity: Low — Recommendation: HAND_BUILT'e `nan_peak` (ve `inf_peak`)
   vakası, beklenen mesaj "eksik ya da geçersiz"; mesaj metni buna göre — Deferred by: Galip Badem, 2026-10-31, fix
   turu kalmadı (R-06 orantısız); `RiskState`'i kalıcı depoya yazan/okuyan ilk spec'te kapanır.
+- **B-11** — Ölçek sınırı içindeki uç girdiler sınırlı ama yavaş: `_size` ~2,4 s ve ~1 MB'lık onay mesajı
+  (giriş `1E+999999`, adım `1E-999999`); ~1M basamaklı `int` girdinin `Decimal`'e çevrilmesi ~27 s — Source: spec
+  0005, review round 1 F-4 (`src/crytobot/risk/_approval.py:298-310`) — Severity: Info — Recommendation: onaylı
+  miktarı borsa hassasiyetine yuvarlayan spec'te miktar/mesaj uzunluğu ve `int` girdinin basamak sayısı sınırlanır —
+  Deferred by: Galip Badem, 2026-11-01, yalnız gerçekçi olmayan girdiler; R-7 tutuyor (istisna yok, süre sonlu).

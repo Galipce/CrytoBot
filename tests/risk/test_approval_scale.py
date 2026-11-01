@@ -34,14 +34,15 @@ BASE: dict[str, Any] = {
     "step": Decimal("0.001"),
     "min_amount": Decimal("0.001"),
     "min_notional": Decimal("5"),
+    "positions": 0,
 }
 HUGE_OUT, TINY_OUT = Decimal("1E+1000000"), Decimal("1E-1000000")
 HUGE_IN, TINY_IN = Decimal("9.99E+999999"), Decimal("1E-999999")
 
 
-def approve(overrides: dict[str, Decimal], limits: RiskLimits = DEFAULT_LIMITS) -> TradeApproval:
+def approve(overrides: dict[str, Any], limits: RiskLimits = DEFAULT_LIMITS) -> TradeApproval:
     v = {**BASE, **overrides}
-    account = AccountState(v["equity"], v["free"], 0)
+    account = AccountState(v["equity"], v["free"], v["positions"])
     state = observe(EMPTY_STATE, NOW, v["equity"], limits).state
     return approve_trade(
         TradeIntent(PAIR, "buy", v["entry"], v["stop"], v["target"]),
@@ -117,3 +118,37 @@ def test_tiny_limit_stays_bounded() -> None:
     result = approve({}, limits=tiny)
 
     assert result.reason is ApprovalReason.BELOW_MINIMUM and result.amount is None
+
+
+BIG: Any = 10**4300  # past Python 3.12's 4300-digit int -> str limit (review round 1 F-1)
+
+
+@pytest.mark.parametrize("sign", [1, -1], ids=["big", "negative_big"])
+@pytest.mark.parametrize("name", list(BASE))
+def test_huge_int_input_is_a_named_rejection(name: str, sign: int) -> None:
+    """AC-8, AC-11 (R-7): 4300 basamağı aşan `int` girdi `ValueError` değil, bir sonuç verir."""
+    result = approve({name: sign * BIG})
+
+    assert (result.amount is None) is (result.reason is not None)
+    if sign < 0:  # no input may be negative
+        assert result.reason is not None
+
+
+def test_huge_int_multiple_is_shown_in_the_message() -> None:
+    """R-3, R-7: elle kurulmuş dev `int` kat, ret mesajında değeriyle adlandırılır."""
+    limits = replace(DEFAULT_LIMITS, profit_cost_multiple=BIG)
+
+    result = approve({"target": Decimal("101")}, limits=limits)
+
+    assert result.reason is ApprovalReason.INSUFFICIENT_EDGE
+    assert f"kat 1{'0' * 4300}" in result.message
+
+
+@pytest.mark.parametrize(
+    ("at", "equity"), [(NOW, -BIG), (BIG, Decimal("10000"))], ids=["negative_equity", "time"]
+)
+def test_huge_int_observation_is_a_named_rejection(at: Any, equity: Any) -> None:
+    """Spec 0004 R-7: dev `int` kasa ya da zaman gözlemi `ValueError` değil, gözlem reddidir."""
+    update = observe(EMPTY_STATE, at, equity, DEFAULT_LIMITS)
+
+    assert update.reason is not None and update.state == EMPTY_STATE

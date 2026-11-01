@@ -183,18 +183,52 @@ def test_changed_multiple_applies_at_once() -> None:
     assert approve(limits=raised).reason is ApprovalReason.INSUFFICIENT_EDGE
 
 
-def test_unrepresentable_result_names_every_value() -> None:
+@pytest.mark.parametrize(
+    ("free", "amount", "limited"),
+    [("1926.8249", "19.249", False), ("1926.8248", "19.248", True)],
+    ids=["same_steps", "one_step_fewer"],
+)
+def test_spread_and_slippage_leave_the_balance_limit_as_spec_0003(
+    free: str, amount: str, limited: bool
+) -> None:
+    """AC-1 (R-9): spread ve slippage sıfırdan büyükken bakiye sınırı spec 0003 AC-3 ile aynı."""
+    result = approve(account=replace(ACCOUNT, free_balance=Decimal(free)))
+
+    assert result.approved and result.amount == Decimal(amount)
+    assert result.limited_by_balance is limited
+
+
+UNREPRESENTABLE: dict[str, dict[str, Any]] = {
+    "tiny_step": {
+        "intent": TradeIntent(PAIR, "buy", Decimal("1"), Decimal("0.5"), Decimal("2")),
+        "rules": PairRules(Decimal("1E-999999"), Decimal("0"), Decimal("0")),
+    },
+    # costs 0: with a fee, the threshold rejects first (entry * fee would exceed the profit)
+    "huge_entry": {
+        "intent": TradeIntent(
+            PAIR, "buy", Decimal("9.999E+999999"), Decimal("1"), Decimal("9.9999E+999999")
+        ),
+        "rules": PairRules(Decimal("10"), Decimal("0"), Decimal("0")),
+        "fee": Decimal(0),
+        "spread": Decimal(0),
+        "slippage": Decimal(0),
+    },
+}
+NAMED = {
+    "tiny_step": ["giriş 1", "stop 0.5", "hedef 2", "ücret 0.001", "spread 0.0005",
+                  "slippage 0.001", "serbest bakiye 100000", "adım 1E-999999", "kasa 100000"],
+    "huge_entry": ["giriş 9.999E+999999", "stop 1", "hedef 9.9999E+999999", "ücret 0", "spread 0",
+                   "slippage 0", "serbest bakiye 100000", "adım 10", "kasa 100000"],
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("case", list(UNREPRESENTABLE))
+def test_unrepresentable_result_names_every_value(case: str) -> None:
     """AC-9 (R-8, B-5): aralık içi ama hesabı temsil edilemeyen girdi, tüm değerleriyle "ölçek"."""
     account = AccountState(Decimal("100000"), Decimal("100000"), 0)
 
-    result = approve(
-        TradeIntent(PAIR, "buy", Decimal("1"), Decimal("0.5"), Decimal("2")),
-        account=account,
-        rules=PairRules(Decimal("1E-999999"), Decimal("0"), Decimal("0")),
-    )
+    result = approve(account=account, **UNREPRESENTABLE[case])
 
     assert result.reason is ApprovalReason.INVALID_INPUT and result.amount is None
     assert "ölçek hesaplanamıyor" in result.message
-    named = ["giriş 1", "stop 0.5", "hedef 2", "ücret 0.001", "spread 0.0005", "slippage 0.001",
-             "serbest bakiye 100000", "adım 1E-999999", "kasa 100000"]  # fmt: skip
-    assert [value for value in named if value not in result.message] == []
+    assert [value for value in NAMED[case] if value not in result.message] == []

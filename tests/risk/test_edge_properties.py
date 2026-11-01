@@ -110,6 +110,7 @@ JUNK: list[Any] = [
     Decimal("1E+1000000"), Decimal("1E-1000000"), Decimal("1E-999999999999"),
     Decimal("1E+999999999999"), Decimal("9.99E+999999"), Decimal("1E-999999"),
     Decimal("0E-999999999999"), Decimal("0.001"), Decimal("100"), Decimal("95"),
+    10**4300, -10**4300,  # past Python 3.12's 4300-digit int -> str limit (review round 1 F-1)
 ]  # fmt: skip
 junk = st.sampled_from(JUNK)
 

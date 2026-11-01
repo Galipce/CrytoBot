@@ -27,6 +27,14 @@ def _in_scale(number: Decimal) -> bool:
     return -SCALE <= number.adjusted() <= SCALE
 
 
+def _show(value: object) -> str:
+    """Ret mesajı için `repr`; `int` `Decimal` üzerinden: 3.12'de 4300 basamağı aşan `str(int)`
+    `ValueError` fırlatır (spec 0005 F-1)."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(Decimal(value))
+    return repr(value)
+
+
 @dataclass(frozen=True)
 class RiskLimits:
     """Oranlar kasaya göre (`Decimal("0.01")` = %1); pozisyon sayısı tam sayı; kat, beklenen kârın
@@ -99,7 +107,7 @@ def _validate(name: str, value: object) -> LimitValue | _Problem:
         if not isinstance(value, int):
             return _Problem(RejectReason.INVALID_VALUE, f"{name}: {value!r} tam sayı değil")
         if value < 1:
-            return _Problem(RejectReason.INVALID_VALUE, f"{name}: {value} en az 1 olmalı")
+            return _Problem(RejectReason.INVALID_VALUE, f"{name}: {_show(value)} en az 1 olmalı")
         number = value
     else:
         if isinstance(value, int):
@@ -110,24 +118,26 @@ def _validate(name: str, value: object) -> LimitValue | _Problem:
             return _Problem(RejectReason.INVALID_VALUE, f"{name}: {value!r} sayı değil")
         # NaN/infinity first: NaN fails every comparison and would slip past the cap check
         if not number.is_finite():
-            return _Problem(RejectReason.INVALID_VALUE, f"{name}: {value} sonlu bir sayı değil")
+            return _Problem(RejectReason.INVALID_VALUE, f"{name}: {number} sonlu bir sayı değil")
         if name == PROFIT_COST_MULTIPLE:
             if not _in_scale(number):
                 return _Problem(
                     RejectReason.INVALID_VALUE,
-                    f"{name}: {value} ölçeği varsayılan üs aralığı (±{SCALE}) dışında",
+                    f"{name}: {number} ölçeği varsayılan üs aralığı (±{SCALE}) dışında",
                 )
             if number < HARD_FLOOR_MULTIPLE:
                 return _Problem(
                     RejectReason.BELOW_FLOOR,
-                    f"{name}: {value} alt sınırın ({HARD_FLOOR_MULTIPLE}) altında",
+                    f"{name}: {number} alt sınırın ({HARD_FLOOR_MULTIPLE}) altında",
                 )
             return number
         if number <= 0:
-            return _Problem(RejectReason.INVALID_VALUE, f"{name}: {value} sıfırdan büyük olmalı")
+            return _Problem(RejectReason.INVALID_VALUE, f"{name}: {number} sıfırdan büyük olmalı")
     cap = _caps()[name]
     if number > cap:
-        return _Problem(RejectReason.ABOVE_CAP, f"{name}: {value} üst sınırı {cap} aşıyor")
+        return _Problem(
+            RejectReason.ABOVE_CAP, f"{name}: {Decimal(number)} üst sınırı {cap} aşıyor"
+        )
     return number
 
 
@@ -157,7 +167,7 @@ def load_limits(toml_text: str) -> LoadedLimits:
     """
     try:
         document = tomllib.loads(toml_text, parse_float=Decimal)
-    except tomllib.TOMLDecodeError as error:
+    except ValueError as error:  # TOMLDecodeError, or an integer past the 4300-digit str limit
         raise RiskConfigError((f"config TOML olarak okunamadı: {error}",)) from error
     section = document.get("risk", {})
     if not isinstance(section, dict):
@@ -219,9 +229,9 @@ def decide_change(current: RiskLimits, change: LimitChange) -> ChangeDecision:
     try:
         channel = Channel(change.channel)
     except ValueError:
-        return reject(RejectReason.UNKNOWN_CHANNEL, f"{change.channel!r}: bilinmeyen kanal")
+        return reject(RejectReason.UNKNOWN_CHANNEL, f"{_show(change.channel)}: bilinmeyen kanal")
     if change.limit not in LIMIT_NAMES:
-        return reject(RejectReason.UNKNOWN_LIMIT, f"{change.limit!r}: bilinmeyen limit adı")
+        return reject(RejectReason.UNKNOWN_LIMIT, f"{_show(change.limit)}: bilinmeyen limit adı")
     checked = _validate(change.limit, change.value)
     if isinstance(checked, _Problem):
         return reject(checked.reason, checked.message)

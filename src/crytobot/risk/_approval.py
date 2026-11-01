@@ -7,7 +7,7 @@ from decimal import MAX_EMAX, MAX_PREC, MIN_EMIN, Decimal, DecimalException, Ine
 from enum import Enum
 from typing import TYPE_CHECKING, cast
 
-from crytobot.risk._limits import SCALE, RiskLimits, _in_scale, _limit_problems
+from crytobot.risk._limits import SCALE, RiskLimits, _in_scale, _limit_problems, _show
 
 if TYPE_CHECKING:  # _tracking imports this module; the state is only read here
     from crytobot.risk._tracking import RiskState
@@ -108,42 +108,44 @@ def _input_problems(
 ) -> list[str]:
     problems = _limit_problems(limits)
     if not isinstance(whitelist, Set):  # a str would match pairs by substring (BR-2)
-        problems.append(f"beyaz liste {whitelist!r} bir çift kümesi olmalı")
+        problems.append(f"beyaz liste {_show(whitelist)} bir çift kümesi olmalı")
     equity = _number(account.equity)
     if equity is None or equity <= 0:
-        problems.append(f"kasa {account.equity!r} sıfırdan büyük bir sayı olmalı")
+        problems.append(f"kasa {_show(account.equity)} sıfırdan büyük bir sayı olmalı")
     elif not _in_scale(equity):
         problems.append(_out_of_scale("kasa", equity))
     free = _number(account.free_balance)
     if free is None or free < 0:
-        problems.append(f"serbest bakiye {account.free_balance!r} negatif olmayan bir sayı olmalı")
+        problems.append(
+            f"serbest bakiye {_show(account.free_balance)} negatif olmayan bir sayı olmalı"
+        )
     elif not _in_scale(free):
         problems.append(_out_of_scale("serbest bakiye", free))
     elif equity is not None and free > equity:
         problems.append(f"serbest bakiye {free} kasadan ({equity}) büyük")
     positions = account.open_positions
     if isinstance(positions, bool) or not isinstance(positions, int) or positions < 0:
-        problems.append(f"açık pozisyon {positions!r} negatif olmayan bir tam sayı olmalı")
+        problems.append(f"açık pozisyon {_show(positions)} negatif olmayan bir tam sayı olmalı")
     rate = _number(fee)
     if rate is None or not 0 <= rate < 1:
-        problems.append(f"ücret {fee!r} 0 ile 1 arasında (1 hariç) olmalı")
+        problems.append(f"ücret {_show(fee)} 0 ile 1 arasında (1 hariç) olmalı")
     elif not _in_scale(rate):
         problems.append(_out_of_scale("ücret", rate))
     for label, value in (("spread", spread), ("slippage", slippage)):
         number = _number(value)  # no default: a missing cost is not silently zero (spec 0005 R-2)
         if number is None or not 0 <= number < 1:
-            problems.append(f"{label} {value!r} 0 ile 1 arasında (1 hariç) olmalı")
+            problems.append(f"{label} {_show(value)} 0 ile 1 arasında (1 hariç) olmalı")
         elif not _in_scale(number):
             problems.append(_out_of_scale(label, number))
     step = _number(rules.amount_step)
     if step is None or step <= 0:
-        problems.append(f"miktar adımı {rules.amount_step!r} sıfırdan büyük olmalı")
+        problems.append(f"miktar adımı {_show(rules.amount_step)} sıfırdan büyük olmalı")
     elif not _in_scale(step):
         problems.append(_out_of_scale("miktar adımı", step))
     for label, value in (("asgari miktar", rules.min_amount), ("asgari tutar", rules.min_notional)):
         number = _number(value)
         if number is None or number < 0:
-            problems.append(f"{label} {value!r} negatif olmayan bir sayı olmalı")
+            problems.append(f"{label} {_show(value)} negatif olmayan bir sayı olmalı")
         elif not _in_scale(number):
             problems.append(_out_of_scale(label, number))
     return problems
@@ -160,7 +162,7 @@ def _state_problems(state: "RiskState", now: object, equity: object) -> list[str
     if not all(_in_scale(cast(Decimal, e)) for e in equities):
         return [f"risk durumu geçersiz: kasa ölçeği varsayılan üs aralığı (±{SCALE}) dışında"]
     if not isinstance(now, datetime) or now.utcoffset() is None:
-        return [f"şu anki zaman {now!r} zaman dilimi taşımalı"]
+        return [f"şu anki zaman {_show(now)} zaman dilimi taşımalı"]
     problems = []
     if now.astimezone(UTC).date() != state.day:
         problems.append(f"risk durumu bayat: gün {state.day}, bugün {now.astimezone(UTC).date()}")
@@ -185,7 +187,7 @@ def approve_trade(
     """BR-2…BR-7: alım önerisini onaylar ve miktarını belirler ya da reddeder."""
 
     def reject(reason: ApprovalReason, detail: str) -> TradeApproval:
-        return TradeApproval(None, reason, False, f"{intent.pair!r}: {detail}")
+        return TradeApproval(None, reason, False, f"{_show(intent.pair)}: {detail}")
 
     problems = _input_problems(limits, account, rules, whitelist, fee, spread, slippage)
     problems += _state_problems(state, now, account.equity)
@@ -205,12 +207,14 @@ def approve_trade(
             f" limit {limits.daily_loss_limit}",
         )
     if intent.side != BUY:
-        return reject(ApprovalReason.NOT_BUY, f"yön {intent.side!r}: yalnızca alım onaylanır")
+        return reject(ApprovalReason.NOT_BUY, f"yön {_show(intent.side)}: yalnızca alım onaylanır")
     if intent.pair not in whitelist:
         return reject(ApprovalReason.NOT_WHITELISTED, "beyaz listede değil")
     entry = _number(intent.entry)
     if entry is None or entry <= 0:
-        return reject(ApprovalReason.INVALID_ENTRY, f"giriş {intent.entry!r} sıfırdan büyük olmalı")
+        return reject(
+            ApprovalReason.INVALID_ENTRY, f"giriş {_show(intent.entry)} sıfırdan büyük olmalı"
+        )
     if not _in_scale(entry):
         return reject(ApprovalReason.INVALID_ENTRY, _out_of_scale("giriş", entry))
     if intent.stop is None:
@@ -219,7 +223,7 @@ def approve_trade(
     if stop is None or stop <= 0 or stop >= entry:
         return reject(
             ApprovalReason.INVALID_STOP,
-            f"stop {intent.stop!r} sıfırdan büyük ve girişten ({entry}) küçük olmalı",
+            f"stop {_show(intent.stop)} sıfırdan büyük ve girişten ({entry}) küçük olmalı",
         )
     if not _in_scale(stop):
         return reject(ApprovalReason.INVALID_STOP, _out_of_scale("stop", stop))
@@ -229,7 +233,7 @@ def approve_trade(
     if target is None or target <= entry:
         return reject(
             ApprovalReason.INVALID_TARGET,
-            f"hedef {intent.target!r} girişten ({entry}) büyük bir sayı olmalı",
+            f"hedef {_show(intent.target)} girişten ({entry}) büyük bir sayı olmalı",
         )
     if not _in_scale(target):
         return reject(ApprovalReason.INVALID_TARGET, _out_of_scale("hedef", target))
@@ -241,13 +245,13 @@ def approve_trade(
         return reject(
             ApprovalReason.INSUFFICIENT_EDGE,
             f"yetersiz kâr beklentisi: beklenen kâr {profit}, efektif maliyet {cost},"
-            f" kat {limits.profit_cost_multiple}",
+            f" kat {Decimal(limits.profit_cost_multiple)}",
         )
     positions = cast(int, account.open_positions)  # validated above
     if positions >= limits.max_open_positions:
         return reject(
             ApprovalReason.POSITION_LIMIT,
-            f"açık pozisyon {positions}, limit {limits.max_open_positions}",
+            f"açık pozisyon {_show(positions)}, limit {limits.max_open_positions}",
         )
     return _size(intent.pair, entry, stop, target, costs, limits, account, rules)
 
@@ -313,7 +317,7 @@ def _size(
             None,
             ApprovalReason.INVALID_INPUT,
             False,
-            f"{pair!r}: geçersiz girdi: ölçek hesaplanamıyor (giriş {entry}, stop {stop},"
+            f"{_show(pair)}: geçersiz girdi: ölçek hesaplanamıyor (giriş {entry}, stop {stop},"
             f" hedef {target}, ücret {rate}, spread {spread}, slippage {slippage},"
             f" serbest bakiye {free}, adım {step}, kasa {equity})",
         )
@@ -322,8 +326,10 @@ def _size(
             None,
             ApprovalReason.BELOW_MINIMUM,
             False,
-            f"{pair!r}: miktar {amount} (tutar {notional}) borsa asgarisinin altında"
+            f"{_show(pair)}: miktar {amount} (tutar {notional}) borsa asgarisinin altında"
             f" (asgari miktar {min_amount}, asgari tutar {min_notional})",
         )
     note = " (serbest bakiyeyle sınırlı)" if limited_by_balance else ""
-    return TradeApproval(amount, None, limited_by_balance, f"{pair!r}: {amount} onaylandı{note}")
+    return TradeApproval(
+        amount, None, limited_by_balance, f"{_show(pair)}: {amount} onaylandı{note}"
+    )
