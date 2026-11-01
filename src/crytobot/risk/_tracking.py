@@ -5,8 +5,8 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import Enum
 
-from crytobot.risk._approval import SCALE, _in_scale, _number, _reached
-from crytobot.risk._limits import Channel, RiskLimits, _limit_problems
+from crytobot.risk._approval import _number, _reached
+from crytobot.risk._limits import SCALE, Channel, RiskLimits, _in_scale, _limit_problems
 
 
 @dataclass(frozen=True)

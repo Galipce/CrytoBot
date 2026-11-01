@@ -7,7 +7,7 @@ from decimal import MAX_EMAX, MAX_PREC, MIN_EMIN, Decimal, DecimalException, Ine
 from enum import Enum
 from typing import TYPE_CHECKING, cast
 
-from crytobot.risk._limits import RiskLimits, _limit_problems
+from crytobot.risk._limits import SCALE, RiskLimits, _in_scale, _limit_problems
 
 if TYPE_CHECKING:  # _tracking imports this module; the state is only read here
     from crytobot.risk._tracking import RiskState
@@ -77,15 +77,6 @@ def _number(value: object) -> Decimal | None:
         return None
     number = Decimal(value)
     return number if number.is_finite() else None
-
-
-# the default context's exponent range: the exact difference of two values inside it stays bounded
-SCALE = 999_999
-
-
-def _in_scale(number: Decimal) -> bool:
-    """Üssü varsayılan decimal aralığında (±999999) olan sayı (spec 0004 A-2)."""
-    return -SCALE <= number.adjusted() <= SCALE
 
 
 def _reached(reference: Decimal, equity: Decimal, limit: Decimal) -> bool:

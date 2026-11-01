@@ -5,7 +5,14 @@ from decimal import Decimal
 
 import pytest
 
-from crytobot.risk import DEFAULT_LIMITS, HARD_CAPS, RiskConfigError, RiskLimits, load_limits
+from crytobot.risk import (
+    DEFAULT_LIMITS,
+    HARD_CAPS,
+    HardCaps,
+    RiskConfigError,
+    RiskLimits,
+    load_limits,
+)
 
 LIMIT_NAMES = ["per_trade_risk", "daily_loss_limit", "max_drawdown", "max_open_positions"]
 CAPS = {"per_trade_risk": "0.02", "daily_loss_limit": "0.05", "max_drawdown": "0.25"}
@@ -41,7 +48,7 @@ def test_valid_config_loads_exact_values() -> None:
     assert loaded.limits == RiskLimits(Decimal("0.005"), Decimal("0.02"), Decimal("0.1"), 3)
     assert loaded.limits.max_drawdown == Decimal("0.1")  # exactly 0.1, not the float's expansion
     assert isinstance(loaded.limits.max_drawdown, Decimal)
-    assert loaded.defaulted == frozenset()
+    assert loaded.defaulted == {"profit_cost_multiple"}
 
 
 def test_missing_limits_take_defaults_and_are_named() -> None:
@@ -51,7 +58,7 @@ def test_missing_limits_take_defaults_and_are_named() -> None:
     assert loaded.limits.per_trade_risk == DEFAULT_LIMITS.per_trade_risk == Decimal("0.01")
     assert loaded.limits.max_open_positions == DEFAULT_LIMITS.max_open_positions == 5
     assert loaded.limits.daily_loss_limit == Decimal("0.02")
-    assert loaded.defaulted == {"per_trade_risk", "max_open_positions"}
+    assert loaded.defaulted == {"per_trade_risk", "max_open_positions", "profit_cost_multiple"}
 
 
 @pytest.mark.parametrize(
@@ -74,7 +81,7 @@ def test_no_limits_or_no_risk_table_gives_all_defaults(toml_text: str) -> None:
         == DEFAULT_LIMITS
         == RiskLimits(Decimal("0.01"), Decimal("0.03"), Decimal("0.15"), 5)
     )
-    assert loaded.defaulted == set(LIMIT_NAMES)
+    assert loaded.defaulted == {*LIMIT_NAMES, "profit_cost_multiple"}
 
 
 @pytest.mark.parametrize("name", LIMIT_NAMES)
@@ -101,7 +108,7 @@ def test_value_just_above_cap_is_rejected_naming_limit_value_cap(name: str) -> N
 
 def test_hard_caps_are_the_spec_values() -> None:
     """R-2: sabit üst sınırlar %2 / %5 / %25 / 8."""
-    expected = RiskLimits(Decimal("0.02"), Decimal("0.05"), Decimal("0.25"), 8)
+    expected = HardCaps(Decimal("0.02"), Decimal("0.05"), Decimal("0.25"), 8)
 
     assert expected == HARD_CAPS
 
