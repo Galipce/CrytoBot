@@ -125,12 +125,15 @@ def test_unsupported_mode_creates_no_order(mode: Any) -> None:
 
 
 RULE_BREAKS: dict[str, tuple[dict[str, Any], str]] = {
-    "off_step": ({"approval": replace(APPROVAL, amount=Decimal("19.2495"))}, "katı değil"),
-    "below_min_amount": ({"rules": replace(RULES, min_amount=Decimal("20"))}, "asgari miktar"),
+    "off_step": ({"approval": replace(APPROVAL, amount=Decimal("19.2495"))}, "(0.001) katı değil"),
+    "below_min_amount": (
+        {"rules": replace(RULES, min_amount=Decimal("20"))},
+        "asgari miktarın (20)",
+    ),
     # notional at the fill price: 19.249 * 100.1 = 1926.8249
     "below_min_notional": (
         {"rules": replace(RULES, min_notional=Decimal("1926.82491"))},
-        "asgari tutar",
+        "asgari tutarın (1926.82491)",
     ),
 }
 
@@ -138,7 +141,7 @@ RULE_BREAKS: dict[str, tuple[dict[str, Any], str]] = {
 @pytest.mark.parametrize("case", list(RULE_BREAKS))
 def test_exchange_rule_is_checked_not_rounded(case: str) -> None:
     """AC-4 (R-4): adımın katı olmayan, asgari miktarın ya da asgari tutarın altındaki miktar →
-    "borsa kuralı", ihlal edilen kural ve miktar adlandırılır; miktar yuvarlanmaz."""
+    "borsa kuralı", ihlal edilen kural, değeri ve miktar adlandırılır; miktar yuvarlanmaz."""
     overrides, rule = RULE_BREAKS[case]
 
     result = place(**overrides)
