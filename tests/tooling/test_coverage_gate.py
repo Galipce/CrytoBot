@@ -17,13 +17,19 @@ def classify(x: int) -> str:
     return "zero"
 '''
 
-FULLY_TESTED_BULK = (
-    '"""Tam test edilen, eşiği toplamda yükseltecek kadar uzun kod."""\n\n'
-    + "".join(
+
+def fully_tested_bulk(count: int) -> str:
+    return '"""Tam test edilen, eşiği toplamda yükseltecek kadar uzun kod."""\n\n' + "".join(
         f"def f{i}(x: int) -> int:\n    if x > {i}:\n        return x\n    return {i}\n\n\n"
-        for i in range(40)
+        for i in range(count)
     )
-)
+
+
+def source_lines(project: Project, module: str) -> int:
+    return sum(
+        len(path.read_text(encoding="utf-8").splitlines())
+        for path in (project.root / "src" / "crytobot" / module).glob("*.py")
+    )
 
 
 def untested_code(project: Project, module: str) -> str:
@@ -32,13 +38,9 @@ def untested_code(project: Project, module: str) -> str:
     Each adds three unexecuted statements, so the module drops under 90% however much
     well-tested code it already has (plan 0002, amendment A-1).
     """
-    lines = sum(
-        len(path.read_text(encoding="utf-8").splitlines())
-        for path in (project.root / "src" / "crytobot" / module).glob("*.py")
-    )
     return UNTESTED_BRANCHES + "".join(
         f"\n\ndef g{i}(x: int) -> int:\n    if x > {i}:\n        return x\n    return {i}\n"
-        for i in range(lines)
+        for i in range(source_lines(project, module))
     )
 
 
@@ -71,17 +73,21 @@ def test_untested_branch_in_sensitive_module_red(project: Project, module: str) 
 
 def test_well_tested_module_does_not_hide_untested_one(project: Project) -> None:
     """Toplam %90'ı geçse bile execution'daki eksik test kapıyı kırmızı yapar (VERIFY F-1)."""
-    project.write("src/crytobot/risk/_bulk.py", FULLY_TESTED_BULK)
+    # an untested function misses 5 of its 6 statements and branches, a bulk one covers all 6:
+    # eight bulk functions per untested one keep the total over 90% (plan 0006, amendment A-1)
+    count = 8 * source_lines(project, "execution") + 40
+    untested = untested_code(project, "execution")
+    project.write("src/crytobot/risk/_bulk.py", fully_tested_bulk(count))
     project.write(
         "tests/test_bulk.py",
         "from crytobot.risk import _bulk\n\n\n"
         "def test_bulk() -> None:\n"
-        "    for i in range(40):\n"
+        f"    for i in range({count}):\n"
         "        f = getattr(_bulk, f'f{i}')\n"
         "        assert f(i + 1) == i + 1\n"
         "        assert f(i) == i\n",
     )
-    project.write("src/crytobot/execution/_logic.py", UNTESTED_BRANCHES)
+    project.write("src/crytobot/execution/_logic.py", untested)
     project.write("tests/test_logic.py", partial_test("execution"))
 
     tests = project.run_step("test-unit")
