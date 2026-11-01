@@ -29,7 +29,8 @@
   - Zararsız komutlar (durum, rapor, **kill switch / durdurma**): chat ID yeterli.
   - **Hassas komutlar** (paper↔live mod değişikliği, aşama onayı, strateji aç/kapa, beyaz liste değişikliği):
     chat ID + **TOTP kodu** + "evet/hayır" teyit adımı.
-  - Risk limitleri Telegram'dan **yalnızca düşürülebilir**; artırma yalnızca CLI'den (BR-13).
+  - Risk limitleri Telegram'dan **yalnızca sıkılaştırılabilir** (dört limitte düşürme, kâr/maliyet katında
+    yükseltme); gevşetme yalnızca CLI'den (BR-13).
   - Para çekme ve API anahtarı işlemleri hiçbir kanaldan yoktur.
 - Her CLI/Telegram komutu `control` audit log'una yazılır (kim, ne, ne zaman, sonuç) — sır içermeden.
 - Kodda sabit risk üst sınırları hiçbir kanaldan aşılamaz.

@@ -25,7 +25,7 @@ from crytobot.risk import (
 
 PAIR = "BTC/USDT"
 START = datetime(2026, 11, 2, 20, 0, tzinfo=UTC)  # four hours before a UTC day boundary
-INTENT = TradeIntent(PAIR, "buy", Decimal("100"), Decimal("95"))
+INTENT = TradeIntent(PAIR, "buy", Decimal("100"), Decimal("95"), Decimal("200"))
 RULES = PairRules(Decimal("0.001"), Decimal("0"), Decimal("0"))
 FEE = Decimal("0.001")
 LOCKS = {
@@ -152,7 +152,16 @@ def run(sequence: list[tuple[Any, ...]], risk: RiskLimits, record: list[str]) ->
             decimal_equity = Decimal(equity.numerator) / Decimal(equity.denominator)
             account = AccountState(decimal_equity, min(decimal_equity, Decimal("5000")), 0)
             result = approve_trade(
-                INTENT, risk, account, RULES, frozenset({PAIR}), FEE, state, clock
+                INTENT,
+                risk,
+                account,
+                RULES,
+                frozenset({PAIR}),
+                FEE,
+                Decimal(0),
+                Decimal(0),
+                state,
+                clock,
             )
             expected = model.decision(clock, equity)
             record.append(expected)
@@ -191,7 +200,16 @@ def test_no_trade_past_a_limit(sequence: list[tuple[Any, ...]], risk: RiskLimits
             equity = state.last_equity
             account = AccountState(equity, min(equity, Decimal("5000")), 0)
             result = approve_trade(
-                INTENT, risk, account, RULES, frozenset({PAIR}), FEE, state, clock
+                INTENT,
+                risk,
+                account,
+                RULES,
+                frozenset({PAIR}),
+                FEE,
+                Decimal(0),
+                Decimal(0),
+                state,
+                clock,
             )
             if result.approved:
                 assert state.peak_equity is not None and state.day_start_equity is not None

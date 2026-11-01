@@ -5,8 +5,8 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import Enum
 
-from crytobot.risk._approval import SCALE, _in_scale, _number, _reached
-from crytobot.risk._limits import Channel, RiskLimits, _limit_problems
+from crytobot.risk._approval import _number, _reached
+from crytobot.risk._limits import SCALE, Channel, RiskLimits, _in_scale, _limit_problems, _show
 
 
 @dataclass(frozen=True)
@@ -52,12 +52,12 @@ def observe(state: RiskState, at: object, equity: object, limits: RiskLimits) ->
         return StateUpdate(state, TrackingReason.INVALID_OBSERVATION, f"geçersiz gözlem: {detail}")
 
     if not isinstance(at, datetime) or at.utcoffset() is None:
-        return reject(f"zaman {at!r} zaman dilimi taşımalı")
+        return reject(f"zaman {_show(at)} zaman dilimi taşımalı")
     if state.last_time is not None and at < state.last_time:
         return reject(f"zaman {at.isoformat()} son gözlemden ({state.last_time.isoformat()}) eski")
     number = _number(equity)
     if number is None or number <= 0:
-        return reject(f"kasa {equity!r} sıfırdan büyük bir sayı olmalı")
+        return reject(f"kasa {_show(equity)} sıfırdan büyük bir sayı olmalı")
     if not _in_scale(number):  # spec 0004 A-2: past it, the exact drawdown check grows unbounded
         return reject(f"kasa {number} ölçeği varsayılan üs aralığı (±{SCALE}) dışında")
     problems = _limit_problems(limits)
@@ -84,7 +84,7 @@ def resume(state: RiskState, channel: str) -> StateUpdate:
     try:
         source = Channel(channel)
     except ValueError:
-        return reject(TrackingReason.UNKNOWN_CHANNEL, f"{channel!r}: bilinmeyen kanal")
+        return reject(TrackingReason.UNKNOWN_CHANNEL, f"{_show(channel)}: bilinmeyen kanal")
     if source is Channel.TELEGRAM:
         return reject(
             TrackingReason.TELEGRAM_RESUME, "durdurma Telegram'dan kaldırılamaz; yalnızca CLI"

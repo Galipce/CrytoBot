@@ -87,12 +87,14 @@ def test_resume_keeps_daily_lock() -> None:
     now = T0 + timedelta(hours=1)  # the day of the last observation
 
     result = approve_trade(
-        TradeIntent("BTC/USDT", "buy", Decimal("100"), Decimal("95")),
+        TradeIntent("BTC/USDT", "buy", Decimal("100"), Decimal("95"), Decimal("200")),
         DEFAULT_LIMITS,
         account,
         PairRules(Decimal("0.001"), Decimal("0.001"), Decimal("5")),
         frozenset({"BTC/USDT"}),
         Decimal("0.001"),
+        Decimal(0),
+        Decimal(0),
         resumed,
         now,
     )

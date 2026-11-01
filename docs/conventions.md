@@ -58,8 +58,12 @@
   adlandırılmış rede çevirir — from spec 0004, review round 1 F-1
 - Üs aralığını genişletmek tam toplama/çıkarmayı güvenli kılmaz: `1E+N - 1` ~N basamak üretir, büyük N'de
   `MemoryError` (yakalanmaz; onay yok ama adlandırılmış ret de yok) — değerin ölçeği girişte sınırlanır: riskte
-  bugün yalnız kasalar (`_in_scale`, ±999999); onayın diğer sayısal girdileri açık (backlog B-8)
-  — from spec 0004, review round 2 F-6, round 3 F-7
+  kasalar, onayın her sayısal girdisi ve kâr/maliyet katı (`_in_scale`, ±999999); yalnız çarpımda kullanılan oran
+  limitleri ölçeksizdir — from spec 0004, review round 2 F-6, round 3 F-7; spec 0005
+- Python 3.12 `int`→`str` dönüşümü 4300 basamakla sınırlı: ret mesajında ham `int` ya da onu içeren bir `repr`
+  (`Fraction`, tuple, list) basmak ve tomllib'in uzun tam sayıyı okuması `ValueError` fırlatır — mesajda ham
+  girdi her zaman `_show` ile, config'te `ValueError` → `RiskConfigError` — from spec 0005, review round 1 F-1,
+  round 2 F-1
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.

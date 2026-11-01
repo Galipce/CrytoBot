@@ -1,12 +1,14 @@
 """Her işlem önerisini iş kurallarına göre onaylamak/reddetmek, pozisyon boyutlamak.
 
 Risk limitleri config'in `[risk]` tablosundan okunur: `per_trade_risk`, `daily_loss_limit`,
-`max_drawdown` (kasaya oran, `0.01` = %1) ve `max_open_positions` (tam sayı).
-Sabit üst sınırlar: `HARD_CAPS`. Alım önerileri `approve_trade` ile onaylanır: stop zorunlu, miktar
+`max_drawdown` (kasaya oran, `0.01` = %1), `max_open_positions` (tam sayı) ve
+`profit_cost_multiple` (kâr/maliyet katı). Sabit üst sınırlar: `HARD_CAPS`; katın alt sınırı:
+`HARD_FLOOR_MULTIPLE`. Alım önerileri `approve_trade` ile onaylanır: stop zorunlu, miktar
 risk bütçesi ve serbest bakiyeyle sınırlı, borsa adımına aşağı yuvarlanmış.
 Kasa `observe` ile `RiskState`'e gözlenir (gün başı, zirve, drawdown durdurması); onay bu
 durumu ister ve günlük zarar ya da drawdown limitinde reddeder; durdurmayı yalnızca CLI `resume`
-ile kaldırır.
+ile kaldırır. Önerinin hedefe kadar beklenen kârı, efektif maliyetin (komisyon + spread +
+slippage) katını geçmiyorsa öneri reddedilir.
 """
 
 from crytobot.risk._approval import (
@@ -20,8 +22,10 @@ from crytobot.risk._approval import (
 from crytobot.risk._limits import (
     DEFAULT_LIMITS,
     HARD_CAPS,
+    HARD_FLOOR_MULTIPLE,
     ChangeDecision,
     Channel,
+    HardCaps,
     LimitChange,
     LoadedLimits,
     RejectReason,
@@ -44,10 +48,12 @@ __all__: list[str] = [
     "DEFAULT_LIMITS",
     "EMPTY_STATE",
     "HARD_CAPS",
+    "HARD_FLOOR_MULTIPLE",
     "AccountState",
     "ApprovalReason",
     "ChangeDecision",
     "Channel",
+    "HardCaps",
     "LimitChange",
     "LoadedLimits",
     "PairRules",
