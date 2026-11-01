@@ -111,7 +111,7 @@ def cases(draw: st.DrawFn) -> Case:
     }
     # one_of leans on its last, simplest branch; an explicit weighted choice keeps most stops valid
     stop = draw(stops[draw(st.sampled_from(["near", "far"] * 3 + ["above", "none"]))])
-    intent = TradeIntent(draw(st.sampled_from(sorted(WHITELIST))), "buy", entry, stop)
+    intent = TradeIntent(draw(st.sampled_from(sorted(WHITELIST))), "buy", entry, stop, entry * 2)
 
     broken = draw(st.sampled_from([*[None] * len(BROKEN), *BROKEN]))
     if broken is None:
@@ -209,7 +209,9 @@ def test_approval_matches_exact_oracle(
     """AC-10 (R-5, R-8): her girdide neden, miktar ve bakiye sınırı modelinkiyle birebir aynı."""
     intent, limits, account, rules, fee = case
     state = fresh_state(account, limits)
-    result = approve_trade(intent, limits, account, rules, WHITELIST, fee, state, NOW)
+    result = approve_trade(
+        intent, limits, account, rules, WHITELIST, fee, Decimal(0), Decimal(0), state, NOW
+    )
 
     assert actual(result) == oracle(case)
 
@@ -222,7 +224,9 @@ def test_approved_trades_hold_invariants(
     """AC-10 (R-9, BR-2…BR-4, BR-7): onaylanan öneri sınırlar içinde; bir adım fazlası taşar."""
     intent, limits, account, rules, fee = case
     state = fresh_state(account, limits)
-    result = approve_trade(intent, limits, account, rules, WHITELIST, fee, state, NOW)
+    result = approve_trade(
+        intent, limits, account, rules, WHITELIST, fee, Decimal(0), Decimal(0), state, NOW
+    )
     if not result.approved:
         assert result.amount is None
         return

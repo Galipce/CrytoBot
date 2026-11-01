@@ -25,9 +25,12 @@ NOW = datetime(2026, 11, 2, 10, 0, tzinfo=UTC)
 BASE: dict[str, Any] = {
     "entry": Decimal("100"),
     "stop": Decimal("95"),
+    "target": Decimal("200"),
     "equity": Decimal("10000"),
     "free": Decimal("5000"),
     "fee": Decimal("0.001"),
+    "spread": Decimal("0"),
+    "slippage": Decimal("0"),
     "step": Decimal("0.001"),
     "min_amount": Decimal("0.001"),
     "min_notional": Decimal("5"),
@@ -41,12 +44,14 @@ def approve(overrides: dict[str, Decimal], limits: RiskLimits = DEFAULT_LIMITS) 
     account = AccountState(v["equity"], v["free"], 0)
     state = observe(EMPTY_STATE, NOW, v["equity"], limits).state
     return approve_trade(
-        TradeIntent(PAIR, "buy", v["entry"], v["stop"]),
+        TradeIntent(PAIR, "buy", v["entry"], v["stop"], v["target"]),
         limits,
         account,
         PairRules(v["step"], v["min_amount"], v["min_notional"]),
         frozenset({PAIR}),
         v["fee"],
+        v["spread"],
+        v["slippage"],
         state,
         NOW,
     )
@@ -59,6 +64,8 @@ OUTSIDE: dict[str, tuple[str, Decimal, ApprovalReason, str]] = {
     "free-huge": ("free", HUGE_OUT, ApprovalReason.INVALID_INPUT, "serbest bakiye"),
     "free-tiny": ("free", TINY_OUT, ApprovalReason.INVALID_INPUT, "serbest bakiye"),
     "fee-tiny": ("fee", TINY_OUT, ApprovalReason.INVALID_INPUT, "ücret"),
+    "spread-tiny": ("spread", TINY_OUT, ApprovalReason.INVALID_INPUT, "spread"),
+    "slippage-tiny": ("slippage", TINY_OUT, ApprovalReason.INVALID_INPUT, "slippage"),
     "step-huge": ("step", HUGE_OUT, ApprovalReason.INVALID_INPUT, "miktar adımı"),
     "step-tiny": ("step", TINY_OUT, ApprovalReason.INVALID_INPUT, "miktar adımı"),
     "min_amount-huge": ("min_amount", HUGE_OUT, ApprovalReason.INVALID_INPUT, "asgari miktar"),
@@ -68,6 +75,7 @@ OUTSIDE: dict[str, tuple[str, Decimal, ApprovalReason, str]] = {
     "entry-huge": ("entry", HUGE_OUT, ApprovalReason.INVALID_ENTRY, "giriş"),
     "entry-tiny": ("entry", TINY_OUT, ApprovalReason.INVALID_ENTRY, "giriş"),
     "stop-tiny": ("stop", TINY_OUT, ApprovalReason.INVALID_STOP, "stop"),
+    "target-huge": ("target", HUGE_OUT, ApprovalReason.INVALID_TARGET, "hedef"),
 }
 
 
@@ -93,7 +101,7 @@ def test_input_inside_the_range_is_not_a_scale_rejection(case: str) -> None:
     assert "ölçeği" not in result.message
 
 
-@pytest.mark.parametrize("name", ["stop", "fee"])
+@pytest.mark.parametrize("name", ["stop", "fee", "spread", "slippage"])
 def test_backlog_b8_repro_is_a_named_rejection(name: str) -> None:
     """AC-8 (B-8): stop ya da ücret `1E-999999999999` `MemoryError` değil, adlandırılmış rettir."""
     result = approve({name: Decimal("1E-999999999999")})

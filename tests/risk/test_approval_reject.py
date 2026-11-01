@@ -24,7 +24,7 @@ from crytobot.risk import (
 
 PAIR = "BTC/USDT"
 WHITELIST = frozenset({PAIR, "ETH/USDT"})
-INTENT = TradeIntent(PAIR, "buy", Decimal("100"), Decimal("95"))
+INTENT = TradeIntent(PAIR, "buy", Decimal("100"), Decimal("95"), Decimal("200"))
 ACCOUNT = AccountState(Decimal("10000"), Decimal("5000"), 0)
 RULES = PairRules(Decimal("0.001"), Decimal("0.001"), Decimal("5"))
 FEE = Decimal("0.001")
@@ -47,7 +47,9 @@ def approve(
     fee: Any = FEE,
 ) -> TradeApproval:
     state = fresh_state(account, limits)
-    return approve_trade(intent, limits, account, rules, whitelist, fee, state, NOW)
+    return approve_trade(
+        intent, limits, account, rules, whitelist, fee, Decimal(0), Decimal(0), state, NOW
+    )
 
 
 def with_limit(name: str, value: Any) -> RiskLimits:
@@ -229,28 +231,28 @@ FIRST_REASON: dict[str, tuple[dict[str, Any], ApprovalReason]] = {
     "input_before_side": (
         {
             "account": replace(ACCOUNT, equity=Decimal("0"), open_positions=9),
-            "intent": TradeIntent("SOL/USDT", "sell", Decimal("0"), None),
+            "intent": TradeIntent("SOL/USDT", "sell", Decimal("0"), None, Decimal("200")),
         },
         ApprovalReason.INVALID_INPUT,
     ),
     "side_before_whitelist": (
         {
             "account": replace(ACCOUNT, open_positions=9),
-            "intent": TradeIntent("SOL/USDT", "sell", Decimal("0"), None),
+            "intent": TradeIntent("SOL/USDT", "sell", Decimal("0"), None, Decimal("200")),
         },
         ApprovalReason.NOT_BUY,
     ),
     "whitelist_before_entry": (
         {
             "account": replace(ACCOUNT, open_positions=9),
-            "intent": TradeIntent("SOL/USDT", "buy", Decimal("0"), None),
+            "intent": TradeIntent("SOL/USDT", "buy", Decimal("0"), None, Decimal("200")),
         },
         ApprovalReason.NOT_WHITELISTED,
     ),
     "entry_before_stop": (
         {
             "account": replace(ACCOUNT, open_positions=9),
-            "intent": TradeIntent(PAIR, "buy", Decimal("0"), None),
+            "intent": TradeIntent(PAIR, "buy", Decimal("0"), None, Decimal("200")),
         },
         ApprovalReason.INVALID_ENTRY,
     ),

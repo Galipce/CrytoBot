@@ -24,7 +24,7 @@ from crytobot.risk import (
 PAIR = "BTC/USDT"
 NOW = datetime(2026, 11, 2, 10, 0, tzinfo=UTC)
 NEW_YORK, ISTANBUL = timezone(timedelta(hours=-5)), timezone(timedelta(hours=3))
-INTENT = TradeIntent(PAIR, "buy", Decimal("100"), Decimal("95"))
+INTENT = TradeIntent(PAIR, "buy", Decimal("100"), Decimal("95"), Decimal("200"))
 RULES = PairRules(Decimal("0.001"), Decimal("0.001"), Decimal("5"))
 
 
@@ -48,7 +48,9 @@ def approve(
     fee: Any = Decimal("0.001"),
 ) -> TradeApproval:
     account = AccountState(Decimal(equity), min(Decimal(equity), Decimal("5000")), 0)
-    return approve_trade(intent, limits, account, RULES, frozenset({PAIR}), fee, state, now)
+    return approve_trade(
+        intent, limits, account, RULES, frozenset({PAIR}), fee, Decimal(0), Decimal(0), state, now
+    )
 
 
 @pytest.mark.parametrize(

@@ -21,7 +21,7 @@ from crytobot.risk import (
 )
 
 PAIR = "BTC/USDT"
-INTENT = TradeIntent(PAIR, "buy", Decimal("100"), Decimal("95"))
+INTENT = TradeIntent(PAIR, "buy", Decimal("100"), Decimal("95"), Decimal("200"))
 ACCOUNT = AccountState(Decimal("10000"), Decimal("5000"), 0)
 STEP = Decimal("0.001")
 RULES = PairRules(STEP, Decimal("0.001"), Decimal("5"))
@@ -43,7 +43,18 @@ def approve(
     fee: Decimal = FEE,
 ) -> TradeApproval:
     state = fresh_state(account, DEFAULT_LIMITS)
-    return approve_trade(intent, DEFAULT_LIMITS, account, rules, frozenset({PAIR}), fee, state, NOW)
+    return approve_trade(
+        intent,
+        DEFAULT_LIMITS,
+        account,
+        rules,
+        frozenset({PAIR}),
+        fee,
+        Decimal(0),
+        Decimal(0),
+        state,
+        NOW,
+    )
 
 
 def loss_at_stop(amount: Decimal, intent: TradeIntent, fee: Decimal) -> Decimal:
@@ -133,12 +144,14 @@ def approve_one_unit(entry: Decimal, equity: Decimal) -> TradeApproval:
     limits = replace(DEFAULT_LIMITS, per_trade_risk=Decimal("0.02"))
     account = AccountState(equity, equity, 0)
     return approve_trade(
-        TradeIntent(PAIR, "buy", entry, STOP_ONE),
+        TradeIntent(PAIR, "buy", entry, STOP_ONE, entry * 2),
         limits,
         account,
         PairRules(Decimal("1"), Decimal("0"), Decimal("0")),
         frozenset({PAIR}),
         Decimal("0"),
+        Decimal(0),
+        Decimal(0),
         fresh_state(account, limits),
         NOW,
     )
@@ -163,7 +176,7 @@ def test_budget_equal_to_loss_beyond_sixty_digits_is_approved(entry: Decimal) ->
 def test_tiny_step_gives_a_result_not_an_error() -> None:
     """R-1: 60 basamağı aşan adım sayısında da sonuç bir onay ya da adlandırılmış rettir."""
     result = approve(
-        intent=TradeIntent(PAIR, "buy", Decimal("1"), Decimal("0.5")),
+        intent=TradeIntent(PAIR, "buy", Decimal("1"), Decimal("0.5"), Decimal("2")),
         account=AccountState(Decimal("100000"), Decimal("100000"), 0),
         rules=PairRules(Decimal("1E-60"), Decimal("0"), Decimal("0")),
         fee=Decimal("0"),
@@ -180,7 +193,7 @@ def test_tiny_step_gives_a_result_not_an_error() -> None:
 def test_scale_past_exact_range_is_a_named_rejection(step: Decimal, equity: Decimal) -> None:
     """R-1: tam hesabın üs sınırını aşan girdi istisna değil, "geçersiz girdi" reddidir."""
     result = approve(
-        intent=TradeIntent(PAIR, "buy", Decimal("1"), Decimal("0.5")),
+        intent=TradeIntent(PAIR, "buy", Decimal("1"), Decimal("0.5"), Decimal("2")),
         account=AccountState(equity, equity, 0),
         rules=PairRules(step, Decimal("0"), Decimal("0")),
     )

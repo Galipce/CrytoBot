@@ -17,12 +17,14 @@ BUY = "buy"
 
 @dataclass(frozen=True)
 class TradeIntent:
-    """Ham alım önerisi: çift, yön, giriş, stop (`None` = stop yok); fiyatlar `Decimal`/`int`."""
+    """Ham alım önerisi: çift, yön, giriş, stop (`None` = stop yok), hedef (`None` = hedef yok);
+    fiyatlar `Decimal`/`int`."""
 
     pair: str
     side: str
     entry: object
     stop: object
+    target: object
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,8 @@ class ApprovalReason(Enum):
     NOT_WHITELISTED = "not_whitelisted"
     INVALID_ENTRY = "invalid_entry"
     INVALID_STOP = "invalid_stop"
+    INVALID_TARGET = "invalid_target"
+    INSUFFICIENT_EDGE = "insufficient_edge"
     POSITION_LIMIT = "position_limit"
     BELOW_MINIMUM = "below_minimum"
 
@@ -94,7 +98,13 @@ def _out_of_scale(label: str, number: Decimal) -> str:
 
 
 def _input_problems(
-    limits: RiskLimits, account: AccountState, rules: PairRules, whitelist: object, fee: object
+    limits: RiskLimits,
+    account: AccountState,
+    rules: PairRules,
+    whitelist: object,
+    fee: object,
+    spread: object,
+    slippage: object,
 ) -> list[str]:
     problems = _limit_problems(limits)
     if not isinstance(whitelist, Set):  # a str would match pairs by substring (BR-2)
@@ -119,6 +129,12 @@ def _input_problems(
         problems.append(f"ücret {fee!r} 0 ile 1 arasında (1 hariç) olmalı")
     elif not _in_scale(rate):
         problems.append(_out_of_scale("ücret", rate))
+    for label, value in (("spread", spread), ("slippage", slippage)):
+        number = _number(value)  # no default: a missing cost is not silently zero (spec 0005 R-2)
+        if number is None or not 0 <= number < 1:
+            problems.append(f"{label} {value!r} 0 ile 1 arasında (1 hariç) olmalı")
+        elif not _in_scale(number):
+            problems.append(_out_of_scale(label, number))
     step = _number(rules.amount_step)
     if step is None or step <= 0:
         problems.append(f"miktar adımı {rules.amount_step!r} sıfırdan büyük olmalı")
@@ -161,6 +177,8 @@ def approve_trade(
     rules: PairRules,
     whitelist: Set[str],
     fee: object,
+    spread: object,
+    slippage: object,
     state: "RiskState",
     now: object,
 ) -> TradeApproval:
@@ -169,7 +187,7 @@ def approve_trade(
     def reject(reason: ApprovalReason, detail: str) -> TradeApproval:
         return TradeApproval(None, reason, False, f"{intent.pair!r}: {detail}")
 
-    problems = _input_problems(limits, account, rules, whitelist, fee)
+    problems = _input_problems(limits, account, rules, whitelist, fee, spread, slippage)
     problems += _state_problems(state, now, account.equity)
     if problems:
         return reject(ApprovalReason.INVALID_INPUT, "geçersiz girdi: " + "; ".join(problems))
@@ -205,31 +223,72 @@ def approve_trade(
         )
     if not _in_scale(stop):
         return reject(ApprovalReason.INVALID_STOP, _out_of_scale("stop", stop))
+    if intent.target is None:
+        return reject(ApprovalReason.INVALID_TARGET, "hedef fiyat yok")
+    target = _number(intent.target)
+    if target is None or target <= entry:
+        return reject(
+            ApprovalReason.INVALID_TARGET,
+            f"hedef {intent.target!r} girişten ({entry}) büyük bir sayı olmalı",
+        )
+    if not _in_scale(target):
+        return reject(ApprovalReason.INVALID_TARGET, _out_of_scale("hedef", target))
+    costs = cast(
+        tuple[Decimal, Decimal, Decimal], tuple(_number(v) for v in (fee, spread, slippage))
+    )
+    profit, cost, clears = _edge(entry, target, *costs, limits.profit_cost_multiple)
+    if not clears:
+        return reject(
+            ApprovalReason.INSUFFICIENT_EDGE,
+            f"yetersiz kâr beklentisi: beklenen kâr {profit}, efektif maliyet {cost},"
+            f" kat {limits.profit_cost_multiple}",
+        )
     positions = cast(int, account.open_positions)  # validated above
     if positions >= limits.max_open_positions:
         return reject(
             ApprovalReason.POSITION_LIMIT,
             f"açık pozisyon {positions}, limit {limits.max_open_positions}",
         )
-    return _size(intent.pair, entry, stop, limits, account, rules, fee)
+    return _size(intent.pair, entry, stop, target, costs, limits, account, rules)
+
+
+def _edge(
+    entry: Decimal,
+    target: Decimal,
+    rate: Decimal,
+    spread: Decimal,
+    slippage: Decimal,
+    multiple: Decimal,
+) -> tuple[Decimal, Decimal, bool]:
+    """Spec 0005 R-3: birim başına kâr ve efektif maliyet; kâr kat çarpı maliyeti geçiyor mu."""
+    with localcontext() as exact:
+        exact.prec = MAX_PREC
+        # every operand is inside the default exponent range (R-7): exact, bounded, no Overflow
+        exact.Emax, exact.Emin = MAX_EMAX, MIN_EMIN
+        exact.traps[Inexact] = True
+        profit = target - entry
+        both_legs = entry + target
+        cost = both_legs * rate + entry * spread + both_legs * slippage
+        return profit, cost, profit > multiple * cost
 
 
 def _size(
     pair: str,
     entry: Decimal,
     stop: Decimal,
+    target: Decimal,
+    costs: tuple[Decimal, Decimal, Decimal],
     limits: RiskLimits,
     account: AccountState,
     rules: PairRules,
-    fee: object,
 ) -> TradeApproval:
     """R-5, R-6: risk bütçesine ve serbest bakiyeye sığan, adıma aşağı yuvarlı en büyük miktar."""
-    equity, free, rate, step, min_amount, min_notional = (
+    rate, spread, slippage = costs
+    equity, free, step, min_amount, min_notional = (
         cast(Decimal, _number(value))  # validated by _input_problems
         for value in (
             account.equity,
             account.free_balance,
-            fee,
             rules.amount_step,
             rules.min_amount,
             rules.min_notional,
@@ -255,7 +314,8 @@ def _size(
             ApprovalReason.INVALID_INPUT,
             False,
             f"{pair!r}: geçersiz girdi: ölçek hesaplanamıyor (giriş {entry}, stop {stop},"
-            f" ücret {rate}, serbest bakiye {free}, adım {step}, kasa {equity})",
+            f" hedef {target}, ücret {rate}, spread {spread}, slippage {slippage},"
+            f" serbest bakiye {free}, adım {step}, kasa {equity})",
         )
     if amount <= 0 or amount < min_amount or notional < min_notional:
         return TradeApproval(
