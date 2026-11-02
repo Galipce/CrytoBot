@@ -1,6 +1,6 @@
 # Spec 0009 — Kapanış kararından risk onaylı paper satış emri
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0009-plan.md`
 
@@ -146,8 +146,8 @@ none — no user interface. (Kapanışların ve bildirimlerin gösterimi `contro
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 4 onay sonrası, triage onaylı: R-12 ve AC-10 (A-1), AC-9 (A-3), R-13 ve AC-12 (A-4), R-14 re-spec (A-5, R-06) |
+| Fix rounds | 3 (fix-1 review r1, fix-2 VERIFY, fix-3 review r3); review r4 sonrası R-06: re-spec, dördüncü tur yok |
+| Review findings: real / noise / deferred | 17 / 3 / 4 (r1: F-1, F-2, F-4, F-5 real, F-3 defer B-18 · r2: F-1 noise · VERIFY 1: F-1…F-7 real, F-8 noise · r3: F-1, F-2a, F-3, F-5 real, F-2b defer B-18, F-4 defer B-14 · r4: F-1 real (re-spec, B-19), F-2 noise, F-3 defer B-18 · VERIFY 2: F-1 real) |
+| Regressions introduced | 0 davranış regresyonu; iki review turunun kaçırdığı iki kod kusurunu VERIFY buldu (işlem önerisi onayıyla satış, talepsiz onayda istisna); açık sözleşme boşluğu B-19 (High) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
