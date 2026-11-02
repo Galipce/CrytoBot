@@ -36,7 +36,7 @@ class CloseApproval:
 
     reason: CloseRefusal | None
     message: str
-    request: CloseRequest
+    request: object  # the request as given; a `CloseRequest` when approved
 
     @property
     def approved(self) -> bool:
@@ -74,10 +74,16 @@ def close_request_problems(request: CloseRequest) -> list[str]:
     return problems
 
 
-def approve_close(request: CloseRequest) -> CloseApproval:
+def approve_close(request: object) -> CloseApproval:
     """R-1, R-2: kapanış talebini yalnızca biçimine bakarak onaylar; işlem riski, günlük zarar,
     drawdown, pozisyon limiti, kâr/maliyet katı, stop zorunluluğu, beyaz liste ve kill switch
     kapanışı engellemez — onay risk durumunu, kasayı ya da zamanı girdi olarak almaz."""
+    if not isinstance(request, CloseRequest):
+        return CloseApproval(
+            CloseRefusal.INVALID_INPUT,
+            f"geçersiz girdi: kapanış talebi {_short(request)} bir kapanış talebi olmalı",
+            request,
+        )
     problems = close_request_problems(request)
     if problems:
         return CloseApproval(

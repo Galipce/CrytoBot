@@ -132,3 +132,14 @@ def test_invalid_close_request_is_named(case: str) -> None:
     assert approval.reason is CloseRefusal.INVALID_INPUT and not approval.approved
     assert "geçersiz girdi" in approval.message and fragment in approval.message, approval.message
     assert len(approval.message) < 500
+
+
+@pytest.mark.parametrize(
+    "request_", [None, "cb-a", 42, INTENT], ids=["none", "text", "int", "intent"]
+)
+def test_close_request_must_be_a_request(request_: Any) -> None:
+    """AC-9 (R-13): talep olmayan değer → "geçersiz girdi", istisna yok."""
+    approval = approve_close(request_)
+
+    assert approval.reason is CloseRefusal.INVALID_INPUT and approval.request is request_
+    assert "kapanış talebi" in approval.message

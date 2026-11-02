@@ -268,16 +268,22 @@ VALID: list[list[Any]] = [
     [Decimal("110"), Decimal("109.9450000000000000000000001")], [FEE], [SLIPPAGE],
     ["paper"], [NOW],
 ]  # fmt: skip
+wraps = st.sampled_from(["risk"] * 4 + ["by_hand", "junk_request", "junk_approval"])
 fields = st.tuples(*[st.sampled_from(v * (8 * len(JUNK) // len(v)) + JUNK) for v in VALID])
 
 
-def no_raise(values: tuple[Any, ...], by_hand: bool) -> str:
+def no_raise(values: tuple[Any, ...], wrap: str) -> str:
     """Approves and places one close; checks no exception and a coherent result."""
     request = CloseRequest(*values[:4])
-    approval = approve_close(request)
+    approval: Any = approve_close(request)
     assert isinstance(approval.reason, CloseRefusal | None)
-    if by_hand:  # an approval built by hand: execution checks the request again
+    if wrap == "by_hand":  # an approval built by hand: execution checks the request again
         approval = CloseApproval(None, "", request)
+    elif wrap == "junk_request":  # ... around something that is no close request
+        approval = CloseApproval(None, "", values[0])
+    elif wrap == "junk_approval":
+        approval = values[0]
+    assert isinstance(approve_close(values[0]).reason, CloseRefusal | None)
     close = CloseOrderRequest(approval, *values[4:9])
     result = place_close_order(EMPTY_EXECUTION, close, PaperExchange(), values[9])
 
@@ -288,11 +294,11 @@ def no_raise(values: tuple[Any, ...], by_hand: bool) -> str:
 
 
 @settings(max_examples=EXAMPLES)
-@given(fields, st.booleans())
-def test_no_close_order_input_raises(values: tuple[Any, ...], by_hand: bool) -> None:
+@given(fields, wraps)
+def test_no_close_order_input_raises(values: tuple[Any, ...], wrap: str) -> None:
     """AC-12 (R-13): rastgele ve aralık dışı girdilerle kapanış onayı ve emri istisna değil,
     sonuç."""
-    no_raise(values, by_hand)
+    no_raise(values, wrap)
 
 
 def test_close_order_outcomes_are_not_vacuous() -> None:
@@ -318,9 +324,9 @@ def test_close_order_outcomes_are_not_vacuous() -> None:
     raised: Counter[str] = Counter()
 
     @settings(max_examples=EXAMPLES)
-    @given(fields, st.booleans())
-    def collect_raised(values: tuple[Any, ...], by_hand: bool) -> None:
-        raised[no_raise(values, by_hand)] += 1
+    @given(fields, wraps)
+    def collect_raised(values: tuple[Any, ...], wrap: str) -> None:
+        raised[no_raise(values, wrap)] += 1
 
     collect_raised()
 

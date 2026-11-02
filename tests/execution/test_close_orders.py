@@ -132,6 +132,11 @@ UNAPPROVED: dict[str, Any] = {
         Decimal("1"), None, False, "", TradeIntent(PAIR, "buy", 100, 95, 110)
     ),
     "not_an_approval": NOTHING,
+    # an approved approval built by hand around something that is no close request
+    "request_is_text": CloseApproval(None, "elle kuruldu", "junk"),
+    "request_is_an_intent": CloseApproval(
+        None, "elle kuruldu", TradeIntent(PAIR, "buy", 100, 95, 110)
+    ),
 }
 
 

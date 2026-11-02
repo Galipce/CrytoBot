@@ -26,7 +26,7 @@ from crytobot.execution._orders import (
     _notify,
 )
 from crytobot.execution._paper import OrderStatus, PaperExchange
-from crytobot.risk import CloseApproval, PairRules, close_request_problems
+from crytobot.risk import CloseApproval, CloseRequest, PairRules, close_request_problems
 
 CLOSE_ID_PREFIX = "cx-"
 SELL = "sell"
@@ -118,7 +118,8 @@ def place_close_order(
     → talebin girdileri ve miktara bağlı ölçek → zaten var / kimlik çakışması → borsa kuralı.
     Güvenli mod kapanışı durdurmaz (R-11)."""
     approval = request.approval
-    close = approval.request if isinstance(approval, CloseApproval) else None
+    held = approval.request if isinstance(approval, CloseApproval) else None
+    close = held if isinstance(held, CloseRequest) else None  # no request: unapproved (R-13)
     pair = close.pair if close is not None else None
 
     def reject(outcome: OrderOutcome, detail: str) -> CloseOrderResult:
