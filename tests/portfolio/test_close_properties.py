@@ -281,12 +281,18 @@ JUNK: list[Any] = [
     {"BTC/USDT": Decimal("1E-999999")}, LATER, datetime(2026, 11, 2),
 ]  # fmt: skip
 junk = st.sampled_from(JUNK)
+# each field is mostly valid, so whole requests reach the record, scale and acceptance paths too
+# (plan 0008 A-2); a 28-digit price is in scale but its sale does not fit in 28 digits
+VALID: list[list[Any]] = [
+    ["x"], ["a"], [AMOUNT], [Decimal("109.945"), Decimal("109.9450000000000000000000001")],
+    [Decimal("2.116331305")], [CloseReason.TARGET], [LATER],
+]  # fmt: skip
+# about four valid values to one junk value per field
+close_fields = st.tuples(*[st.sampled_from(v * (4 * len(JUNK) // len(v)) + JUNK) for v in VALID])
 
 
-@settings(max_examples=EXAMPLES)
-@given(st.tuples(*[junk] * 7), junk)
-def test_no_close_input_raises(fields: tuple[Any, ...], prices: Any) -> None:
-    """AC-12 (R-14): rastgele ve aralık dışı girdilerle kapanış ve karar istisna değil, sonuç."""
+def no_raise(fields: tuple[Any, ...], prices: Any) -> str:
+    """Closes and decides on one opened position; checks no exception and a coherent result."""
     ledger = record_fill(
         open_ledger(EMPTY_LEDGER, Decimal("10000"), OPENED).ledger,
         Fill("a", "BTC/USDT", "buy", AMOUNT, Decimal("100.1"), Decimal(0), STOP, TARGET, NOW),
@@ -300,10 +306,20 @@ def test_no_close_input_raises(fields: tuple[Any, ...], prices: Any) -> None:
     assert (closed.closure is not None) is (
         closed.outcome in (CloseOutcome.CLOSED, CloseOutcome.ALREADY_RECORDED)
     )
+    unrepresentable = "ölçek hesaplanamıyor" in closed.message
+    return "unrepresentable" if unrepresentable else closed.outcome.value
+
+
+@settings(max_examples=EXAMPLES)
+@given(close_fields, junk)
+def test_no_close_input_raises(fields: tuple[Any, ...], prices: Any) -> None:
+    """AC-12 (R-14): rastgele ve aralık dışı girdilerle kapanış ve karar istisna değil, sonuç."""
+    no_raise(fields, prices)
 
 
 def test_close_outcomes_are_not_vacuous() -> None:
-    """AC-12: üreteç her sonucu yeterince üretir."""
+    """AC-12: üreteçler her sonucu yeterince üretir; "istisna yok" üreteci kabule ve ölçek adımına
+    ulaşır (plan 0008 A-2)."""
     record: Counter[str] = Counter()
 
     @settings(max_examples=EXAMPLES)
@@ -319,3 +335,15 @@ def test_close_outcomes_are_not_vacuous() -> None:
         + [f"decide_{o.value}" for o in DecisionOutcome if o is not DecisionOutcome.INVALID_INPUT]
     )
     assert {o: record[o] for o in outcomes if record[o] < 20} == {}, record
+
+    raised: Counter[str] = Counter()
+
+    @settings(max_examples=EXAMPLES)
+    @given(close_fields, junk)
+    def collect_raised(fields: tuple[Any, ...], prices: Any) -> None:
+        raised[no_raise(fields, prices)] += 1
+
+    collect_raised()
+
+    # plan 0008 A-2: the no-raise property reaches acceptance and the scale step
+    assert raised["closed"] >= 20 and raised["unrepresentable"] >= 20, raised
