@@ -174,6 +174,10 @@ def test_trade_approval_sells_nothing() -> None:
     assert result.outcome is OrderOutcome.UNAPPROVED and result.order is None
     assert result.state is EMPTY_EXECUTION and "onaysız öneri" in result.message
 
+    # before the exchange rules, as every unapproved request (spec 0006 R-11)
+    small = place_order(EMPTY_EXECUTION, replace(request, rules=TOO_SMALL), VENUE, NOW)
+    assert small.outcome is OrderOutcome.UNAPPROVED
+
 
 def test_close_approval_buys_nothing() -> None:
     """AC-5 (R-4): kapanış onayıyla alım isteği → alımın "onaysız öneri"si."""
