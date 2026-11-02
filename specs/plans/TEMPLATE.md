@@ -14,16 +14,33 @@
      spec is too big (prompts/plan.md, SIZE). -->
 
 ## Risks & open questions
-<!-- Each with YOUR recommendation and rationale (proposal rule). Unresolved questions block build. -->
+<!-- Each with YOUR recommendation and rationale (proposal rule). Unresolved questions block build.
+     Environment: doctor's per-profile verdict on the planner's machine and every unmet step
+     prerequisite, each with a recommendation (R-13). /build compares its own verdict to this line. -->
 
 ## Criterion ↔ test map
 <!-- Profile: fast or full — the check.conf step whose selector runs the test
-     (docs/testing.md, Two speeds, rule 4). -->
+     (docs/testing.md, Two speeds, rule 4). Put test names, files and path::name in backticks:
+     doctor warns for one that no file outside specs/ holds. -->
 | Acceptance criterion | Proven by | Profile |
 |---|---|---|
 | AC-1 | | |
 | AC-2 | | |
 
+## Build evidence
+<!-- Written by BUILD, read by REVIEW and VERIFY: pointer lines, never saved output
+     (docs/testing.md, Evidence policy). One line each, with the commit it holds for:
+     CHECK GREEN (full, <n> steps, <t> s) @<sha>   — or the CI run link with its SHA
+     RESIDUE CLEAN (full, 2 runs) @<sha> · RESIDUE CLEAN (fast, 2 runs) @<sha>
+       — only when scripts/check.conf changed in this work; RESIDUE FOUND goes to the human. -->
+
 ## Amendments
 <!-- Approved changes after the plan gate (review triage, R-07), never silent. One line each:
      A-1 — <what changes: files, steps> — <why; source: review round n / R-07> — <name>, <YYYY-MM-DD> -->
+
+## Triage
+<!-- The triage record (workflows/feature-development.md, step 7) — here, because in lite there is
+     no PR yet at triage time; the PR description links this section. One table per review or
+     VERIFY round, written at the gate:
+     ### Review round <n> — <name>, <YYYY-MM-DD>
+     | Finding | Verdict (real / noise / defer / investigate) | Note (fix commit, rationale, B-<n>, A-<n>) | -->

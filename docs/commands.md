@@ -66,10 +66,23 @@ Mode is the `Mode:` line in `AGENTS.md`, set at bootstrap (`workflows/README.md`
 - **What it does:** workspace health — required core files, recovery catalog, configuration
   (`AGENTS.md`, mode, language, `scripts/check.conf`), the ANEW base version (`.anew-version`),
   adapter presence and parity, this page's coverage, spec/plan gate consistency, twin and shipped specs, `specs/done/` immutability,
-  evidence hygiene, fast-only evidence. `--strict` turns gate warnings into failures; CI runs it that way.
+  evidence hygiene, fast-only evidence, criterion-map names no file holds (WARN). `--strict` turns gate warnings into failures; CI runs it that way.
+  Step prerequisites (`requires` lines in `check.conf`): runs each distinct command once and
+  prints, per profile, `runnable on this machine` or `not runnable on this machine (steps: …)`
+  — a WARN in every mode, also under `--strict`: it describes the machine (R-13). A malformed
+  `requires` line (or one naming no step) is a WARN, and each profile then reads `check fails on
+  the check.conf errors above` — a conf error to fix, not an environment gap.
+  New ships (specs added to `specs/done/` vs the base ref; fail closed — a line with a checkbox
+  followed by an `AC-`/`CB-`/`PB-` id, only punctuation or emphasis between, is a criterion; its
+  first box decides; a box in backticks still counts): an unchecked criterion without
+  `→ moved to B-<n> | spec <NNNN>` (target existing), or any move in a sensitive-area spec, is a
+  gate (tick a proven criterion `[x]`); a spec target must be open (`specs/active/`). A
+  `Self-critique: pending` warns on a Draft — expected until the self-critique is approved — and
+  is a gate past approval. Locally the base is HEAD, so only an uncommitted ship is seen; CI on a
+  pull request sees every new ship.
 - **When to use it:** after bootstrap, before a PR, whenever the workspace feels off.
 - **Reads / writes:** reads the working tree (and git, for `specs/done/` against a base ref);
-  writes nothing.
+  writes nothing itself; runs the project's prerequisite commands (side-effect free by contract).
 - **Stops at:** exit 0 = healthy (warnings allowed), exit 1 = broken; `FAIL` / `WARN` lines say why.
 - **Lite / Strict:** no difference. The `--strict` flag is not strict mode; the two are independent.
 - **Refusal:** none — it reports.
@@ -78,7 +91,8 @@ Mode is the `Mode:` line in `AGENTS.md`, set at bootstrap (`workflows/README.md`
 
 ### `scripts/check`
 - **What it does:** the single verification contract — runs the steps in `scripts/check.conf` in
-  order, fail fast. `--fast` runs only the steps tagged `[fast]`.
+  order, fail fast. `--fast` runs only the steps tagged `[fast]`. Before the first step it runs
+  the prerequisites (`requires <step>: <command>`) of the profile's steps, once per command.
   **Fast green is a working state; only full green is evidence.** (`docs/testing.md`, Two speeds,
   one contract)
 - **When to use it:** `--fast` while iterating, and before a push together with the touched
@@ -90,20 +104,27 @@ Mode is the `Mode:` line in `AGENTS.md`, set at bootstrap (`workflows/README.md`
 - **Stops at:** `CHECK GREEN (full, n steps, t s)` (exit 0) or `CHECK FAILED (full) at step: <name>` (exit 1).
 - **Lite / Strict:** no difference.
 - **Refusal:** `check: no scripts/check.conf yet.` (exit 1); an unknown argument prints the
-  usage (exit 2).
+  usage (exit 2); an unmet prerequisite: `CHECK FAILED (<profile>) prerequisite not met: <command>
+  (steps: …) — environment gap, …(R-13)` before any step (exit 1); a malformed `requires` line:
+  `CHECK FAILED (<profile>) requires names no step: <name>`, `… requires has no command: <step>`
+  or `… requires line has no ':': <line>` (exit 1).
 - **Common mistake:** citing `CHECK GREEN (fast, …)` as evidence.
 
 ### `scripts/residue`
 - **What it does:** the residue test (`docs/testing.md`, Resource hygiene) — runs check twice and
-  names every process, or memory drop over the tolerance, that outlives a run. `--fast` tests the
-  fast profile.
-- **When to use it:** at bootstrap (both profiles), and whenever `scripts/check.conf` changes.
+  names every process check left running, judged by its parent chain. What other sessions or the
+  OS started meanwhile is listed as `not from check` with its parent and never fails it. Memory
+  is reported, not judged (a drop over `ANEW_RESIDUE_MB` is marked informational). `--fast` tests
+  the fast profile.
+- **When to use it:** at bootstrap and whenever `scripts/check.conf` changes (BUILD's Done), both
+  profiles. The agent runs it; the gate shows one line, `Residue: clean (fast + full)`.
 - **Reads / writes:** runs `scripts/check`; writes only a temp dir, deleted on exit.
 - **Stops at:** `RESIDUE CLEAN (<profile>, 2 runs)` (exit 0) or `RESIDUE FOUND (<profile>)` (exit 1).
   A `check.conf` without steps: `RESIDUE NOT MEASURED (<profile>)` (exit 0) — never evidence of clean.
 - **Lite / Strict:** no difference.
 - **Refusal:** a red check stops it: `RESIDUE TEST ABORTED (<profile>): check failed in run <n> — the residue test needs a green check`.
-- **Common mistake:** running it on a busy machine — whatever starts meanwhile is listed too.
+- **Common mistake:** writing it into a spec as an acceptance criterion — it is BUILD's duty when
+  check.conf changes; or asking a human to idle the machine — attribution makes that unnecessary.
 
 ### `scripts/selftest`
 - **What it does:** proves that `scripts/check`, `scripts/doctor` and `scripts/residue` behave as
@@ -185,7 +206,7 @@ gate, handoff ending in `Next: <segment> — <who runs it>`, stop.
   rounds after triage (`prompts/build.md §fixes`).
 - **Reads / writes:** reads `specs/plans/NNNN-plan.md`, the spec, `prompts/build.md`; writes code
   and tests and sets the spec to `Status: In progress`.
-- **Stops at:** changed files vs. the plan list + real `./scripts/check` output ·
+- **Stops at:** changed files vs. the plan list (as amended) + real `./scripts/check` output ·
   `Next: INDEPENDENT REVIEW — fresh session / read-only reviewer`. A deviation goes to R-07.
 - **Lite / Strict:** no difference in checks; in strict, a session of its own.
 - **Refusal:** "Plan not approved — run PLAN and get the approval recorded first."
@@ -194,7 +215,7 @@ gate, handoff ending in `Next: <segment> — <who runs it>`, stop.
 ### `/review`
 - **What it does:** an independent, read-only review of the diff against the spec.
 - **When to use it:** after a build, and again on a fix diff with a Medium or higher finding
-  (in a sensitive area: every fix diff).
+  (in a sensitive area: every fix diff) — never on a fix diff that touches documentation only.
 - **Reads / writes:** reads the diff, the spec in `specs/active/`, its plan in `specs/plans/`
   (file list, criterion ↔ test map), `prompts/review.md`; writes nothing.
 - **Stops at:** the findings report, verbatim · `Next: TRIAGE — human (real / noise / defer / investigate); then Developer fix rounds, then VERIFY`.
@@ -210,10 +231,10 @@ gate, handoff ending in `Next: <segment> — <who runs it>`, stop.
   Evidence policy).
 - **When to use it:** after triage is complete. Not needed after a clean one-pass review, whose
   report already holds the table (lite, `workflows/segments.md`).
-- **Reads / writes:** reads the spec, `prompts/verify.md`, test output; writes no production code.
-- **Stops at:** the criterion ↔ evidence table · `Next: SHIP — human (DoD, PR, merge, move spec to specs/done/, Status: Shipped)`.
+- **Reads / writes:** reads the spec, the plan (criterion ↔ test map, `## Triage`), `prompts/verify.md`, test output; writes no production code.
+- **Stops at:** the criterion ↔ evidence table · `Next: SHIP — human (DoD, tick the proven criteria, move spec to specs/done/ with Status: Shipped in the PR, merge)`.
 - **Lite / Strict:** no difference; in strict, QA in a fresh session.
-- **Refusal:** none — a soft check: with no review/triage record, it says so and asks.
+- **Refusal:** none — a soft check: with no triage record in the plan's `## Triage`, it says so and asks.
 - **Common mistake:** a claim without evidence in the table — that is a gap, and gaps are findings.
 
 ## D — Request lanes: `/change`, `/fix-bug`, `/refactor`
@@ -282,7 +303,7 @@ gate, handoff ending in `Next: <segment> — <who runs it>`, stop.
 ## Recovery ramps
 
 Ramps are safe returns to the loop, not alternatives to it — each carries its own protection
-rules. The agent names the ramp's code and asks the human to run it; the catalog, R-01…R-12,
+rules. The agent names the ramp's code and asks the human to run it; the catalog, R-01…R-13,
 lives in [`prompts/recovery/README.md`](../prompts/recovery/README.md).
 
 ## Quick reference
