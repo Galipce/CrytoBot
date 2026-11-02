@@ -1,4 +1,5 @@
-"""Dolan paper alımlardan defter: açılış, dolum kaydı, pozisyonlar (spec 0007)."""
+"""Dolan paper alımlardan defter: açılış, dolum kaydı, pozisyonlar (spec 0007); kapanışların ve
+gerçekleşen kâr/zararın taşındığı ortak türler (spec 0008, kayıt `_close.py`'de)."""
 
 import re
 from collections.abc import Mapping
@@ -41,7 +42,8 @@ class Fill:
 
 @dataclass(frozen=True)
 class Position:
-    """Açık pozisyon (R-4): her dolum ayrı bir pozisyondur; maliyet fiyatı dolum fiyatıdır."""
+    """Alımın açtığı pozisyon (R-4): her dolum ayrı bir pozisyondur; maliyet fiyatı dolum fiyatıdır.
+    Açıkken `Ledger.positions`'ta, kapandıktan sonra `Closure.position`'da durur (spec 0008)."""
 
     client_order_id: str
     pair: str
