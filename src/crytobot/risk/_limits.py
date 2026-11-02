@@ -39,6 +39,23 @@ def _show(value: object) -> str:
         return f"<{type(value).__name__}: gösterilemiyor>"
 
 
+# significant digits of an order amount or price: every real exchange value fits (spec 0009 R-13)
+DIGITS = 28
+
+
+def _significant(number: Decimal) -> int:
+    """Sondaki sıfırlar hariç basamak sayısı; değeri `str`'e ya da `int`'e çevirmeden sayar."""
+    digits = number.as_tuple().digits
+    return len(bytes(digits).rstrip(b"\0"))
+
+
+def _brief(number: Decimal) -> str:
+    """Mesaj için sayı: en fazla 28 basamaklıysa kendisi, değilse basamak sayısı — ölçek içindeki
+    milyon basamaklı bir değer mesajı megabaytlarca uzatmasın (B-11)."""
+    length = len(number.as_tuple().digits)
+    return str(number) if length <= DIGITS else f"<{length} basamaklı sayı>"
+
+
 @dataclass(frozen=True)
 class RiskLimits:
     """Oranlar kasaya göre (`Decimal("0.01")` = %1); pozisyon sayısı tam sayı; kat, beklenen kârın

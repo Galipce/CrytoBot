@@ -20,6 +20,14 @@ from crytobot.risk._approval import (
     TradeIntent,
     approve_trade,
 )
+from crytobot.risk._close import (
+    CLOSE_REASONS,
+    CloseApproval,
+    CloseRefusal,
+    CloseRequest,
+    approve_close,
+    close_request_problems,
+)
 from crytobot.risk._limits import (
     DEFAULT_LIMITS,
     HARD_CAPS,
@@ -46,6 +54,7 @@ from crytobot.risk._tracking import (
 )
 
 __all__: list[str] = [
+    "CLOSE_REASONS",
     "DEFAULT_LIMITS",
     "EMPTY_STATE",
     "HARD_CAPS",
@@ -54,6 +63,9 @@ __all__: list[str] = [
     "ApprovalReason",
     "ChangeDecision",
     "Channel",
+    "CloseApproval",
+    "CloseRefusal",
+    "CloseRequest",
     "HardCaps",
     "LimitChange",
     "LoadedLimits",
@@ -67,7 +79,9 @@ __all__: list[str] = [
     "TrackingReason",
     "TradeApproval",
     "TradeIntent",
+    "approve_close",
     "approve_trade",
+    "close_request_problems",
     "decide_change",
     "load_limits",
     "observe",
