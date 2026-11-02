@@ -180,20 +180,29 @@ class Model:
         self.closes[action.client_order_id] = {"content": content}
         return "close_closed"
 
-    def decide(self, action: Decide) -> tuple[str, list[tuple[str, CloseReason]]]:
+    def decide(self, action: Decide) -> tuple[str, list[tuple[Any, ...]], list[str]]:
+        """Kararlar (kimlik, çift, miktar, neden, fiyat) ve eksik çiftler, ilk görülme sırasıyla."""
         if self.balance is None:
-            return "decide_not_opened", []
-        decisions: list[tuple[str, CloseReason]] = []
-        missing = False
+            return "decide_not_opened", [], []
+        decisions: list[tuple[Any, ...]] = []
+        missing: list[str] = []
         for client_order_id, position in self.open.items():
-            price = action.prices.get(position["pair"], Decimal(0))
+            pair = position["pair"]
+            price = action.prices.get(pair, Decimal(0))
             if price <= 0:
-                missing = True
-            elif price <= STOP:
-                decisions.append((client_order_id, CloseReason.STOP))
-            elif price >= TARGET:
-                decisions.append((client_order_id, CloseReason.TARGET))
-        return ("decide_missing_price" if missing else "decide_ready"), decisions
+                missing += [] if pair in missing else [pair]
+                continue
+            reason = (
+                CloseReason.STOP
+                if price <= STOP
+                else CloseReason.TARGET
+                if price >= TARGET
+                else None
+            )
+            if reason is not None:
+                decisions.append((client_order_id, pair, AMOUNT, reason, price))
+        outcome = "decide_missing_price" if missing else "decide_ready"
+        return outcome, decisions, missing
 
 
 def run(actions: list[Any]) -> list[str]:
@@ -203,9 +212,12 @@ def run(actions: list[Any]) -> list[str]:
         result: Any
         if isinstance(action, Decide):
             result = exit_decisions(ledger, action.prices)
-            expected, decisions = model.decide(action)
+            expected, decisions, missing = model.decide(action)
             assert "decide_" + result.outcome.value == expected, result.message
-            assert [(d.client_order_id, d.reason) for d in result.decisions] == decisions
+            assert [
+                (d.client_order_id, d.pair, d.amount, d.reason, d.price) for d in result.decisions
+            ] == decisions
+            assert list(result.missing) == missing
             seen.append(expected)
             continue
         if isinstance(action, Decimal):
