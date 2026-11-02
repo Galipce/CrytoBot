@@ -85,6 +85,21 @@ def test_ledger_takes_sixty_digit_fills(field: str) -> None:
     assert "60 anlamlı basamaktan uzun" in close_long.message
 
 
+def order_with(**overrides: Any) -> Any:
+    fields = {
+        "stop": Decimal("0.1"),
+        "target": Decimal("0.2"),
+        "price": Decimal("0.12"),
+    } | overrides
+    intent = TradeIntent(PAIR, "buy", Decimal("0.12"), fields["stop"], fields["target"])
+    approval = TradeApproval(AMOUNT, None, False, "", intent)
+    rules = PairRules(Decimal("0.00000001"), Decimal(0), Decimal(0))
+    request = OrderRequest(
+        "a", intent, approval, rules, fields["price"], Decimal(0), Decimal(0), "paper"
+    )
+    return place_order(EMPTY_EXECUTION, request, PaperExchange(), NOW)
+
+
 INPUTS: dict[str, Any] = {
     "buy-amount": lambda: record_fill(opened(), fill(amount=LONG_29)),
     "buy-stop": lambda: record_fill(opened(), fill(stop=LONG_29)),
@@ -93,6 +108,9 @@ INPUTS: dict[str, Any] = {
         record_fill(opened(), fill()).ledger, close(amount=LONG_29)
     ),
     "opening": lambda: open_ledger(EMPTY_LEDGER, LONG_29, OPENED),
+    # the order refuses what the ledger would: it never fills first (plan 0010 A-2)
+    "order-stop": lambda: order_with(stop=LONG_29),
+    "order-target": lambda: order_with(target=LONG_29),
 }
 
 

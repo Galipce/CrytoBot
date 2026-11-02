@@ -233,6 +233,9 @@ def _check(request: OrderRequest, now: object) -> _Checked | list[str]:
             ("hedef", intent.target),
         ):
             positive(label, value)
+        for label in ("stop", "hedef"):  # the ledger holds them to 28 digits (spec 0010 R-4)
+            if label in numbers and _significant(numbers[label]) > DIGITS:
+                problems.append(_too_long(label, numbers.pop(label)))
     approval = request.approval
     amount = _number(approval.amount) if isinstance(approval, TradeApproval) else None
     if amount is not None and amount > 0:  # a missing or non-positive amount is unapproved (R-2)
