@@ -146,6 +146,21 @@ def test_unapproved_close_is_refused(case: str) -> None:
     assert result.state is EMPTY_EXECUTION and "onaysız kapanış" in result.message
 
 
+def test_trade_approval_sells_nothing() -> None:
+    """AC-5 (R-4, BR-9): elle kurulmuş bir işlem önerisi onayıyla satış önerisi → "onaysız öneri",
+    satış emri oluşmaz; satış yalnızca kapanış onayından çıkar."""
+    sell = TradeIntent(PAIR, "sell", Decimal("100"), Decimal("95"), Decimal("110"))
+    request = OrderRequest(
+        "s1-btc-0002", sell, TradeApproval(Decimal("1"), None, False, "", sell), RULES,
+        Decimal("100"), Decimal("0.001"), Decimal("0.001"), "paper",
+    )  # fmt: skip
+
+    result = place_order(EMPTY_EXECUTION, request, VENUE, NOW)
+
+    assert result.outcome is OrderOutcome.UNAPPROVED and result.order is None
+    assert result.state is EMPTY_EXECUTION and "onaysız öneri" in result.message
+
+
 def test_close_approval_buys_nothing() -> None:
     """AC-5 (R-4): kapanış onayıyla alım isteği → alımın "onaysız öneri"si."""
     intent = TradeIntent(PAIR, "buy", Decimal("100"), Decimal("95"), Decimal("110"))

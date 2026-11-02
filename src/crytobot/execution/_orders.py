@@ -22,6 +22,7 @@ from crytobot.execution._paper import OrderStatus, PaperExchange
 from crytobot.risk import PairRules, TradeApproval, TradeIntent
 
 PAPER = "paper"
+BUY = "buy"
 CLIENT_ID_PREFIX = "cb-"
 # ASCII only: exchanges accept at most 36 of [A-Za-z0-9_-] in a client order id (R-6)
 _INTENT_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
@@ -362,6 +363,10 @@ def place_order(
         )
     if _judged_differently(approval.intent, checked):
         return reject(OrderOutcome.UNAPPROVED, "onaysız öneri: onay başka bir öneri için verilmiş")
+    if checked.side != BUY:  # a sale comes only from a close approval (spec 0009 R-4, BR-9)
+        return reject(
+            OrderOutcome.UNAPPROVED, f"onaysız öneri: yön {_show(checked.side)} alım değil"
+        )
     if off_step:
         return reject(
             OrderOutcome.EXCHANGE_RULE,
