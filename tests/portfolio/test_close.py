@@ -15,6 +15,7 @@ from crytobot.portfolio import (
     CloseResult,
     Decision,
     DecisionOutcome,
+    EntryKind,
     Fill,
     Ledger,
     LedgerOutcome,
@@ -23,6 +24,17 @@ from crytobot.portfolio import (
     exit_decisions,
     open_ledger,
     record_fill,
+)
+from crytobot.risk import (
+    DEFAULT_LIMITS,
+    EMPTY_STATE,
+    AccountState,
+    ApprovalReason,
+    PairRules,
+    TradeApproval,
+    TradeIntent,
+    approve_trade,
+    observe,
 )
 
 OPENED = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
@@ -460,3 +472,53 @@ def test_close_refusal_order(case: str) -> None:
     result = close(ledgers[kind], **overrides)
 
     assert result.outcome is expected and result.ledger is ledgers[kind]
+
+
+def test_close_is_append_only() -> None:
+    """AC-11 (R-12): kapanış yeni bir kayıttır; önceki kayıtlar ve sıraları aynıdır; reddedilen
+    istek defteri aynen bırakır."""
+    before = bought()
+
+    closed = close(before)
+    refused = close(closed.ledger, client_order_id="cb-x2")
+
+    entries = closed.ledger.entries
+    assert entries[: len(before.entries)] == before.entries
+    assert [e.kind for e in entries] == [EntryKind.OPENING, EntryKind.FILL, EntryKind.CLOSE]
+    assert entries[-1].usdt == Decimal("2114.214973695") and entries[-1].closure == closed.closure
+    assert refused.ledger is closed.ledger
+
+
+def five_positions() -> Ledger:
+    ledger = open_ledger(EMPTY_LEDGER, Decimal("10000"), OPENED).ledger
+    for i in range(5):
+        ledger = record_fill(ledger, replace(FILL, client_order_id=f"cb-{i}")).ledger
+    return ledger
+
+
+def judge(ledger: Ledger) -> TradeApproval:
+    """What `app` does: the ledger's snapshot as risk's account input (plan 0007 Risk 1)."""
+    snapshot = account_state(ledger, {"BTC/USDT": Decimal("105")}).snapshot
+    assert snapshot is not None
+    account = AccountState(snapshot.equity, snapshot.free_balance, snapshot.open_positions)
+    state = observe(EMPTY_STATE, LATER, account.equity, DEFAULT_LIMITS).state
+    intent = TradeIntent("BTC/USDT", "buy", Decimal("100"), Decimal("95"), Decimal("110"))
+    rules = PairRules(Decimal("0.001"), Decimal("0.001"), Decimal("5"))
+    return approve_trade(
+        intent, DEFAULT_LIMITS, account, rules, frozenset({"BTC/USDT"}), Decimal("0.001"),
+        Decimal("0.0005"), Decimal("0.001"), state, LATER,
+    )  # fmt: skip
+
+
+def test_closed_position_frees_the_position_limit() -> None:
+    """AC-11 (R-11, BR-7): beş açık pozisyonlu defterde biri kapanınca hesap durumu 4 açık pozisyon
+    verir ve spec 0003 onayı pozisyon limitine takılmaz."""
+    full = five_positions()
+
+    closed = close_position(full, replace(CLOSE, position_id="cb-2")).ledger
+
+    snapshot = account_state(closed, {"BTC/USDT": Decimal("105")}).snapshot
+    assert snapshot is not None and snapshot.open_positions == 4
+    assert [p.client_order_id for p in snapshot.positions] == ["cb-0", "cb-1", "cb-3", "cb-4"]
+    assert judge(full).reason is ApprovalReason.POSITION_LIMIT
+    assert judge(closed).approved and judge(closed).reason is not ApprovalReason.POSITION_LIMIT
