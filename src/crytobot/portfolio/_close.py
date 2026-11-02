@@ -18,7 +18,7 @@ from crytobot.portfolio._ledger import (
     _price,
     _time,
 )
-from crytobot.portfolio._numbers import BOUNDED, _brief, _show
+from crytobot.portfolio._numbers import BOUNDED, CALC_DIGITS, _brief, _show
 
 _AT = {CloseReason.STOP: "stop'ta", CloseReason.TARGET: "hedefte"}
 
@@ -173,8 +173,8 @@ def _check(close: Close) -> _Checked | list[str]:
     client_order_id = _id("kapanış clientOrderId", close.client_order_id, problems)
     position_id = _id("pozisyon clientOrderId", close.position_id, problems)
     amount = _amount("miktar", close.amount, problems)
-    price = _amount("dolum fiyatı", close.price, problems)
-    fee = _amount("komisyon", close.fee, problems, zero=True)
+    price = _amount("dolum fiyatı", close.price, problems, digits=CALC_DIGITS)  # spec 0010 R-3
+    fee = _amount("komisyon", close.fee, problems, zero=True, digits=CALC_DIGITS)
     reason = close.reason
     if not isinstance(reason, CloseReason):
         problems.append(f"neden {_show(reason)} stop ya da hedef olmalı")

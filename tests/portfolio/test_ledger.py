@@ -220,6 +220,12 @@ INVALID: dict[str, tuple[dict[str, Any], tuple[str, ...]]] = {
     for field in FIELDS
     for case, (value, rule) in BAD_POSITIVE.items()
 }
+# a fill price's bound is 60 digits, the other numbers' 28 (spec 0010 R-3)
+del INVALID["price-29_digits"]
+INVALID["price-61_digits"] = (
+    {"price": Decimal("1." + "2" * 60)},
+    ("dolum fiyatı ", "<61 basamaklı sayı> 60 anlamlı basamaktan uzun"),
+)
 INVALID |= {
     "fee-negative": ({"fee": Decimal("-0.001")}, ("komisyon",)),
     "fee-nan": ({"fee": Decimal("NaN")}, ("komisyon",)),
