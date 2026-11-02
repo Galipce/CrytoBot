@@ -452,9 +452,9 @@ UNREPRESENTABLE: dict[str, tuple[dict[str, Any], str]] = {
     ),
     # the notional fits, the fee does not
     "long_fee": ({"fee": Decimal("0.001" + "0" * 52 + "1")}, "ücret <"),
-    # in scale each, but the fill (over 60 digits) or the step's remainder does not fit (spec 0010)
+    # 1 - slippage fits (40 digits), the fill needs 68; the step's remainder does not fit either
     "long_price": (
-        {"price": Decimal("109.9450000000000000000000001"), "slippage": Decimal("1E-70")},
+        {"price": Decimal("109.9450000000000000000000001"), "slippage": Decimal("1E-40")},
         "fiyat 109.945",
     ),
     "tiny_step": ({"rules": replace(RULES, amount_step=Decimal("1E-999999"))}, "adım 1E-999999"),
@@ -483,7 +483,7 @@ REFUSALS: dict[str, tuple[bool, dict[str, Any], OrderOutcome]] = {
         False,
         {
             "price": Decimal("109.9450000000000000000000001"),
-            "slippage": Decimal("1E-70"),
+            "slippage": Decimal("1E-40"),
             "mode": "live",
         },
         OrderOutcome.INVALID_INPUT,

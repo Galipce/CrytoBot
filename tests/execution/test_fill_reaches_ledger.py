@@ -248,8 +248,8 @@ def equity_with(mark: Decimal) -> Any:
 # (what fits in exactly 60 digits, what needs 61): each one a calculation of R-2
 BOUND: dict[str, tuple[Any, Any]] = {
     "fill": (
-        lambda: close_with(1, 1, "1E-60", 0),
-        lambda: close_with(1, 1, "1E-61", 0),
+        lambda: close_with(1, 3, "1E-59", 0),
+        lambda: close_with(1, 3, "1E-60", 0),
     ),
     "notional": (
         lambda: close_with(3, 1, "1E-59", 0),
