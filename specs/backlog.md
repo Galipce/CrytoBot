@@ -89,3 +89,9 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   ya da sondaki sıfırları da sayan basamak kuralı; kendi change akışında — Deferred by: Galip Badem, 2026-11-02, kural
   üç modülde kopya (docs/conventions.md); yalnız `portfolio`'da değiştirmek kopyaları ayırır, üçünü birden
   değiştirmek bu spec'in kapsamını aşar.
+- **B-16** — `get`'i `KeyError` dışında bir istisna fırlatan elle yazılmış bir `Mapping` fiyat girdisi
+  `exit_decisions`'tan (`src/crytobot/portfolio/_close.py`, `prices.get`) ve spec 0007'nin `account_state`'inden
+  (`_ledger.py`) istisna olarak sızar ("hiçbir girdi istisna fırlatmaz") — Source: spec 0008, review round 1 F-3 —
+  Severity: Info — Recommendation: iki fonksiyonda birlikte, fiyat okumasını adlandırılmış bir "geçersiz girdi"
+  retine çeviren tek bir yardımcı ya da girdiyi `dict`'e kopyalamak — Deferred by: Galip Badem, 2026-11-02, gerçek
+  çağıran (`app`) düz `dict` verir; düzeltme shipped spec 0007'nin koduna da dokunur; `app` spec'inde kapanır.
