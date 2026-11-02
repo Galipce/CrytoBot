@@ -7,7 +7,16 @@ kayıt doğurmaz. `account_state` defterden serbest bakiyeyi, açık pozisyonlar
 fiyatla değerlenmiş kasayı türetir: `risk`'in hesap girdisi (`AccountState`'e `app` çevirir).
 """
 
-from crytobot.portfolio._close import Close, CloseOutcome, CloseResult, close_position
+from crytobot.portfolio._close import (
+    Close,
+    CloseOutcome,
+    CloseResult,
+    Decision,
+    DecisionOutcome,
+    DecisionResult,
+    close_position,
+    exit_decisions,
+)
 from crytobot.portfolio._ledger import (
     BUY,
     EMPTY_LEDGER,
@@ -37,6 +46,9 @@ __all__: list[str] = [
     "CloseReason",
     "CloseResult",
     "Closure",
+    "Decision",
+    "DecisionOutcome",
+    "DecisionResult",
     "Entry",
     "EntryKind",
     "Fill",
@@ -48,6 +60,7 @@ __all__: list[str] = [
     "SnapshotResult",
     "account_state",
     "close_position",
+    "exit_decisions",
     "open_ledger",
     "record_fill",
 ]

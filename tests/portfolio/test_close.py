@@ -13,11 +13,14 @@ from crytobot.portfolio import (
     CloseOutcome,
     CloseReason,
     CloseResult,
+    Decision,
+    DecisionOutcome,
     Fill,
     Ledger,
     LedgerOutcome,
     account_state,
     close_position,
+    exit_decisions,
     open_ledger,
     record_fill,
 )
@@ -57,6 +60,123 @@ def bought(amount: Any = Decimal("10000")) -> Ledger:
 
 def close(ledger: Ledger | None = None, **overrides: Any) -> CloseResult:
     return close_position(bought() if ledger is None else ledger, replace(CLOSE, **overrides))
+
+
+# (BTC price, the decision's reason or None): stop 95, target 110, both inclusive
+AT_PRICE: dict[str, tuple[Decimal, CloseReason | None]] = {
+    "target": (Decimal("110"), CloseReason.TARGET),
+    "above_target": (Decimal("111"), CloseReason.TARGET),
+    "stop": (Decimal("95"), CloseReason.STOP),
+    "below_stop": (Decimal("94"), CloseReason.STOP),
+    "between": (Decimal("100"), None),
+    "just_below_target": (Decimal("109.99"), None),
+}
+
+
+@pytest.mark.parametrize("case", list(AT_PRICE))
+def test_decision_at_stop_or_target(case: str) -> None:
+    """AC-1 (R-1): fiyat stop'a eşit ya da altında → "stop'ta kapanış", hedefe eşit ya da üstünde →
+    "hedefte kapanış", arada → karar yok; karar kimliği, çifti, miktarı, nedeni ve fiyatı taşır;
+    defter değişmez."""
+    price, reason = AT_PRICE[case]
+    ledger = bought()
+
+    result = exit_decisions(ledger, {"BTC/USDT": price})
+
+    assert result.outcome is DecisionOutcome.READY and result.missing == ()
+    expected = () if reason is None else (
+        Decision("cb-s1-btc-0001", "BTC/USDT", Decimal("19.249"), reason, price),
+    )  # fmt: skip
+    assert result.decisions == expected
+    assert ledger == bought() and ledger.positions == bought().positions
+
+
+def test_stop_wins_when_both_hold() -> None:
+    """AC-1 (R-1; spec 0008 G-4): stop'u hedefinin üstünde, elle kurulmuş bir pozisyonda iki koşul
+    birden doğru → "stop'ta kapanış"."""
+    ledger = record_fill(
+        open_ledger(EMPTY_LEDGER, Decimal("10000"), OPENED).ledger,
+        replace(FILL, stop=Decimal("110"), target=Decimal("95")),
+    ).ledger
+
+    result = exit_decisions(ledger, {"BTC/USDT": Decimal("100")})
+
+    assert [d.reason for d in result.decisions] == [CloseReason.STOP]
+
+
+def three_positions() -> Ledger:
+    """BTC (`cb-1`), ETH (`cb-2`), BTC (`cb-3`), eklenme sırasıyla."""
+    ledger = open_ledger(EMPTY_LEDGER, Decimal("10000"), OPENED).ledger
+    eth = replace(FILL, pair="ETH/USDT", amount=Decimal("1"), price=Decimal("50"), fee=0)
+    for fill in (
+        replace(FILL, client_order_id="cb-1"),
+        replace(eth, client_order_id="cb-2", stop=Decimal("45"), target=Decimal("60")),
+        replace(FILL, client_order_id="cb-3"),
+    ):
+        ledger = record_fill(ledger, fill).ledger
+    return ledger
+
+
+BAD_ETH: dict[str, dict[str, Any]] = {
+    "all_priced": {"ETH/USDT": Decimal("61")},
+    "absent": {},
+    "zero": {"ETH/USDT": Decimal(0)},
+    "negative": {"ETH/USDT": Decimal(-1)},
+    "nan": {"ETH/USDT": Decimal("NaN")},
+    "float": {"ETH/USDT": 61.0},
+}
+
+
+@pytest.mark.parametrize("case", list(BAD_ETH))
+def test_decisions_keep_order_and_name_missing_prices(case: str) -> None:
+    """AC-2 (R-1, R-2): kararlar eklenme sırasıyla; bir çiftin fiyatı yok ya da geçersiz → o çift
+    "fiyat eksik" ile adlandırılır, diğer çiftin kararları yine verilir; pozisyonu olmayan çiftin
+    fiyatı yok sayılır."""
+    prices = {"BTC/USDT": Decimal("94"), "XRP/USDT": Decimal("NaN"), **BAD_ETH[case]}
+
+    result = exit_decisions(three_positions(), prices)
+
+    ids = [(d.client_order_id, d.reason) for d in result.decisions]
+    if case == "all_priced":
+        assert result.outcome is DecisionOutcome.READY and result.missing == ()
+        assert ids == [
+            ("cb-1", CloseReason.STOP),
+            ("cb-2", CloseReason.TARGET),
+            ("cb-3", CloseReason.STOP),
+        ]
+    else:
+        assert result.outcome is DecisionOutcome.MISSING_PRICE
+        assert result.missing == ("ETH/USDT",) and "fiyat eksik" in result.message
+        assert "ETH/USDT" in result.message and "XRP/USDT" not in result.message
+        assert ids == [("cb-1", CloseReason.STOP), ("cb-3", CloseReason.STOP)]
+
+
+def test_decisions_need_no_price_without_positions() -> None:
+    """AC-2 (R-2): açık pozisyon yoksa karar listesi boş, fiyat gerekmez (kapanmış pozisyonun çifti
+    için de)."""
+    for ledger in (open_ledger(EMPTY_LEDGER, Decimal("10000"), OPENED).ledger, close().ledger):
+        result = exit_decisions(ledger, {})
+
+        assert result.outcome is DecisionOutcome.READY
+        assert result.decisions == () and result.missing == ()
+
+
+def test_decisions_need_an_opened_ledger() -> None:
+    """AC-2 (R-2): açılmamış defter için karar isteği → "defter açılmamış"."""
+    result = exit_decisions(EMPTY_LEDGER, {"BTC/USDT": Decimal("94")})
+
+    assert result.outcome is DecisionOutcome.NOT_OPENED and result.decisions == ()
+    assert "defter açılmamış" in result.message
+
+
+@pytest.mark.parametrize("prices", [None, [("BTC/USDT", Decimal("94"))], "BTC/USDT"])
+def test_decision_prices_must_be_a_mapping(prices: Any) -> None:
+    """AC-2 (R-2): eşleme olmayan fiyat girdisi → "geçersiz girdi", açılmamış defterden önce."""
+    for ledger in (EMPTY_LEDGER, bought()):
+        result = exit_decisions(ledger, prices)
+
+        assert result.outcome is DecisionOutcome.INVALID_INPUT and result.decisions == ()
+        assert "geçersiz girdi" in result.message
 
 
 def test_close_at_target_realizes_profit() -> None:

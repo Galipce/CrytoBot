@@ -1,5 +1,6 @@
 """Açık pozisyonun stop ya da hedefte kapanışı ve gerçekleşen kâr/zarar (spec 0008)."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, DecimalException, localcontext
@@ -14,11 +15,93 @@ from crytobot.portfolio._ledger import (
     EntryKind,
     Ledger,
     _amount,
+    _price,
     _time,
 )
 from crytobot.portfolio._numbers import BOUNDED, _brief, _show
 
 _AT = {CloseReason.STOP: "stop'ta", CloseReason.TARGET: "hedefte"}
+
+
+@dataclass(frozen=True)
+class Decision:
+    """Kapanması gereken açık pozisyon (R-1): kimliği, çifti, miktarı, nedeni ve karara esas
+    fiyat."""
+
+    client_order_id: str
+    pair: str
+    amount: Decimal
+    reason: CloseReason
+    price: Decimal
+
+
+class DecisionOutcome(Enum):
+    """Kapanış kararı isteğinin sonucu; ret sırası: geçersiz girdi → defter açılmamış (R-2)."""
+
+    READY = "ready"
+    MISSING_PRICE = "missing_price"
+    INVALID_INPUT = "invalid_input"
+    NOT_OPENED = "not_opened"
+
+
+@dataclass(frozen=True)
+class DecisionResult:
+    """Kararlar açık pozisyonların eklenme sırasıyla. "Fiyat eksik"te de fiyatı geçerli çiftlerin
+    kararları doludur: çağıran onları uygular, eksik çiftleri bildirir (R-2, plan 0008 Risk 4)."""
+
+    outcome: DecisionOutcome
+    decisions: tuple[Decision, ...]
+    missing: tuple[str, ...]
+    message: str
+
+
+def exit_decisions(ledger: Ledger, prices: object) -> DecisionResult:
+    """R-1, R-2: güncel fiyat stop'a eşit ya da altındaysa "stop'ta kapanış", hedefe eşit ya da
+    üstündeyse "hedefte kapanış"; ikisi birden doğruysa stop. Defteri değiştirmez."""
+    if not isinstance(prices, Mapping):
+        return DecisionResult(
+            DecisionOutcome.INVALID_INPUT,
+            (),
+            (),
+            f"geçersiz girdi: fiyatlar {_show(prices)} çift → fiyat eşlemesi olmalı",
+        )
+    if ledger.balance is None:
+        return DecisionResult(
+            DecisionOutcome.NOT_OPENED, (), (), "defter açılmamış: önce başlangıç yatırması"
+        )
+    positions = tuple(ledger.positions.values())
+    marks: dict[str, Decimal] = {}
+    missing: list[str] = []
+    for pair in dict.fromkeys(p.pair for p in positions):
+        price = _price(prices.get(pair))
+        if price is None:
+            missing.append(pair)
+        else:
+            marks[pair] = price
+    decisions: list[Decision] = []
+    for position in positions:
+        price = marks.get(position.pair)
+        if price is None:
+            continue
+        if price <= position.stop:  # protective side first (spec 0008 G-4)
+            reason = CloseReason.STOP
+        elif price >= position.target:
+            reason = CloseReason.TARGET
+        else:
+            continue
+        decisions.append(
+            Decision(position.client_order_id, position.pair, position.amount, reason, price)
+        )
+    found = f"{len(decisions)} kapanış kararı"
+    if missing:
+        return DecisionResult(
+            DecisionOutcome.MISSING_PRICE,
+            tuple(decisions),
+            tuple(missing),
+            f"fiyat eksik: açık pozisyonu olan {', '.join(missing)} için geçerli fiyat yok;"
+            f" {found}",
+        )
+    return DecisionResult(DecisionOutcome.READY, tuple(decisions), (), found)
 
 
 @dataclass(frozen=True)
