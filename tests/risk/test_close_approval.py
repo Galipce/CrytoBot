@@ -71,6 +71,10 @@ BLOCKED: dict[str, tuple[RiskState, str, int, frozenset[str], TradeIntent, Appro
         observed("10000"), "10000", 0, frozenset({PAIR}), replace(INTENT, stop=None),
         ApprovalReason.INVALID_STOP,
     ),
+    # a zero equity is no input for a buy at all; a close needs no equity (plan 0009 A-1)
+    "zero_equity": (
+        observed("10000"), "0", 0, frozenset({PAIR}), INTENT, ApprovalReason.INVALID_INPUT,
+    ),
     "thin_edge": (
         observed("10000"), "10000", 0, frozenset({PAIR}), replace(INTENT, target=Decimal("100.1")),
         ApprovalReason.INSUFFICIENT_EDGE,
