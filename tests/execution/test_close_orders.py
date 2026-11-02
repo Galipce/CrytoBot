@@ -1,7 +1,7 @@
 """Spec 0009 AC-3…AC-11: kapanış onayından paper piyasa satışı."""
 
 from dataclasses import FrozenInstanceError, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from decimal import Decimal
 from types import MappingProxyType
 from typing import Any
@@ -332,6 +332,28 @@ def test_unknown_close_enters_and_leaves_safe_mode() -> None:
     assert second.state.unknown == (CID, other)
 
 
+class BadOffset(tzinfo):
+    def utcoffset(self, dt: datetime | None) -> timedelta:
+        return timedelta(days=2)  # outside the range `datetime` accepts: ValueError
+
+    def dst(self, dt: datetime | None) -> None:
+        return None
+
+    def tzname(self, dt: datetime | None) -> str:
+        return "bad"
+
+
+class RaisingOffset(tzinfo):
+    def utcoffset(self, dt: datetime | None) -> timedelta:
+        raise RuntimeError("no offset")
+
+    def dst(self, dt: datetime | None) -> None:
+        return None
+
+    def tzname(self, dt: datetime | None) -> str:
+        return "bad"
+
+
 LONG = Decimal("1." + "2" * 28)  # 29 significant digits
 INVALID: dict[str, tuple[dict[str, Any], str]] = {
     "price-zero": ({"price": Decimal(0)}, "fiyat Decimal('0') sıfırdan büyük"),
@@ -365,6 +387,8 @@ INVALID: dict[str, tuple[dict[str, Any], str]] = {
     ),
     "now-no_zone": ({"now": datetime(2026, 11, 2, 11, 0)}, "şu anki zaman"),
     "now-text": ({"now": "11:00"}, "şu anki zaman '11:00'"),
+    "now-offset_out_of_range": ({"now": NOW.replace(tzinfo=BadOffset())}, "şu anki zaman"),
+    "now-offset_raises": ({"now": NOW.replace(tzinfo=RaisingOffset())}, "şu anki zaman"),
 }
 
 

@@ -4,8 +4,9 @@ bağımsız bir modelle birebir; hiçbir girdi istisna fırlatmaz (BR-9, BR-11, 
 import re
 from collections import Counter
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, tzinfo
 from decimal import Decimal
+from enum import Enum
 from fractions import Fraction
 from types import MappingProxyType
 from typing import Any
@@ -252,6 +253,17 @@ def test_close_orders_match_the_model(case: Any) -> None:
     run(case)
 
 
+class BadOffset(tzinfo):
+    def utcoffset(self, dt: datetime | None) -> timedelta:
+        return timedelta(days=2)  # outside the range `datetime` accepts: ValueError
+
+    def dst(self, dt: datetime | None) -> None:
+        return None
+
+    def tzname(self, dt: datetime | None) -> str:
+        return "bad"
+
+
 JUNK: list[Any] = [
     None, True, 0.5, "1", "paper", "hedef", "cb-a", Decimal("NaN"), Decimal("-Infinity"),
     Decimal(0), Decimal(-1), Decimal("0.001"), Decimal("1E+1000000"), Decimal("1E-999999"),
@@ -259,6 +271,10 @@ JUNK: list[Any] = [
     PairRules(None, None, None), PairRules(10**4300, -1, Decimal("NaN")), NOW,
     datetime(2026, 11, 2),
 ]  # fmt: skip
+JUNK += [
+    Enum("TextEnum", {"HEDEF": "hedef"}, type=str).HEDEF,  # type: ignore[attr-defined]
+    "BAD_OFFSET",  # no_raise turns it into the time: Hypothesis cannot print such a datetime
+]
 junk = st.sampled_from(JUNK)
 # each field is valid eight times out of nine, so requests reach the scale and acceptance paths
 # (a 28-digit price's fill, or a remainder by a 1E-999999 step, does not fit in 28 digits)
@@ -274,6 +290,7 @@ fields = st.tuples(*[st.sampled_from(v * (8 * len(JUNK) // len(v)) + JUNK) for v
 
 def no_raise(values: tuple[Any, ...], wrap: str) -> str:
     """Approves and places one close; checks no exception and a coherent result."""
+    values = tuple(NOW.replace(tzinfo=BadOffset()) if v == "BAD_OFFSET" else v for v in values)
     request = CloseRequest(*values[:4])
     approval: Any = approve_close(request)
     assert isinstance(approval.reason, CloseRefusal | None)

@@ -61,6 +61,16 @@ class CloseOrderResult:
         return self.outcome is OrderOutcome.CREATED
 
 
+def _aware(now: object) -> bool:
+    """Zaman dilimi taşıyan zaman; `utcoffset`'i fırlatan ya da aralık dışı olan taşımaz (A-4)."""
+    if not isinstance(now, datetime):
+        return False
+    try:
+        return now.utcoffset() is not None
+    except Exception:  # a tzinfo may raise anything: it names no time zone
+        return False
+
+
 def _own_problems(
     request: CloseOrderRequest, now: object, numbers: dict[str, Decimal]
 ) -> list[str]:
@@ -90,7 +100,7 @@ def _own_problems(
         problems.append(f"fiyat {_brief(numbers.pop('fiyat'))} {DIGITS} anlamlı basamaktan uzun")
     number("ücret", request.fee, "rate")
     number("slippage", request.slippage, "rate")
-    if not isinstance(now, datetime) or now.utcoffset() is None:
+    if not _aware(now):
         problems.append(f"şu anki zaman {_show(now)} zaman dilimi taşımalı")
     return problems
 
