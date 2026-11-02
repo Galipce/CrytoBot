@@ -174,7 +174,7 @@ def place_close_order(
                 state,
                 OrderOutcome.ALREADY_EXISTS,
                 existing,
-                f"{pair}: {client_order_id} zaten var ({existing.status.value})",
+                f"{_show(pair)}: {client_order_id} zaten var ({existing.status.value})",
             )
         return reject(
             OrderOutcome.ID_CONFLICT,
@@ -225,7 +225,7 @@ def place_close_order(
         ExecutionState(MappingProxyType(orders), MappingProxyType(quotes)),
         OrderOutcome.CREATED,
         order,
-        f"{pair}: {client_order_id} {status.value}: {position_id} satışı, miktar"
+        f"{_show(pair)}: {client_order_id} {status.value}: {position_id} satışı, miktar"
         f" {_brief(amount)}" + (f", dolum fiyatı {fill}" if filled else ""),
         notifications,
     )

@@ -94,6 +94,7 @@ def test_close_sells_at_target() -> None:
     assert (order.fill_price, order.fee) == (Decimal("109.945"), Decimal("2.116331305"))
     assert order.created_at == NOW and dict(result.state.orders) == {CID: order}
     assert result.notifications == () and result.state.unknown == ()
+    assert result.message.startswith(f"'{PAIR}': {CID} filled")  # the pair as in every message
 
 
 def test_close_fill_closes_the_ledger_position() -> None:
@@ -203,7 +204,7 @@ def test_same_close_already_exists(status: OrderStatus) -> None:
     assert first.outcome is OrderOutcome.CREATED
     assert again.outcome is OrderOutcome.ALREADY_EXISTS and again.order == first.order
     assert again.state is first.state and len(again.state.orders) == 1
-    assert "zaten var" in again.message
+    assert again.message.startswith(f"'{PAIR}': {CID} zaten var")
 
 
 CONFLICTS: dict[str, dict[str, Any]] = {
