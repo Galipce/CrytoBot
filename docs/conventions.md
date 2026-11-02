@@ -77,3 +77,6 @@
 - `pytest --cov` + `coverage report` — `risk`, `execution`, `portfolio`: her biri için ayrı %90 branch coverage eşiği
   (full-only `coverage` adımı, modül başına `coverage report --include`; `pyproject.toml` `[tool.coverage.*]`).
 - Türkçe metin: ruff `allowed-confusables = ["ı"]` — docstring/yorumlarda noktasız ı serbest.
+- Sayı yardımcıları (`_number`, `_in_scale`, `_significant`, `_brief`, `_show`, `BOUNDED`) üç modülde kopya:
+  `risk` (kaynak), `execution/_numbers.py`, `portfolio/_numbers.py` — başka modülün iç alt modülü import
+  edilemez (R-3d); kurallardan biri değişirse üçü birlikte değişir — from spec 0007, plan Risk 2
