@@ -1,6 +1,6 @@
 # Spec 0009 — Kapanış kararından risk onaylı paper satış emri
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0009-plan.md`
 
