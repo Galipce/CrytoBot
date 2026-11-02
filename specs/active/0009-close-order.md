@@ -118,8 +118,9 @@ none — no user interface. (Kapanışların ve bildirimlerin gösterimi `contro
   bildirimi (R-10, R-11).
 - [ ] AC-9 — Geçersiz girdi: talepte biçime uymayan pozisyon kimliği (`cb-` öneki yok, 33 karakterlik öneri kimliği,
   boşluk), metin olmayan çift, 0/negatif/`NaN`/kayan nokta/mantıksal değer/29 basamak miktar, `stop`/`hedef` dışında
-  neden; emirde geçersiz fiyat, oran, kural, mod, zaman → "geçersiz girdi", girdi adlandırılır, istisna yok; sığmayan
-  hesap → "ölçek hesaplanamıyor"; mesaj kısa (R-1, R-13).
+  neden; emirde geçersiz fiyat, oran, kural, zaman → "geçersiz girdi", girdi adlandırılır, istisna yok; sığmayan
+  hesap → "ölçek hesaplanamıyor"; mesaj kısa; bilinmeyen ya da metin olmayan mod → "mod desteklenmiyor" (R-1, R-5,
+  R-13).
 - [ ] AC-10 — Ret sırası: geçersiz girdi + desteklenmeyen mod → "geçersiz girdi"; sığmayan satış dolumu +
   desteklenmeyen mod → "geçersiz girdi"; tekrar eden kimlik + borsa kuralı → "zaten var"/"kimlik çakışması";
   onaysız + borsa kuralı → "onaysız kapanış"; mod + onaysız → "mod desteklenmiyor" (R-12).

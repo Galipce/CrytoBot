@@ -364,6 +364,20 @@ def test_invalid_close_order_is_named(case: str) -> None:
     assert len(result.message) < 500
 
 
+@pytest.mark.parametrize(
+    "mode",
+    ["live", "backtest", "PAPER", "", NOTHING, 42, Decimal(1)],
+    ids=["live", "backtest", "upper", "empty", "none", "int", "decimal"],
+)
+def test_unsupported_close_mode_is_named(mode: Any) -> None:
+    """AC-9 (R-5): bilinmeyen ya da metin olmayan mod → "mod desteklenmiyor", "geçersiz girdi"
+    değil; emir oluşmaz."""
+    result = place(mode=mode)
+
+    assert result.outcome is OrderOutcome.UNSUPPORTED_MODE and result.state is EMPTY_EXECUTION
+    assert "desteklenmiyor: yalnızca paper" in result.message
+
+
 UNREPRESENTABLE: dict[str, tuple[dict[str, Any], str]] = {
     # the fill fits, the notional does not: refused, never rounded (plan 0009 A-3)
     "long_notional": (
