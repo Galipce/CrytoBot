@@ -180,7 +180,7 @@ def place_close_order(
         return reject(
             OrderOutcome.INVALID_INPUT,
             f"geçersiz girdi: ölçek hesaplanamıyor (miktar {_brief(amount)}, dolum fiyatı"
-            f" {fill}, ücret {_brief(numbers['ücret'])}, adım {_brief(step)})",
+            f" {_brief(fill)}, ücret {_brief(numbers['ücret'])}, adım {_brief(step)})",
         )
     client_order_id = CLOSE_ID_PREFIX + position_id.removeprefix("cb-")  # deterministic (R-8)
     existing = state.orders.get(client_order_id)
@@ -213,8 +213,9 @@ def place_close_order(
     if notional < numbers["asgari tutar"]:
         return reject(
             OrderOutcome.EXCHANGE_RULE,
-            f"borsa kuralı: {position_id} kapanışı: tutar {notional} (miktar {_brief(amount)} *"
-            f" dolum fiyatı {fill}) asgari tutarın ({_brief(numbers['asgari tutar'])}) altında",
+            f"borsa kuralı: {position_id} kapanışı: tutar {_brief(notional)} (miktar"
+            f" {_brief(amount)} * dolum fiyatı {_brief(fill)}) asgari tutarın"
+            f" ({_brief(numbers['asgari tutar'])}) altında",
         )
     status = exchange.place(client_order_id)
     filled = status is OrderStatus.FILLED
@@ -244,6 +245,6 @@ def place_close_order(
         OrderOutcome.CREATED,
         order,
         f"{_show(pair)}: {client_order_id} {status.value}: {position_id} satışı, miktar"
-        f" {_brief(amount)}" + (f", dolum fiyatı {fill}" if filled else ""),
+        f" {_brief(amount)}" + (f", dolum fiyatı {_brief(fill)}" if filled else ""),
         notifications,
     )

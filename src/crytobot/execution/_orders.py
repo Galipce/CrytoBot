@@ -391,8 +391,8 @@ def place_order(
     if notional < checked.min_notional:
         return reject(
             OrderOutcome.EXCHANGE_RULE,
-            f"borsa kuralı: tutar {notional} (miktar {_brief(amount)} * dolum fiyatı {fill}) asgari"
-            f" tutarın ({_brief(checked.min_notional)}) altında",
+            f"borsa kuralı: tutar {_brief(notional)} (miktar {_brief(amount)} * dolum fiyatı"
+            f" {_brief(fill)}) asgari tutarın ({_brief(checked.min_notional)}) altında",
         )
     status = exchange.place(client_order_id)
     filled = status is OrderStatus.FILLED
@@ -424,7 +424,7 @@ def place_order(
         OrderOutcome.CREATED,
         order,
         f"{_show(pair)}: {client_order_id} {status.value}: miktar {_brief(amount)}"
-        + (f", dolum fiyatı {fill}" if filled else ""),
+        + (f", dolum fiyatı {_brief(fill)}" if filled else ""),
         notifications,
     )
 
