@@ -314,7 +314,7 @@ UNREPRESENTABLE: dict[str, tuple[Decimal, dict[str, Any], str]] = {
 
 @pytest.mark.parametrize("case", list(UNREPRESENTABLE))
 def test_unrepresentable_calculation_is_named(case: str) -> None:
-    """AC-8 (R-11; plan 0007 Risk 3): tam sonucu 28 basamağa sığmayan hesap yuvarlanmaz, "ölçek
+    """AC-8 (R-11; plan 0007 Risk 3): tam sonucu 60 basamağa sığmayan hesap yuvarlanmaz, "ölçek
     hesaplanamıyor" ile reddedilir; uzun sayı basamak sayısıyla yazılır, mesaj kısa kalır."""
     balance, overrides, number = UNREPRESENTABLE[case]
     ledger = opened(balance)
@@ -484,7 +484,7 @@ def test_prices_must_be_a_mapping(prices: Any) -> None:
 
 
 def test_unrepresentable_equity_is_named() -> None:
-    """AC-8 (R-11; plan 0007 Risk 3): 28 basamağa sığmayan kasa toplamı → "ölçek hesaplanamıyor"."""
+    """AC-8 (R-11; plan 0007 Risk 3): 60 basamağa sığmayan kasa toplamı → "ölçek hesaplanamıyor"."""
     ledger = record().ledger
 
     result = account_state(ledger, {"BTC/USDT": Decimal("1E-999990")})

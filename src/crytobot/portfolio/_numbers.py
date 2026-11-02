@@ -11,7 +11,7 @@ from decimal import Context, Decimal, DivisionByZero, Inexact, InvalidOperation,
 SCALE = 999_999
 # significant digits of a ledger amount or price: every real exchange value fits (spec 0007 R-11)
 DIGITS = 28
-# significant digits of an exact calculation: realistic values need at most 47 (spec 0010 R-2, R-5)
+# significant digits of an exact calculation: realistic values need at most 48 (spec 0010 R-2, R-5)
 CALC_DIGITS = 60
 
 

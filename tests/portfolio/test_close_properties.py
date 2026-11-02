@@ -282,7 +282,7 @@ JUNK: list[Any] = [
 ]  # fmt: skip
 junk = st.sampled_from(JUNK)
 # each field is mostly valid, so whole requests reach the record, scale and acceptance paths too
-# (plan 0008 A-2); a 28-digit price is in scale but its sale does not fit in 28 digits
+# (plan 0008 A-2); a 1E-70 fee is in scale but the proceeds do not fit in 60 digits
 VALID: list[list[Any]] = [
     ["x"], ["a"], [AMOUNT], [Decimal("109.945"), Decimal("109.9450000000000000000000001")],
     [Decimal("2.116331305"), Decimal("1E-70")], [CloseReason.TARGET], [LATER],

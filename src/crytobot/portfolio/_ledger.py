@@ -177,8 +177,8 @@ def _too_long(label: str, number: Decimal, digits: int = DIGITS) -> str:
 def _amount(
     label: str, value: object, problems: list[str], *, zero: bool = False, digits: int = DIGITS
 ) -> Decimal | None:
-    """R-11: sıfırdan büyük (`zero` ile negatif olmayan), ölçek içinde, en fazla 28 anlamlı
-    basamak."""
+    """R-11: sıfırdan büyük (`zero` ile negatif olmayan), ölçek içinde, en fazla `digits`
+    anlamlı basamak."""
     number = _number(value)
     if number is None or number < 0 or (number == 0 and not zero):
         rule = "negatif olmayan" if zero else "sıfırdan büyük"

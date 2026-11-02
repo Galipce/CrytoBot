@@ -463,7 +463,7 @@ UNREPRESENTABLE: dict[str, tuple[dict[str, Any], str]] = {
 
 @pytest.mark.parametrize("case", list(UNREPRESENTABLE))
 def test_unrepresentable_close_order_is_named(case: str) -> None:
-    """AC-9 (R-13; plan 0009 Risk 5): tam sonucu 28 basamağa sığmayan hesap yuvarlanmaz, "ölçek
+    """AC-9 (R-13; plan 0009 Risk 5): tam sonucu 60 basamağa sığmayan hesap yuvarlanmaz, "ölçek
     hesaplanamıyor"; mesaj kısa."""
     overrides, fragment = UNREPRESENTABLE[case]
 

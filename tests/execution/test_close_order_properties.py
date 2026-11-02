@@ -277,7 +277,7 @@ JUNK += [
 ]
 junk = st.sampled_from(JUNK)
 # each field is valid eight times out of nine, so requests reach the scale and acceptance paths
-# (a 28-digit price's fill, or a remainder by a 1E-999999 step, does not fit in 28 digits)
+# (a fill over 60 digits, or a remainder by a 1E-999999 step, does not fit in 28 digits)
 VALID: list[list[Any]] = [
     ["cb-a"], ["BTC/USDT"], [Decimal("19.249")], ["hedef"],
     [RULES, PairRules(Decimal("1E-999999"), Decimal(0), Decimal(0))],

@@ -140,7 +140,7 @@ REFUSED: dict[str, tuple[Decimal, Decimal, Decimal, Decimal]] = {
     # the fill alone is out of scale: amount and fee rate bring the fee back in
     "fill_out_of_scale": (Decimal("1E+27"), Decimal("1E-999999"), Decimal("0.5"), Decimal("0.1")),
     "fee_out_of_scale": (Decimal(1), Decimal("1E-999990"), Decimal(0), Decimal("1E-20")),
-    # the sale and the fee fit; the buy's cost and the close's proceeds need 61 digits
+    # the sale and the fee fit; the close's proceeds need 61 digits, the buy's cost 62
     "cost_beyond_the_bound": (Decimal("1E+20"), Decimal(1), Decimal(0), Decimal("1E-61")),
 }
 

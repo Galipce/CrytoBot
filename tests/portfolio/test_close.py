@@ -443,7 +443,7 @@ UNREPRESENTABLE: dict[str, tuple[Decimal, dict[str, Any], str]] = {
 
 @pytest.mark.parametrize("case", list(UNREPRESENTABLE))
 def test_unrepresentable_close_is_named(case: str) -> None:
-    """AC-9 (R-13, R-14; plan 0008 Risk 5): tam sonucu 28 basamağa sığmayan satış tutarı ya da
+    """AC-9 (R-13, R-14; plan 0008 Risk 5): tam sonucu 60 basamağa sığmayan satış tutarı ya da
     bakiye yuvarlanmaz, "ölçek hesaplanamıyor" ile reddedilir; mesaj kısa kalır."""
     opening, overrides, number = UNREPRESENTABLE[case]
     ledger = bought(opening)
