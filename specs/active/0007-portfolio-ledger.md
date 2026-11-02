@@ -106,8 +106,10 @@ spec'lerinde gelir.)
 - [ ] AC-8 — Geçersiz girdi: başlangıç tutarı, miktar, dolum fiyatı, stop, hedef 0/negatif/`NaN`/kayan nokta/mantıksal
   değer/aralık dışı üs/29 anlamlı basamak; negatif komisyon; biçime uymayan `clientOrderId` (boş, 37 karakter,
   boşluk, Unicode, metin değil); metin olmayan çift ya da yön; zaman dilimi taşımayan zaman; açılıştan önceki
-  dolum zamanı; eşleme olmayan fiyat girdisi; `10**4300` gibi dev `int` → "geçersiz girdi", girdi adlandırılır,
-  istisna yok; dolum ya da kasa hesabı 28 basamağa sığmayan girdi → "ölçek hesaplanamıyor"; uzun sayı mesajda
+  dolum zamanı; eşleme olmayan fiyat girdisi; negatif dev `int` (`-(10**4300)`) → "geçersiz girdi", girdi
+  adlandırılır, istisna yok; pozitif `10**4300` tek anlamlı basamaklı ve ölçek içidir, R-11'e göre geçerlidir:
+  açılış "açıldı", stop ya da hedefte "kaydedildi", miktarda "ölçek hesaplanamıyor", istisna yok (plan A-1,
+  backlog B-15); dolum ya da kasa hesabı 28 basamağa sığmayan girdi → "ölçek hesaplanamıyor"; uzun sayı mesajda
   basamak sayısıyla, mesaj kısa (R-2, R-7, R-11).
 - [ ] AC-9 — Ret sırası: geçersiz girdi + açılmamış defter → "geçersiz girdi"; tekrar eden kimlik + satış yönü →
   "zaten kayıtlı"/"kayıt çakışması"; satış yönü + yetersiz bakiye → "desteklenmeyen yön" (R-10).

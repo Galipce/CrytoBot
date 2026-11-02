@@ -242,6 +242,28 @@ def test_opening_time_needs_a_zone(at: Any) -> None:
     assert result.outcome is LedgerOutcome.INVALID_INPUT and "açılış zamanı" in result.message
 
 
+HUGE = 10**4300  # one significant digit, exponent 4300: in scale (R-11); a bound is backlog B-15
+
+
+def test_positive_huge_int_is_in_scale() -> None:
+    """AC-8 (R-11; plan 0007 A-1): pozitif `10**4300` geçerlidir: açılış "açıldı", stop ya da
+    hedefte "kaydedildi", miktarda "ölçek hesaplanamıyor"; istisna yok, mesaj kısa."""
+    opening = open_ledger(EMPTY_LEDGER, HUGE, OPENED)
+    stop = record(stop=HUGE)
+    target = record(target=HUGE)
+    amount = record(amount=HUGE)
+
+    assert opening.outcome is LedgerOutcome.OPENED and opening.ledger.balance == HUGE
+    assert stop.outcome is LedgerOutcome.RECORDED and stop.position is not None
+    assert stop.position.stop == HUGE
+    assert target.outcome is LedgerOutcome.RECORDED and target.position is not None
+    assert target.position.target == HUGE
+    assert amount.outcome is LedgerOutcome.INVALID_INPUT and amount.position is None
+    assert "ölçek hesaplanamıyor" in amount.message
+    assert "miktar <4301 basamaklı sayı>" in amount.message
+    assert all(len(r.message) < 500 for r in (opening, stop, target, amount))
+
+
 UNREPRESENTABLE: dict[str, tuple[Decimal, dict[str, Any], str]] = {
     # in scale and within 28 significant digits each, but their sum or difference is not
     "tiny_fee": (Decimal("10000"), {"fee": Decimal("1E-999999")}, "komisyon 1E-999999"),
