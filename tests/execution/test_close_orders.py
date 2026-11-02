@@ -190,6 +190,11 @@ EXCHANGE: dict[str, tuple[dict[str, Any], str]] = {
     ),
     # 19.249 * 0.25 * 0.9995 = 4.80984... < 5
     "below_min_notional": ({"price": Decimal("0.25")}, "asgari tutarın (5) altında"),
+    # at the current price it would pass (2117.39); the notional is on the fill price (2116.331305)
+    "notional_on_the_fill": (
+        {"rules": replace(RULES, min_notional=Decimal("2116.331306"))},
+        "asgari tutarın (2116.331306) altında",
+    ),
 }
 
 
@@ -208,6 +213,18 @@ def test_close_exchange_rules(case: str) -> None:
 def test_close_at_the_minimum_notional() -> None:
     """AC-6 (R-6): satış tutarı asgari tutara tam eşit → kabul."""
     result = place(rules=replace(RULES, min_notional=Decimal("2116.331305")))
+
+    assert result.outcome is OrderOutcome.CREATED
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [replace(RULES, min_amount=Decimal("19.249")), replace(RULES, min_amount=0, min_notional=0)],
+    ids=["amount_at_the_minimum", "zero_minimums"],
+)
+def test_close_at_the_minimums(rules: PairRules) -> None:
+    """AC-6 (R-6, R-13): asgari miktara eşit miktar ve sıfır asgariler geçerlidir."""
+    result = place(rules=rules)
 
     assert result.outcome is OrderOutcome.CREATED
 
