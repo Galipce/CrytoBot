@@ -119,3 +119,7 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   `query_order`'daki `now.utcoffset()` da korumasız (`src/crytobot/execution/_orders.py`).
 - ~~**B-19**~~ — Kapandı: spec 0010 (hesap sınırı 60 basamak, `execution` çıktısı defterin kapısından geçer). Kalan: bakiyeye
   bağlı defter reddi `app` spec'inde BR-11 sayılır (spec 0010, Constraints).
+- **B-20** — Miktarsız onayda çok küçük fiyatla (`1E-999999`) sıfır komisyon ölçek dışı kalır; ret nedeni "onaysız öneri"den
+  "geçersiz girdi"ye döner. Emir oluşmaz — Source: spec 0010, review round 1 F-8 (`src/crytobot/execution/_orders.py`) —
+  Severity: Low, backlog-only — Recommendation: ölçek denetimini onay adımından sonraya almak — Deferred by: Galip Badem,
+  2026-11-02, gerçek borsa böyle fiyat üretmez, para kaybı ve yanlış kayıt yok.

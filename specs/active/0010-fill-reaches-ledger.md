@@ -27,12 +27,13 @@ denenmesi (B-17), borsa hassasiyetine yuvarlama (live spec'i), `app` döngüsü.
 - R-4: **`execution` çıktısı defterin kapısından geçer:** `place_order` ve `place_close_order`, emri simülatöre vermeden önce
   dolum fiyatının ve komisyonun R-3'e uyduğunu, kapanışta ayrıca satış gelirinin (tutar − komisyon) R-2'ye sığdığını
   denetler; alımda ise maliyetin (tutar + komisyon) sığdığını denetler. Uymuyorsa emir oluşmaz, "geçersiz girdi: ölçek hesaplanamıyor". Bu denetimin ret sırasındaki yeri ölçek
-  adımıdır (0006 R-11, 0009 R-12).
+  adımıdır (0006 R-11, 0009 R-12). `place_order` önerinin stop ve hedefini de R-1'in 28 basamak sınırıyla denetler; değilse
+  "geçersiz girdi" (plan A-2).
 - R-5: **Gerçekçi aralıkta kabul:** miktar ve fiyat en fazla 10 tam + 8 ondalık, slippage en fazla 6 ondalık (0,001'in altı),
   komisyon oranı en fazla 5 ondalık (0,1'in altı), bakiye en fazla 13 tam basamak iken borsa kuralına uyan her alım ve
   kapanış dolar ve defter tarafından kabul edilir (bakiye yetiyorsa). Aralık varsayımdır; `market_data` geldiğinde gerçek
   değerlerle yeniden bakılır (self-critique G-1).
-- R-6: **Kalan ayrışma adlandırılır:** defterin bakiyeye bağlı hesabı (bakiye toplamı, gerçekleşen toplam) R-2'yi aşarsa
+- R-6: **Kalan ayrışma adlandırılır:** defterin bakiyeye ya da pozisyona bağlı hesabı (bakiye toplamı, gerçekleşen kâr/zarar ve toplamı) R-2'yi aşarsa
   defter "ölçek hesaplanamıyor" ile reddeder ve değişmez; emir dolu kalır. `execution` bakiyeyi bilmediği için bunu önceden
   göremez. Bu yalnız R-5'in dışındaki değerlerde olur. Tepkisi `app` spec'inin işidir.
 - R-7: Bakiyeyi aşan alımda sıra değişmez: tam karşılaştırma önce gelir, "yetersiz bakiye" (0007 A-2). 28 basamağı aşan
@@ -63,7 +64,7 @@ none — no user interface.
 - [ ] AC-2 — Alım eşi: aynı değerlerle `place_order` dolumu (`record_fill`) defterce kabul edilir, bakiye tam tutar (R-2, R-3).
 - [ ] AC-3 — Hesap sınırı: 60 basamağa tam sığan hesap kabul, 61 basamak gerektiren hesap → "ölçek hesaplanamıyor", yuvarlama
   yok; tutar, komisyon, satış geliri, bakiye, gerçekleşen toplam ve kasa için ayrı ayrı (R-2, R-8).
-- [ ] AC-4 — Defterin girdileri: 60 basamaklı dolum fiyatı ve komisyon kabul, 61 → "geçersiz girdi"; 29 basamaklı miktar, stop,
+- [ ] AC-4 — Girdiler: 60 basamaklı dolum fiyatı ve komisyon kabul, 61 → "geçersiz girdi"; defterde ve `place_order`'da 29 basamaklı miktar, stop,
   hedef, başlangıç tutarı ve güncel fiyat hâlâ "geçersiz girdi" (R-1, R-3).
 - [ ] AC-5 — Sözleşme: ölçek dışı dolum fiyatı ya da komisyon üreten (fiyat `1E-999999`, slippage 0.5) ve satış geliri ya da alım
   maliyeti sığmayan istek emir oluşturmaz, "ölçek hesaplanamıyor", durum değişmez; alım ve kapanışta (R-4).
