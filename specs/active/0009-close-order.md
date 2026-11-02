@@ -50,9 +50,12 @@ da stop-limit emir, reddedilmiş bir kapanış emrinin yeniden denenmesi, kalıc
 - R-11: **Güvenli mod** (spec 0006 R-9, BR-11) yalnızca **alım** isteklerini durdurur; kapanış emri isteği güvenli
   modda da işlenir. Durumu `bilinmiyor` olan bir kapanış emri de güvenli moda sokar (yeni alımlar durur) ve spec 0006
   R-10'daki gibi giriş ve çıkış bildirimi üretir.
-- R-12: **Ret sırası** (kapanış emri): geçersiz girdi → mod desteklenmiyor → zaten var / kimlik çakışması → onaysız
-  kapanış → borsa kuralı. Birden fazla sorun varsa bu sıradaki ilki döner. Kapanış onayının ret sırası: geçersiz
-  girdi (tek ret nedeni).
+- R-12: **Ret sırası** (kapanış emri): geçersiz girdi (emrin kendi girdileri: kurallar, fiyat, oranlar, zaman ve
+  satış dolum fiyatının ölçeği) → mod desteklenmiyor → onaysız kapanış → geçersiz girdi (onaylı talebin alanları;
+  tutarın, komisyonun ve adım kalanının ölçeği) → zaten var / kimlik çakışması → borsa kuralı. Birden fazla sorun
+  varsa bu sıradaki ilki döner. Onay bir kapanış onayı değilse ya da ret taşıyorsa güvenilir bir talep (dolayısıyla
+  kimlik) yoktur: tekrar denetimi yapılmaz, sonuç "onaysız kapanış"tır (plan A-1). Kapanış onayının ret sırası:
+  geçersiz girdi (tek ret nedeni).
 - R-13: **Sayı ve girdi kuralları** spec 0006 R-12 ile aynıdır: miktar ve güncel fiyat sıfırdan büyük, en fazla 28
   anlamlı basamak; oranlar 0 ile 1 arasında (1 hariç); adım sıfırdan büyük, asgariler negatif olmayan; sonlu
   `Decimal`/`int` (mantıksal değer ve kayan nokta hariç), üssü ±999999 içinde; çift metin; neden yalnızca `stop` ya da
@@ -117,9 +120,9 @@ none — no user interface. (Kapanışların ve bildirimlerin gösterimi `contro
   boşluk), metin olmayan çift, 0/negatif/`NaN`/kayan nokta/mantıksal değer/29 basamak miktar, `stop`/`hedef` dışında
   neden; emirde geçersiz fiyat, oran, kural, mod, zaman → "geçersiz girdi", girdi adlandırılır, istisna yok; sığmayan
   hesap → "ölçek hesaplanamıyor"; mesaj kısa (R-1, R-13).
-- [ ] AC-10 — Ret sırası: geçersiz girdi + desteklenmeyen mod → "geçersiz girdi"; tekrar eden kimlik + borsa kuralı →
-  "zaten var"/"kimlik çakışması"; onaysız + borsa kuralı → "onaysız kapanış"; mod + onaysız → "mod desteklenmiyor"
-  (R-12).
+- [ ] AC-10 — Ret sırası: geçersiz girdi + desteklenmeyen mod → "geçersiz girdi"; sığmayan satış dolumu +
+  desteklenmeyen mod → "geçersiz girdi"; tekrar eden kimlik + borsa kuralı → "zaten var"/"kimlik çakışması";
+  onaysız + borsa kuralı → "onaysız kapanış"; mod + onaysız → "mod desteklenmiyor" (R-12).
 - [ ] AC-11 — Değişmeyen davranış: spec 0003–0006'nın testleri değişmeden geçer; durum değişmez değerdir, reddedilen
   istek durumu aynen bırakır (R-15).
 - [ ] AC-12 — Property: rastgele alım ve kapanış talebi, onay, emir ve sorgu dizilerinde (bağımsız modelle birebir)
