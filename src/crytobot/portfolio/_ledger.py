@@ -242,7 +242,7 @@ def record_fill(ledger: Ledger, fill: Fill) -> LedgerResult:
             f" ({opened_at.isoformat()}) önce",
         )
 
-    def unrepresentable(balance: Decimal) -> LedgerResult:
+    def unrepresentable() -> LedgerResult:
         """The exact result does not fit in 28 digits (plan 0007 Risk 3)."""
         return reject(
             LedgerOutcome.INVALID_INPUT,
@@ -254,7 +254,7 @@ def record_fill(ledger: Ledger, fill: Fill) -> LedgerResult:
         with localcontext(BOUNDED):
             cost = checked.amount * checked.price + checked.fee
     except DecimalException:
-        return unrepresentable(balance)
+        return unrepresentable()
     position = Position(
         checked.client_order_id,
         checked.pair,
@@ -293,7 +293,7 @@ def record_fill(ledger: Ledger, fill: Fill) -> LedgerResult:
         with localcontext(BOUNDED):
             after = balance - cost
     except DecimalException:
-        return unrepresentable(balance)
+        return unrepresentable()
     positions = dict(ledger.positions)
     positions[position.client_order_id] = position
     entry = Entry(EntryKind.FILL, checked.at, cost, position)
