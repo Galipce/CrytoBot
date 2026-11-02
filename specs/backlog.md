@@ -81,3 +81,11 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   VERIFY ikinci geçiş F-1 — Severity: Low — Recommendation: AC-2'ye `__eq__`'i hep True dönen ve istisna fırlatan çift
   nesneli iki vaka, beklenen "onaysız öneri" — Deferred by: Galip Badem, 2026-11-02, fix turu kalmadı (R-06
   orantısız); bugün davranış doğru, yalnız elle kurulmuş onayda; execution'a dokunan sonraki spec'te kapanır.
+- **B-15** — Sayı kuralında büyüklük sınırı yok: `_significant` sondaki sıfırları saymadığından `10**4300` (ve
+  `Decimal("1E+999999")`) tek anlamlı basamaklı, ölçek içi ve geçerli; defter 4301 basamaklı bakiyeyle açılır, stop
+  ya da hedefi anlamsız pozisyon kaydedilir, değerler riske aynen gider. Aynı kural `risk` ve `execution`'da da
+  geçerli — Source: spec 0007, review round 1 F-1 (`src/crytobot/portfolio/_numbers.py:28-31`,
+  `_ledger.py:141-150`) — Severity: Medium — Recommendation: üç modülde birlikte, para ve fiyat alanlarına üst sınır
+  ya da sondaki sıfırları da sayan basamak kuralı; kendi change akışında — Deferred by: Galip Badem, 2026-11-02, kural
+  üç modülde kopya (docs/conventions.md); yalnız `portfolio`'da değiştirmek kopyaları ayırır, üçünü birden
+  değiştirmek bu spec'in kapsamını aşar.
