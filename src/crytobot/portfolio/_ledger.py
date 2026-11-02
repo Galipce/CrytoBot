@@ -11,6 +11,7 @@ from types import MappingProxyType
 
 from crytobot.portfolio._numbers import (
     BOUNDED,
+    CALC_DIGITS,
     DIGITS,
     SCALE,
     _brief,
@@ -169,23 +170,23 @@ def _out_of_scale(label: str, number: Decimal) -> str:
     return f"{label} {_brief(number)} ölçeği varsayılan üs aralığı (±{SCALE}) dışında"
 
 
-def _too_long(label: str, number: Decimal) -> str:
-    return f"{label} {_brief(number)} {DIGITS} anlamlı basamaktan uzun"
+def _too_long(label: str, number: Decimal, digits: int = DIGITS) -> str:
+    return f"{label} {_brief(number)} {digits} anlamlı basamaktan uzun"
 
 
 def _amount(
-    label: str, value: object, problems: list[str], *, zero: bool = False
+    label: str, value: object, problems: list[str], *, zero: bool = False, digits: int = DIGITS
 ) -> Decimal | None:
-    """R-11: sıfırdan büyük (`zero` ile negatif olmayan), ölçek içinde, en fazla 28 anlamlı
-    basamak."""
+    """R-11: sıfırdan büyük (`zero` ile negatif olmayan), ölçek içinde, en fazla `digits`
+    anlamlı basamak."""
     number = _number(value)
     if number is None or number < 0 or (number == 0 and not zero):
         rule = "negatif olmayan" if zero else "sıfırdan büyük"
         problems.append(f"{label} {_show(value)} {rule} bir sayı olmalı")
     elif not _in_scale(number):
         problems.append(_out_of_scale(label, number))
-    elif _significant(number) > DIGITS:
-        problems.append(_too_long(label, number))
+    elif _significant(number) > digits:
+        problems.append(_too_long(label, number, digits))
     else:
         return number
     return None
@@ -210,8 +211,8 @@ def _check(fill: Fill) -> _Checked | list[str]:
     if not (isinstance(fill.pair, str) and isinstance(fill.side, str)):
         problems.append(f"çift {_show(fill.pair)} ve yön {_show(fill.side)} metin olmalı")
     amount = _amount("miktar", fill.amount, problems)
-    price = _amount("dolum fiyatı", fill.price, problems)
-    fee = _amount("komisyon", fill.fee, problems, zero=True)
+    price = _amount("dolum fiyatı", fill.price, problems, digits=CALC_DIGITS)  # spec 0010 R-3
+    fee = _amount("komisyon", fill.fee, problems, zero=True, digits=CALC_DIGITS)
     stop = _amount("stop", fill.stop, problems)
     target = _amount("hedef", fill.target, problems)
     at = _time("dolum zamanı", fill.at, problems)
@@ -283,7 +284,7 @@ def record_fill(ledger: Ledger, fill: Fill) -> LedgerResult:
         )
 
     def unrepresentable() -> LedgerResult:
-        """The exact result does not fit in 28 digits (plan 0007 Risk 3)."""
+        """The exact result does not fit in 60 digits (plan 0007 Risk 3)."""
         return reject(
             LedgerOutcome.INVALID_INPUT,
             f"geçersiz girdi: ölçek hesaplanamıyor (miktar {_brief(checked.amount)}, dolum fiyatı"
@@ -425,7 +426,7 @@ def account_state(ledger: Ledger, prices: object) -> SnapshotResult:
             equity = balance
             for position in positions:
                 equity += position.amount * marks[position.pair]
-    except DecimalException:  # the exact result does not fit in 28 digits (plan 0007 Risk 3)
+    except DecimalException:  # the exact result does not fit in 60 digits (plan 0007 Risk 3)
         return SnapshotResult(
             SnapshotOutcome.INVALID_INPUT,
             None,

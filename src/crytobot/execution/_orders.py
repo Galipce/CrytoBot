@@ -233,6 +233,9 @@ def _check(request: OrderRequest, now: object) -> _Checked | list[str]:
             ("hedef", intent.target),
         ):
             positive(label, value)
+        for label in ("stop", "hedef"):  # the ledger holds them to 28 digits (spec 0010 R-4)
+            if label in numbers and _significant(numbers[label]) > DIGITS:
+                problems.append(_too_long(label, numbers.pop(label)))
     approval = request.approval
     amount = _number(approval.amount) if isinstance(approval, TradeApproval) else None
     if amount is not None and amount > 0:  # a missing or non-positive amount is unapproved (R-2)
@@ -319,7 +322,13 @@ def place_order(
             notional = size * fill
             fee = notional * checked.fee
             off_step = size % checked.step != 0
-    except DecimalException:  # the exact result does not fit in 28 digits (plan 0006 Risk 3)
+            _cost = notional + fee  # what the ledger debits must fit too (spec 0010 R-4)
+        # a tiny fee stays exact but out of scale: the ledger would refuse it (spec 0010 R-4);
+        # slippage only raises a buy's fill, so the fill cannot fall out of scale here
+        fits = _in_scale(fee)
+    except DecimalException:  # the exact result does not fit in 60 digits (plan 0006 Risk 3)
+        fits = False
+    if not fits:
         return reject(
             OrderOutcome.INVALID_INPUT,
             "geçersiz girdi: ölçek hesaplanamıyor (miktar"
@@ -382,8 +391,8 @@ def place_order(
     if notional < checked.min_notional:
         return reject(
             OrderOutcome.EXCHANGE_RULE,
-            f"borsa kuralı: tutar {notional} (miktar {_brief(amount)} * dolum fiyatı {fill}) asgari"
-            f" tutarın ({_brief(checked.min_notional)}) altında",
+            f"borsa kuralı: tutar {_brief(notional)} (miktar {_brief(amount)} * dolum fiyatı"
+            f" {_brief(fill)}) asgari tutarın ({_brief(checked.min_notional)}) altında",
         )
     status = exchange.place(client_order_id)
     filled = status is OrderStatus.FILLED
@@ -415,7 +424,7 @@ def place_order(
         OrderOutcome.CREATED,
         order,
         f"{_show(pair)}: {client_order_id} {status.value}: miktar {_brief(amount)}"
-        + (f", dolum fiyatı {fill}" if filled else ""),
+        + (f", dolum fiyatı {_brief(fill)}" if filled else ""),
         notifications,
     )
 

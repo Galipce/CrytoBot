@@ -136,6 +136,7 @@ BAD_ETH: dict[str, dict[str, Any]] = {
     "negative": {"ETH/USDT": Decimal(-1)},
     "nan": {"ETH/USDT": Decimal("NaN")},
     "float": {"ETH/USDT": 61.0},
+    "29_digits": {"ETH/USDT": Decimal("1." + "2" * 28)},
 }
 
 
@@ -381,6 +382,12 @@ INVALID: dict[str, tuple[dict[str, Any], tuple[str, ...]]] = {
     for field in LABELS
     for case, (value, rule) in BAD_POSITIVE.items()
 }
+# a fill price's bound is 60 digits, the other numbers' 28 (spec 0010 R-3)
+del INVALID["price-29_digits"]
+INVALID["price-61_digits"] = (
+    {"price": Decimal("1." + "2" * 60)},
+    ("dolum fiyatı ", "<61 basamaklı sayı> 60 anlamlı basamaktan uzun"),
+)
 INVALID |= {
     "fee-negative": ({"fee": Decimal("-0.001")}, ("komisyon", "negatif olmayan")),
     "fee-nan": ({"fee": Decimal("NaN")}, ("komisyon", "negatif olmayan")),
@@ -424,20 +431,20 @@ def test_close_at_the_position_opening_is_accepted() -> None:
 
 
 UNREPRESENTABLE: dict[str, tuple[Decimal, dict[str, Any], str]] = {
-    # in scale and within 28 significant digits each, but the sale or the new balance is not
+    # in scale each, but the proceeds or the new balance do not fit in 60 digits (spec 0010)
     "long_price": (
         Decimal("10000"),
-        {"price": Decimal("109.9450000000000000000000001")},
+        {"price": Decimal("109.9450000000000000000000001"), "fee": Decimal("1E-70")},
         "dolum fiyatı 109.9450000000000000000000001",
     ),
-    # 1E+21 - 1928.7517249 fits in 28 digits; adding 2114.214973695 does not
-    "long_balance": (Decimal("1E+21"), {}, "gelir 2114.214973695"),
+    # 1E+52 - 1928.7517249 fits in 60 digits; adding 2114.214973695 does not
+    "long_balance": (Decimal("1E+52"), {}, "gelir 2114.214973695"),
 }
 
 
 @pytest.mark.parametrize("case", list(UNREPRESENTABLE))
 def test_unrepresentable_close_is_named(case: str) -> None:
-    """AC-9 (R-13, R-14; plan 0008 Risk 5): tam sonucu 28 basamağa sığmayan satış tutarı ya da
+    """AC-9 (R-13, R-14; plan 0008 Risk 5): tam sonucu 60 basamağa sığmayan satış tutarı ya da
     bakiye yuvarlanmaz, "ölçek hesaplanamıyor" ile reddedilir; mesaj kısa kalır."""
     opening, overrides, number = UNREPRESENTABLE[case]
     ledger = bought(opening)
