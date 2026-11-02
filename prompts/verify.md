@@ -39,6 +39,12 @@ read its diff — anything beyond the finding is a finding. Each deferred findin
 in specs/backlog.md; the triage record is the plan's ## Triage section.
 
 Each PASS row is the criterion ticked at ship (`- [x]`); doctor checks every new ship for it.
+Project rule, unrealistic values: a finding that needs a value no real exchange or caller produces
+(an exponent near +-999999, a million-character id, a deliberately overridden class, extreme nesting)
+and causes no money loss and no wrong record is marked `backlog-only`: recommend defer, it opens no
+fix round. Show why the value is unrealistic. Ordinary values (a few decimals) never qualify, and a
+wrong or diverging record never qualifies.
+
 List explicitly: criteria WITHOUT real evidence, and tests that assert implementation details
 instead of behavior. No claims without proof; gaps are findings, not footnotes.
 Write in the docs language (AGENTS.md, Language); field labels and Status values stay English.
