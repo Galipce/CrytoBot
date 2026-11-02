@@ -11,6 +11,8 @@ from decimal import Context, Decimal, DivisionByZero, Inexact, InvalidOperation,
 SCALE = 999_999
 # significant digits of a ledger amount or price: every real exchange value fits (spec 0007 R-11)
 DIGITS = 28
+# significant digits of an exact calculation: realistic values need at most 47 (spec 0010 R-2, R-5)
+CALC_DIGITS = 60
 
 
 def _number(value: object) -> Decimal | None:
@@ -52,10 +54,10 @@ def _show(value: object) -> str:
         return f"<{type(value).__name__}: gösterilemiyor>"
 
 
-# 28 digits, and a result that does not fit raises instead of rounding (plan 0007 Risk 3): the
+# 60 digits, and a result that does not fit raises instead of rounding (plan 0007 Risk 3): the
 # exact answer is kept or the calculation stops, in time independent of how many digits a value has
 BOUNDED = Context(
-    prec=DIGITS,
+    prec=CALC_DIGITS,
     Emax=SCALE,
     Emin=-SCALE,
     traps=[InvalidOperation, DivisionByZero, Overflow, Inexact],

@@ -285,7 +285,7 @@ junk = st.sampled_from(JUNK)
 # (plan 0008 A-2); a 28-digit price is in scale but its sale does not fit in 28 digits
 VALID: list[list[Any]] = [
     ["x"], ["a"], [AMOUNT], [Decimal("109.945"), Decimal("109.9450000000000000000000001")],
-    [Decimal("2.116331305")], [CloseReason.TARGET], [LATER],
+    [Decimal("2.116331305"), Decimal("1E-70")], [CloseReason.TARGET], [LATER],
 ]  # fmt: skip
 # about four valid values to one junk value per field
 close_fields = st.tuples(*[st.sampled_from(v * (4 * len(JUNK) // len(v)) + JUNK) for v in VALID])

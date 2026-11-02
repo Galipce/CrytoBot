@@ -99,14 +99,14 @@ def test_insufficient_balance_changes_nothing() -> None:
 
 
 def test_insufficient_balance_needs_no_difference() -> None:
-    """AC-5 (R-5; plan 0007 A-2): bakiyeyi aşan dolum, bakiye farkı 28 basamağa sığmasa da
+    """AC-5 (R-5; plan 0007 A-2): bakiyeyi aşan dolum, bakiye farkı hesap sınırına sığmasa da
     "yetersiz bakiye" alır."""
-    ledger = opened(Decimal("1E-27"))  # 1E-27 - 1E+27 needs 55 digits
+    ledger = opened(Decimal("1E-40"))  # 1E-40 - 1E+27 needs 68 digits
 
     result = record(ledger, amount=Decimal("1E+27"), price=Decimal(1), fee=Decimal(0))
 
     assert result.outcome is LedgerOutcome.INSUFFICIENT_BALANCE and result.ledger is ledger
-    assert f"gereken {10**27} USDT" in result.message and "bakiye 1E-27" in result.message
+    assert f"gereken {10**27} USDT" in result.message and "bakiye 1E-40" in result.message
 
 
 def test_exact_balance_is_accepted() -> None:
@@ -128,18 +128,17 @@ def test_same_fill_is_already_recorded() -> None:
 
 
 def test_retry_is_already_recorded_whatever_the_balance() -> None:
-    """AC-6 (R-6, R-10; plan 0007 A-1): bakiye farkı artık 28 basamağa sığmasa da birebir aynı retry
+    """AC-6 (R-6, R-10; plan 0007 A-1): bakiye farkı hesap sınırına sığmasa da birebir aynı retry
     → "zaten kayıtlı"; sonuç defterin geçmişine bağlı değil."""
-    first = record(opened(Decimal("2E+27")), amount=Decimal("1E+27"), price=Decimal(1), fee=0)
+    first = record(opened(Decimal("2E+31")), amount=Decimal("1E+31"), price=Decimal(1), fee=0)
     ledger = record(
-        first.ledger, client_order_id="cb-2", amount=Decimal("1E+27") - 1, price=1, fee=0
+        first.ledger, client_order_id="cb-2", amount=1000, price=Decimal("9" * 28), fee=0
     ).ledger
-    ledger = record(
-        ledger, client_order_id="cb-3", amount=1 - Decimal("1E-27"), price=1, fee=0
-    ).ledger
-    assert ledger.balance == Decimal("1E-27")  # 1E-27 - 1E+27 needs 55 digits
+    ledger = record(ledger, client_order_id="cb-3", amount=1, price=1, fee=Decimal("1E-40")).ledger
+    # 999 - 1E-40 - 1E+31 needs 71 digits
+    assert ledger.balance == Decimal("998." + "9" * 40)
 
-    again = record(ledger, amount=Decimal("1E+27"), price=Decimal(1), fee=0)
+    again = record(ledger, amount=Decimal("1E+31"), price=Decimal(1), fee=0)
 
     assert again.outcome is LedgerOutcome.ALREADY_RECORDED and again.ledger is ledger
     assert again.position == first.position

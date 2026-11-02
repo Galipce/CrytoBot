@@ -443,13 +443,20 @@ def test_unsupported_close_mode_is_named(mode: Any) -> None:
 UNREPRESENTABLE: dict[str, tuple[dict[str, Any], str]] = {
     # the fill fits, the notional does not: refused, never rounded (plan 0009 A-3)
     "long_notional": (
-        {"price": Decimal("1234567890123456789012345.1"), "slippage": Decimal(0)},
-        "miktar 19.249",
+        {
+            "approval": approved(amount=Decimal("1.234567890123456789012345678")),
+            "price": Decimal("1234567890123456789012345.1"),
+            "slippage": Decimal("1E-8"),
+        },
+        "miktar 1.2345",
     ),
     # the notional fits, the fee does not
-    "long_fee": ({"fee": Decimal("0.0010000000000000000000000001")}, "ücret 0.00100"),
-    # in scale and within 28 significant digits each, but the fill or the step's remainder is not
-    "long_price": ({"price": Decimal("109.9450000000000000000000001")}, "fiyat 109.945"),
+    "long_fee": ({"fee": Decimal("0.001" + "0" * 52 + "1")}, "ücret <"),
+    # in scale each, but the fill (over 60 digits) or the step's remainder does not fit (spec 0010)
+    "long_price": (
+        {"price": Decimal("109.9450000000000000000000001"), "slippage": Decimal("1E-70")},
+        "fiyat 109.945",
+    ),
     "tiny_step": ({"rules": replace(RULES, amount_step=Decimal("1E-999999"))}, "adım 1E-999999"),
 }
 
@@ -474,7 +481,11 @@ REFUSALS: dict[str, tuple[bool, dict[str, Any], OrderOutcome]] = {
     # the fill depends on the order's own inputs only: its scale comes before the mode (plan A-1)
     "unrepresentable_fill_and_mode": (
         False,
-        {"price": Decimal("109.9450000000000000000000001"), "mode": "live"},
+        {
+            "price": Decimal("109.9450000000000000000000001"),
+            "slippage": Decimal("1E-70"),
+            "mode": "live",
+        },
         OrderOutcome.INVALID_INPUT,
     ),
     "mode_and_unapproved": (

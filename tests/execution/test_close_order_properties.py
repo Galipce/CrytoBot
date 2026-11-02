@@ -281,7 +281,7 @@ junk = st.sampled_from(JUNK)
 VALID: list[list[Any]] = [
     ["cb-a"], ["BTC/USDT"], [Decimal("19.249")], ["hedef"],
     [RULES, PairRules(Decimal("1E-999999"), Decimal(0), Decimal(0))],
-    [Decimal("110"), Decimal("109.9450000000000000000000001")], [FEE], [SLIPPAGE],
+    [Decimal("110"), Decimal("109.9450000000000000000000001")], [FEE], [SLIPPAGE, Decimal("1E-70")],
     ["paper"], [NOW],
 ]  # fmt: skip
 wraps = st.sampled_from(["risk"] * 4 + ["by_hand", "junk_request", "junk_approval"])
