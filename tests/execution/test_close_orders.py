@@ -442,6 +442,17 @@ REFUSALS: dict[str, tuple[bool, dict[str, Any], OrderOutcome]] = {
         {"approval": NOTHING, "rules": TOO_SMALL},
         OrderOutcome.UNAPPROVED,
     ),
+    # the approved request's fields and scale come before the repeat check (R-12)
+    "amount_scale_and_repeat": (
+        True,
+        {"rules": replace(RULES, amount_step=Decimal("1E-999999"))},
+        OrderOutcome.INVALID_INPUT,
+    ),
+    "malformed_request_and_repeat": (
+        True,
+        {"approval": CloseApproval(None, "", replace(REQUEST, amount=Decimal(0)))},
+        OrderOutcome.INVALID_INPUT,
+    ),
     "repeat_and_exchange": (True, {"rules": TOO_SMALL}, OrderOutcome.ALREADY_EXISTS),
     "conflict_and_exchange": (
         True,
