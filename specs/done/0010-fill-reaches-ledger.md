@@ -1,6 +1,6 @@
 # Spec 0010 — Dolan her emir deftere yazılır: hesap sınırı ve modüller arası sözleşme
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0010-plan.md`
 - Self-critique: done
@@ -57,38 +57,38 @@ none — no user interface.
 - Para/oran değerleri `decimal.Decimal`; yeni runtime bağımlılığı yok.
 
 ## Acceptance criteria
-- [ ] AC-1 — B-19 örneği: açılış 100000; alım 12345.67890123 @ 0.12, komisyon 1.11 → USDT 98517.4085318524; aynı miktarın
+- [x] AC-1 — B-19 örneği: açılış 100000; alım 12345.67890123 @ 0.12, komisyon 1.11 → USDT 98517.4085318524; aynı miktarın
   kapanışı fiyat 0.12345678, slippage 0.0005, komisyon oranı 0.00075 → emir dolu, dolum 0.123395051610, komisyon
   1.1425467638833229568602250; defter kabul eder: USDT 100039.661670266280619523439775, gerçekleşen kâr
   39.661670266280619523439775 (R-2, R-3, R-5, R-8).
-- [ ] AC-2 — Alım eşi: aynı değerlerle `place_order` dolumu (`record_fill`) defterce kabul edilir, bakiye tam tutar (R-2, R-3).
-- [ ] AC-3 — Hesap sınırı: 60 basamağa tam sığan hesap kabul, 61 basamak gerektiren hesap → "ölçek hesaplanamıyor", yuvarlama
+- [x] AC-2 — Alım eşi: aynı değerlerle `place_order` dolumu (`record_fill`) defterce kabul edilir, bakiye tam tutar (R-2, R-3).
+- [x] AC-3 — Hesap sınırı: 60 basamağa tam sığan hesap kabul, 61 basamak gerektiren hesap → "ölçek hesaplanamıyor", yuvarlama
   yok; tutar, komisyon, satış geliri, bakiye, gerçekleşen toplam ve kasa için ayrı ayrı (R-2, R-8).
-- [ ] AC-4 — Girdiler: 60 basamaklı dolum fiyatı ve komisyon kabul, 61 → "geçersiz girdi"; defterde ve `place_order`'da 29 basamaklı miktar, stop,
+- [x] AC-4 — Girdiler: 60 basamaklı dolum fiyatı ve komisyon kabul, 61 → "geçersiz girdi"; defterde ve `place_order`'da 29 basamaklı miktar, stop,
   hedef ve başlangıç tutarı hâlâ "geçersiz girdi"; 29 basamaklı güncel fiyat `place_order` ve `place_close_order`'da "geçersiz
   girdi", defterin hesap durumu ve kararında "fiyat eksik" (0007, 0008) (R-1, R-3).
-- [ ] AC-5 — Sözleşme: ölçek dışı dolum fiyatı ya da komisyon üreten (fiyat `1E-999999`, slippage 0.5) ve satış geliri ya da alım
+- [x] AC-5 — Sözleşme: ölçek dışı dolum fiyatı ya da komisyon üreten (fiyat `1E-999999`, slippage 0.5) ve satış geliri ya da alım
   maliyeti sığmayan istek emir oluşturmaz, "ölçek hesaplanamıyor", durum değişmez; alım ve kapanışta (R-4).
-- [ ] AC-6 — Kalan ayrışma: emir dolu, bakiye toplamı 60 basamağa sığmayan defter → "ölçek hesaplanamıyor", defter değişmez, emir
+- [x] AC-6 — Kalan ayrışma: emir dolu, bakiye toplamı 60 basamağa sığmayan defter → "ölçek hesaplanamıyor", defter değişmez, emir
   dolu kalır, tekrar isteği "zaten var" (R-6).
-- [ ] AC-7 — Değişmeyen davranış: 0003–0009 testleri geçer; yalnız sınır değerini taşıyan vakalar planda listeli olarak değişir,
+- [x] AC-7 — Değişmeyen davranış: 0003–0009 testleri geçer; yalnız sınır değerini taşıyan vakalar planda listeli olarak değişir,
   assert'leri aynıdır (R-8).
-- [ ] AC-8 — Property: R-5 aralığında rastgele alım → defter → karar → onay → satış → defter dizilerinde (bağımsız `Fraction`
+- [x] AC-8 — Property: R-5 aralığında rastgele alım → defter → karar → onay → satış → defter dizilerinde (bağımsız `Fraction`
   modeliyle) borsa kuralına uyan her emir dolar, defter her dolumu kabul eder, bakiye ve gerçekleşen toplam modelle
   birebir aynıdır, 60 basamak aşılmaz; üreteç sonuçları yeterince üretir (R-2…R-5).
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 3 onay sonrası: R-4 ve AC-5 (plan onayı), R-4, R-6, AC-4 (A-2), AC-4 (A-3) |
+| Fix rounds | 2 (fix-1 review r1, fix-2 review r2); VERIFY düzeltmeleri ship commit'inde |
+| Review findings: real / noise / deferred | 15 / 1 / 2 (r1: F-1…F-7, F-9 real, F-8 defer B-20 · r2: F-1…F-4 real, F-5 noise · VERIFY: F-1, F-3, F-4 real, F-2 defer B-21) |
+| Regressions introduced | 0 davranış regresyonu; build'de eski 28 sınırına bağlı iki test vakası plan listesinde yoktu (A-1); fix-1 bir assert sildi, r2 yakaladı, geri kondu |
+| Bugs escaped to production | 0 (henüz üretim yok) |
