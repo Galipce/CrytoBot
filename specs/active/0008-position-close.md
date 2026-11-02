@@ -1,6 +1,6 @@
 # Spec 0008 — Pozisyonun stop ya da hedefte kapanışı ve gerçekleşen kâr/zarar
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0008-plan.md`
 
