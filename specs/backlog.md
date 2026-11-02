@@ -101,3 +101,10 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   borsanın aynı `clientOrderId`'yi final durumdan sonra yeniden kabul davranışıyla birlikte karar verilsin (ör. deneme
   sayısı taşıyan kimlik ya da reddedilmiş emrin yerine yeni emir) — Deferred by: Galip Badem, 2026-11-02, paper'da ret
   yalnız ayarlanmış simülatörde olur; karar borsa davranışına bağlı.
+- **B-18** — Ret mesajı ham metin girdisini kısaltmaz: `risk`'in `_show`'u (ve onu kullanan `_short`) ile
+  `execution`'daki `_show(pair)` sınırsız `repr` yazar; milyon karakterlik bir kimlik ya da neden ~2 MB'lık mesaj
+  üretir ("mesaj kısa", spec 0009 R-13). Aynı kalıp spec 0006'nın öneri kimliği ve çift mesajlarında da var —
+  Source: spec 0009, review round 1 F-3 (`src/crytobot/risk/_close.py`, `src/crytobot/execution/_close.py`) —
+  Severity: Low — Recommendation: üç modüldeki `_show` kuralını birlikte değiştir (uzun metni karakter sayısıyla
+  kısalt); B-11 ve B-15 ile aynı change akışında — Deferred by: Galip Badem, 2026-11-02, gerçekçi değil (talep
+  defterin doğrulanmış alanlarından kurulur); düzeltme kopya kuralını üç modülde birlikte değiştirir.
