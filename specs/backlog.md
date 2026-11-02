@@ -95,3 +95,9 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   Severity: Info — Recommendation: iki fonksiyonda birlikte, fiyat okumasını adlandırılmış bir "geçersiz girdi"
   retine çeviren tek bir yardımcı ya da girdiyi `dict`'e kopyalamak — Deferred by: Galip Badem, 2026-11-02, gerçek
   çağıran (`app`) düz `dict` verir; düzeltme shipped spec 0007'nin koduna da dokunur; `app` spec'inde kapanır.
+- **B-17** — Reddedilmiş bir kapanış emri yeniden denenemez: kapanış `clientOrderId`'si pozisyondan deterministik
+  türediği için (`cb-` → `cx-`) aynı pozisyonun sonraki kapanış isteği, durumu `reddedildi` olan emri "zaten var" ile
+  döndürür ve pozisyon açık kalır — Source: spec 0009, clarify S7 — Severity: Medium — Recommendation: live spec'inde
+  borsanın aynı `clientOrderId`'yi final durumdan sonra yeniden kabul davranışıyla birlikte karar verilsin (ör. deneme
+  sayısı taşıyan kimlik ya da reddedilmiş emrin yerine yeni emir) — Deferred by: Galip Badem, 2026-11-02, paper'da ret
+  yalnız ayarlanmış simülatörde olur; karar borsa davranışına bağlı.
