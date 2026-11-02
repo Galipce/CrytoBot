@@ -125,7 +125,16 @@ def test_close_fill_closes_the_ledger_position() -> None:
     assert closed.ledger.realized == Decimal("185.463248795")
 
 
+class ForgedApproval(CloseApproval):
+    """Claims approval while it carries a refusal: the refusal decides (plan 0009 A-4)."""
+
+    @property
+    def approved(self) -> bool:
+        return True
+
+
 UNAPPROVED: dict[str, Any] = {
+    "forged_approved": ForgedApproval(CloseRefusal.INVALID_INPUT, "elle kuruldu", REQUEST),
     "refused": approve_close(replace(REQUEST, reason="elle")),
     "refused_valid_request": CloseApproval(CloseRefusal.INVALID_INPUT, "elle kuruldu", REQUEST),
     "trade_approval": TradeApproval(

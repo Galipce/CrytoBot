@@ -155,7 +155,7 @@ def place_close_order(
             OrderOutcome.UNSUPPORTED_MODE,
             f"mod {_show(request.mode)} desteklenmiyor: yalnızca paper",
         )
-    if not isinstance(approval, CloseApproval) or not approval.approved or close is None:
+    if not isinstance(approval, CloseApproval) or approval.reason is not None or close is None:
         return reject(OrderOutcome.UNAPPROVED, "onaysız kapanış: kapanış onayı yok ya da ret")
     request_problems = close_request_problems(close)  # a hand-built approval is checked again
     if request_problems:
