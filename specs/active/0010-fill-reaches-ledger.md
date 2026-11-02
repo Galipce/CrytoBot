@@ -26,7 +26,7 @@ denenmesi (B-17), borsa hassasiyetine yuvarlama (live spec'i), `app` döngüsü.
   basamakla kabul eder; miktar, stop ve hedef 28'de kalır. Üs kuralı (±999999) aynıdır.
 - R-4: **`execution` çıktısı defterin kapısından geçer:** `place_order` ve `place_close_order`, emri simülatöre vermeden önce
   dolum fiyatının ve komisyonun R-3'e uyduğunu, kapanışta ayrıca satış gelirinin (tutar − komisyon) R-2'ye sığdığını
-  denetler. Uymuyorsa emir oluşmaz, "geçersiz girdi: ölçek hesaplanamıyor". Bu denetimin ret sırasındaki yeri ölçek
+  denetler; alımda ise maliyetin (tutar + komisyon) sığdığını denetler. Uymuyorsa emir oluşmaz, "geçersiz girdi: ölçek hesaplanamıyor". Bu denetimin ret sırasındaki yeri ölçek
   adımıdır (0006 R-11, 0009 R-12).
 - R-5: **Gerçekçi aralıkta kabul:** miktar ve fiyat en fazla 10 tam + 8 ondalık, slippage en fazla 6 ondalık (0,001'in altı),
   komisyon oranı en fazla 5 ondalık (0,1'in altı), bakiye en fazla 13 tam basamak iken borsa kuralına uyan her alım ve
@@ -65,8 +65,8 @@ none — no user interface.
   yok; tutar, komisyon, satış geliri, bakiye, gerçekleşen toplam ve kasa için ayrı ayrı (R-2, R-8).
 - [ ] AC-4 — Defterin girdileri: 60 basamaklı dolum fiyatı ve komisyon kabul, 61 → "geçersiz girdi"; 29 basamaklı miktar, stop,
   hedef, başlangıç tutarı ve güncel fiyat hâlâ "geçersiz girdi" (R-1, R-3).
-- [ ] AC-5 — Sözleşme: ölçek dışı dolum fiyatı ya da komisyon üreten (fiyat `1E-999999`, slippage 0.5) ve satış geliri sığmayan
-  istek emir oluşturmaz, "ölçek hesaplanamıyor", durum değişmez; alım ve kapanışta (R-4).
+- [ ] AC-5 — Sözleşme: ölçek dışı dolum fiyatı ya da komisyon üreten (fiyat `1E-999999`, slippage 0.5) ve satış geliri ya da alım
+  maliyeti sığmayan istek emir oluşturmaz, "ölçek hesaplanamıyor", durum değişmez; alım ve kapanışta (R-4).
 - [ ] AC-6 — Kalan ayrışma: emir dolu, bakiye toplamı 60 basamağa sığmayan defter → "ölçek hesaplanamıyor", defter değişmez, emir
   dolu kalır, tekrar isteği "zaten var" (R-6).
 - [ ] AC-7 — Değişmeyen davranış: 0003–0009 testleri geçer; yalnız sınır değerini taşıyan vakalar planda listeli olarak değişir,
