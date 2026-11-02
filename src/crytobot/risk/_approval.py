@@ -2,7 +2,7 @@
 
 from collections.abc import Set
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import MAX_EMAX, MAX_PREC, MIN_EMIN, Decimal, DecimalException, Inexact, localcontext
 from enum import Enum
 from typing import TYPE_CHECKING, cast
@@ -157,10 +157,14 @@ def _state_problems(state: "RiskState", now: object, equity: object) -> list[str
     """Spec 0004 R-7: durum boş, başka günden ya da başka bir kasayla güncellenmişse bayattır."""
     if state.day is None or state.last_equity is None:
         return ["risk durumu boş: önce kasa gözlenmeli"]
+    if not isinstance(state.day, date):  # a huge int could not even be written (spec 0011 R-13)
+        return [f"risk durumu geçersiz: gün {_show(state.day)} tarih değil"]
     # observe never builds such a state; a hand-built one would break or blow up _reached
     equities = (state.day_start_equity, state.peak_equity, state.last_equity)
-    if not all(isinstance(e, Decimal) and e.is_finite() for e in equities):
+    if any(e is None for e in equities):
         return ["risk durumu geçersiz: gün başı, zirve ya da son kasa eksik"]
+    if not all(isinstance(e, Decimal) and e.is_finite() for e in equities):
+        return ["risk durumu geçersiz: gün başı, zirve ya da son kasa geçersiz"]
     if not all(_in_scale(cast(Decimal, e)) for e in equities):
         return [f"risk durumu geçersiz: kasa ölçeği varsayılan üs aralığı (±{SCALE}) dışında"]
     if not isinstance(now, datetime) or now.utcoffset() is None:

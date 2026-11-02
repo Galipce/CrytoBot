@@ -54,6 +54,7 @@ from crytobot.risk._tracking import (
     TrackingReason,
     observe,
     resume,
+    risk_state_problems,
 )
 
 __all__: list[str] = [
@@ -89,4 +90,5 @@ __all__: list[str] = [
     "load_limits",
     "observe",
     "resume",
+    "risk_state_problems",
 ]

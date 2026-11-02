@@ -40,6 +40,7 @@ from crytobot.portfolio._ledger import (
     open_ledger,
     record_fill,
 )
+from crytobot.portfolio._replay import ledger_problems
 
 __all__: list[str] = [
     "BUY",
@@ -65,6 +66,7 @@ __all__: list[str] = [
     "account_state",
     "close_position",
     "exit_decisions",
+    "ledger_problems",
     "open_ledger",
     "record_fill",
 ]
