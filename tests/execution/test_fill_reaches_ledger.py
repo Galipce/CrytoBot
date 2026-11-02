@@ -313,3 +313,42 @@ def test_balance_beyond_the_bound_diverges_by_name() -> None:
     assert "ölçek hesaplanamıyor" in result.message
     assert order.status is OrderStatus.FILLED and list(ledger.positions) == ["cb-a"]
     assert again.outcome is OrderOutcome.ALREADY_EXISTS and again.order == order
+
+
+LONG_PRICE = Decimal("1." + "2" * 27)  # 28 digits: with slippage the fill is longer than that
+AT_LEAST = PairRules(Decimal(1), Decimal(0), Decimal("1E+10"))  # the minimum notional refuses it
+
+
+def buy_long(rules: PairRules) -> Any:
+    intent = TradeIntent(PAIR, "buy", LONG_PRICE, Decimal("0.1"), Decimal("2"))
+    approval = TradeApproval(Decimal(1), None, False, "", intent)
+    request = OrderRequest(
+        "a", intent, approval, rules, LONG_PRICE, Decimal(0), Decimal("1E-8"), "paper"
+    )
+    return place_order(EMPTY_EXECUTION, request, PaperExchange(), NOW)
+
+
+def sell_long(rules: PairRules, amount: Decimal = Decimal(1)) -> Any:
+    approval = approve_close(CloseRequest("cb-a", PAIR, amount, "hedef"))
+    request = CloseOrderRequest(approval, rules, LONG_PRICE, Decimal(0), Decimal("1E-8"), "paper")
+    return place_close_order(EMPTY_EXECUTION, request, PaperExchange(), NOW)
+
+
+LONG_MESSAGES: dict[str, tuple[Any, tuple[str, ...]]] = {
+    "buy_created": (lambda: buy_long(PLAIN), ("dolum fiyatı <",)),
+    "buy_exchange_rule": (lambda: buy_long(AT_LEAST), ("tutar <", "dolum fiyatı <")),
+    "close_created": (lambda: sell_long(PLAIN), ("dolum fiyatı <",)),
+    "close_exchange_rule": (lambda: sell_long(AT_LEAST), ("tutar <", "dolum fiyatı <")),
+    "close_unrepresentable": (lambda: sell_long(PLAIN, LONG_PRICE), ("dolum fiyatı <",)),
+}
+
+
+@pytest.mark.parametrize("case", list(LONG_MESSAGES))
+def test_long_values_are_written_by_digit_count(case: str) -> None:
+    """AC-3 (R-7): 28 basamağı aşan dolum fiyatı ve tutar mesajda basamak sayısıyla yazılır."""
+    result, fragments = LONG_MESSAGES[case]
+
+    message = result().message
+
+    assert all(fragment in message for fragment in fragments), message
+    assert "1.2222222222222222222222222222" not in message and len(message) < 300
