@@ -3,12 +3,14 @@
 Bugün yalnızca paper alımların defteri vardır (spec 0007): `open_ledger` boş defteri bir başlangıç
 yatırmasıyla açar, `record_fill` dolan her alımı silinmez bir kayıt ve ayrı bir pozisyon olarak
 yazar ve bedelini USDT bakiyesinden düşer. Bakiye negatife düşmez; aynı `clientOrderId` ikinci bir
-kayıt doğurmaz.
+kayıt doğurmaz. `account_state` defterden serbest bakiyeyi, açık pozisyonları ve çift başına güncel
+fiyatla değerlenmiş kasayı türetir: `risk`'in hesap girdisi (`AccountState`'e `app` çevirir).
 """
 
 from crytobot.portfolio._ledger import (
     BUY,
     EMPTY_LEDGER,
+    AccountSnapshot,
     Entry,
     EntryKind,
     Fill,
@@ -16,6 +18,9 @@ from crytobot.portfolio._ledger import (
     LedgerOutcome,
     LedgerResult,
     Position,
+    SnapshotOutcome,
+    SnapshotResult,
+    account_state,
     open_ledger,
     record_fill,
 )
@@ -23,6 +28,7 @@ from crytobot.portfolio._ledger import (
 __all__: list[str] = [
     "BUY",
     "EMPTY_LEDGER",
+    "AccountSnapshot",
     "Entry",
     "EntryKind",
     "Fill",
@@ -30,6 +36,9 @@ __all__: list[str] = [
     "LedgerOutcome",
     "LedgerResult",
     "Position",
+    "SnapshotOutcome",
+    "SnapshotResult",
+    "account_state",
     "open_ledger",
     "record_fill",
 ]

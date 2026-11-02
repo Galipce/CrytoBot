@@ -295,3 +295,86 @@ def record_fill(ledger: Ledger, fill: Fill) -> LedgerResult:
         f"{position.pair}: {position.client_order_id} kaydedildi: miktar {_brief(position.amount)},"
         f" maliyet {_brief(cost)} USDT, bakiye {_brief(after)} USDT",
     )
+
+
+class SnapshotOutcome(Enum):
+    """Hesap durumu isteğinin sonucu; ret sırası: geçersiz girdi → defter açılmamış → fiyat eksik →
+    ölçek hesaplanamıyor (geçersiz girdi) (plan 0007 Risk 4)."""
+
+    READY = "ready"
+    INVALID_INPUT = "invalid_input"
+    NOT_OPENED = "not_opened"
+    MISSING_PRICE = "missing_price"
+
+
+@dataclass(frozen=True)
+class AccountSnapshot:
+    """R-7, R-8: `risk`'in hesap girdisi (kasa, serbest bakiye, açık pozisyon sayısı) ve açık
+    pozisyonlar eklenme sırasıyla."""
+
+    equity: Decimal
+    free_balance: Decimal
+    open_positions: int
+    positions: tuple[Position, ...]
+
+
+@dataclass(frozen=True)
+class SnapshotResult:
+    outcome: SnapshotOutcome
+    snapshot: AccountSnapshot | None
+    message: str
+
+
+def _price(value: object) -> Decimal | None:
+    """R-7, R-11: güncel fiyat sıfırdan büyük, ölçek içinde, en fazla 28 anlamlı basamak."""
+    return _amount("fiyat", value, [])
+
+
+def account_state(ledger: Ledger, prices: object) -> SnapshotResult:
+    """R-7: serbest bakiye, açık pozisyonlar ve çift başına güncel fiyatla değerlenmiş kasa; açık
+    pozisyonu olan bir çiftin fiyatı yoksa kasa hesaplanmaz."""
+    if not isinstance(prices, Mapping):
+        return SnapshotResult(
+            SnapshotOutcome.INVALID_INPUT,
+            None,
+            f"geçersiz girdi: fiyatlar {_show(prices)} çift → fiyat eşlemesi olmalı",
+        )
+    balance = ledger.balance
+    if balance is None:
+        return SnapshotResult(
+            SnapshotOutcome.NOT_OPENED, None, "defter açılmamış: önce başlangıç yatırması"
+        )
+    positions = tuple(ledger.positions.values())
+    marks: dict[str, Decimal] = {}
+    missing: list[str] = []
+    for pair in dict.fromkeys(p.pair for p in positions):
+        price = _price(prices.get(pair))
+        if price is None:
+            missing.append(pair)
+        else:
+            marks[pair] = price
+    if missing:
+        return SnapshotResult(
+            SnapshotOutcome.MISSING_PRICE,
+            None,
+            "fiyat eksik: açık pozisyonu olan " + ", ".join(missing) + " için geçerli fiyat yok",
+        )
+    try:
+        with localcontext(BOUNDED):
+            equity = balance
+            for position in positions:
+                equity += position.amount * marks[position.pair]
+    except DecimalException:  # the exact result does not fit in 28 digits (plan 0007 Risk 3)
+        return SnapshotResult(
+            SnapshotOutcome.INVALID_INPUT,
+            None,
+            f"geçersiz girdi: ölçek hesaplanamıyor (bakiye {_brief(balance)}, fiyatlar "
+            + ", ".join(f"{pair} {_brief(price)}" for pair, price in marks.items())
+            + ")",
+        )
+    return SnapshotResult(
+        SnapshotOutcome.READY,
+        AccountSnapshot(equity, balance, len(positions), positions),
+        f"kasa {_brief(equity)} USDT, serbest bakiye {_brief(balance)} USDT, açık pozisyon"
+        f" {len(positions)}",
+    )

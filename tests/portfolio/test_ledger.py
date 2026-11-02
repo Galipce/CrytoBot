@@ -14,6 +14,8 @@ from crytobot.portfolio import (
     Ledger,
     LedgerOutcome,
     LedgerResult,
+    SnapshotOutcome,
+    account_state,
     open_ledger,
     record_fill,
 )
@@ -311,3 +313,120 @@ def test_entries_are_append_only() -> None:
     assert list(second.ledger.positions) == ["cb-s1-btc-0001", "cb-s1-btc-0002"]
     assert first.ledger.balance == Decimal("8071.2482751")
     assert refused.ledger is second.ledger
+
+
+def test_opening_snapshot_needs_no_price() -> None:
+    """AC-1 (R-7): yeni açılmış defter → serbest bakiye 10000, kasa 10000, açık pozisyon 0; fiyat
+    verilmeden hesap durumu oluşur."""
+    result = account_state(opened(), {})
+
+    snapshot = result.snapshot
+    assert result.outcome is SnapshotOutcome.READY and snapshot is not None
+    assert (snapshot.equity, snapshot.free_balance, snapshot.open_positions) == (
+        Decimal("10000"),
+        Decimal("10000"),
+        0,
+    )
+    assert snapshot.positions == ()
+
+
+def test_equity_marks_the_position_at_the_current_price() -> None:
+    """AC-2 (R-7): BTC 105 ile kasa 8071.2482751 + 19.249 * 105 = 10092.3932751."""
+    recorded = record()
+
+    result = account_state(recorded.ledger, {"BTC/USDT": Decimal("105")})
+
+    snapshot = result.snapshot
+    assert result.outcome is SnapshotOutcome.READY and snapshot is not None
+    assert snapshot.equity == Decimal("10092.3932751")
+    assert snapshot.free_balance == Decimal("8071.2482751") and snapshot.open_positions == 1
+    assert snapshot.positions == (recorded.position,)
+
+
+def test_each_fill_is_its_own_position() -> None:
+    """AC-3 (R-4, R-7): aynı çiftte iki dolum iki pozisyon, eklenme sırasıyla; farklı çift kendi
+    fiyatıyla değerlenir."""
+    one = record()
+    two = record(one.ledger, client_order_id="cb-s1-btc-0002", amount=Decimal("1"))
+    eth = record(
+        two.ledger,
+        client_order_id="cb-s1-eth-0001",
+        pair="ETH/USDT",
+        amount=Decimal("2"),
+        price=Decimal("50"),
+        fee=Decimal("0.1"),
+    )
+
+    result = account_state(
+        eth.ledger, {"BTC/USDT": Decimal("105"), "ETH/USDT": Decimal("60"), "XRP/USDT": 1}
+    )
+
+    snapshot = result.snapshot
+    assert result.outcome is SnapshotOutcome.READY and snapshot is not None
+    assert snapshot.open_positions == 3
+    assert [p.client_order_id for p in snapshot.positions] == [
+        "cb-s1-btc-0001",
+        "cb-s1-btc-0002",
+        "cb-s1-eth-0001",
+    ]
+    # balance 8071.2482751 - (1 * 100.1 + 1.9268249) - (2 * 50 + 0.1) = 7869.1214502
+    assert snapshot.free_balance == Decimal("7869.1214502")
+    assert snapshot.equity == Decimal("7869.1214502") + Decimal("20.249") * 105 + 2 * 60
+
+
+MISSING: dict[str, Any] = {
+    "absent": None,
+    "zero": Decimal(0),
+    "negative": Decimal(-1),
+    "nan": Decimal("NaN"),
+    "float": 105.0,
+    "bool": True,
+    "29_digits": LONG,
+}
+
+
+@pytest.mark.parametrize("case", list(MISSING))
+def test_missing_price_for_an_open_position(case: str) -> None:
+    """AC-4 (R-7): açık pozisyonu olan çiftin fiyatı yok ya da geçersiz → "fiyat eksik", çift
+    adlandırılır, kasa hesaplanmaz."""
+    ledger = record().ledger
+    prices = {} if MISSING[case] is None else {"BTC/USDT": MISSING[case]}
+
+    result = account_state(ledger, prices | {"ETH/USDT": Decimal("60")})
+
+    assert result.outcome is SnapshotOutcome.MISSING_PRICE and result.snapshot is None
+    assert "fiyat eksik" in result.message and "BTC/USDT" in result.message
+    assert "ETH/USDT" not in result.message
+
+
+def test_prices_without_positions_are_ignored() -> None:
+    """AC-4 (R-7): pozisyonu olmayan çiftin fiyatı geçersiz olsa da yok sayılır."""
+    result = account_state(opened(), {"ETH/USDT": Decimal("NaN"), 42: "x"})
+
+    assert result.outcome is SnapshotOutcome.READY
+
+
+def test_snapshot_of_an_unopened_ledger() -> None:
+    """AC-7 (R-1): açılmamış defterin hesap durumu → "defter açılmamış"."""
+    result = account_state(EMPTY_LEDGER, {})
+
+    assert result.outcome is SnapshotOutcome.NOT_OPENED and "defter açılmamış" in result.message
+
+
+@pytest.mark.parametrize("prices", [None, [("BTC/USDT", Decimal("105"))], "BTC/USDT"])
+def test_prices_must_be_a_mapping(prices: Any) -> None:
+    """AC-8 (R-7): eşleme olmayan fiyat girdisi → "geçersiz girdi", açılmamış defterde de önce."""
+    for ledger in (record().ledger, EMPTY_LEDGER):
+        result = account_state(ledger, prices)
+
+        assert result.outcome is SnapshotOutcome.INVALID_INPUT and "fiyatlar" in result.message
+
+
+def test_unrepresentable_equity_is_named() -> None:
+    """AC-8 (R-11; plan 0007 Risk 3): 28 basamağa sığmayan kasa toplamı → "ölçek hesaplanamıyor"."""
+    ledger = record().ledger
+
+    result = account_state(ledger, {"BTC/USDT": Decimal("1E-999990")})
+
+    assert result.outcome is SnapshotOutcome.INVALID_INPUT and result.snapshot is None
+    assert "ölçek hesaplanamıyor" in result.message and "BTC/USDT 1E-999990" in result.message
