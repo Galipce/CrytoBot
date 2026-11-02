@@ -188,7 +188,7 @@ def _check(close: Close) -> _Checked | list[str]:
         with localcontext(BOUNDED):
             sale = amount * price
             proceeds = sale - fee
-    except DecimalException:  # the exact result does not fit in 28 digits (plan 0008 Risk 5)
+    except DecimalException:  # the exact result does not fit in 60 digits (plan 0008 Risk 5)
         return [
             f"ölçek hesaplanamıyor (miktar {_brief(amount)}, dolum fiyatı {_brief(price)},"
             f" komisyon {_brief(fee)})"
@@ -284,7 +284,7 @@ def close_position(ledger: Ledger, close: Close) -> CloseResult:
             realized = checked.proceeds - cost
             after = balance + checked.proceeds
             total = ledger.realized + realized
-    except DecimalException:  # the exact result does not fit in 28 digits (plan 0008 Risk 5)
+    except DecimalException:  # the exact result does not fit in 60 digits (plan 0008 Risk 5)
         return reject(
             CloseOutcome.INVALID_INPUT,
             f"geçersiz girdi: ölçek hesaplanamıyor (gelir {_brief(checked.proceeds)}, bakiye"

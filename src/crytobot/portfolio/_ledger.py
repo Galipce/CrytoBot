@@ -284,7 +284,7 @@ def record_fill(ledger: Ledger, fill: Fill) -> LedgerResult:
         )
 
     def unrepresentable() -> LedgerResult:
-        """The exact result does not fit in 28 digits (plan 0007 Risk 3)."""
+        """The exact result does not fit in 60 digits (plan 0007 Risk 3)."""
         return reject(
             LedgerOutcome.INVALID_INPUT,
             f"geçersiz girdi: ölçek hesaplanamıyor (miktar {_brief(checked.amount)}, dolum fiyatı"
@@ -426,7 +426,7 @@ def account_state(ledger: Ledger, prices: object) -> SnapshotResult:
             equity = balance
             for position in positions:
                 equity += position.amount * marks[position.pair]
-    except DecimalException:  # the exact result does not fit in 28 digits (plan 0007 Risk 3)
+    except DecimalException:  # the exact result does not fit in 60 digits (plan 0007 Risk 3)
         return SnapshotResult(
             SnapshotOutcome.INVALID_INPUT,
             None,
