@@ -215,25 +215,26 @@ BAD_POSITIVE: dict[str, tuple[Any, str]] = {
     "out_of_scale": (Decimal("1E+1000000"), "ölçeği varsayılan üs aralığı"),
     "29_digits": (LONG, TOO_LONG),
 }
-INVALID: dict[str, tuple[dict[str, Any], str]] = {
-    f"{field}-{case}": ({field: value}, f"{LABELS[field]} ")
+# (overrides, message fragments): the input's name and, for numbers, the rule (plan 0007 A-3)
+INVALID: dict[str, tuple[dict[str, Any], tuple[str, ...]]] = {
+    f"{field}-{case}": ({field: value}, (f"{LABELS[field]} ", rule))
     for field in FIELDS
-    for case, (value, _) in BAD_POSITIVE.items()
+    for case, (value, rule) in BAD_POSITIVE.items()
 }
 INVALID |= {
-    "fee-negative": ({"fee": Decimal("-0.001")}, "komisyon"),
-    "fee-nan": ({"fee": Decimal("NaN")}, "komisyon"),
-    "fee-tiny": ({"fee": Decimal("1E-1000000")}, "komisyon 1E-1000000 ölçeği"),
-    "id-empty": ({"client_order_id": ""}, "clientOrderId"),
-    "id-37_chars": ({"client_order_id": "x" * 37}, "clientOrderId"),
-    "id-space": ({"client_order_id": "cb a"}, "clientOrderId"),
-    "id-unicode": ({"client_order_id": "cb-ğüş"}, "clientOrderId"),
-    "id-not_text": ({"client_order_id": 42}, "clientOrderId"),
-    "pair-not_text": ({"pair": NOTHING}, "çift None ve yön 'buy' metin"),
-    "side-not_text": ({"side": NOTHING}, "çift 'BTC/USDT' ve yön None metin"),
-    "at-no_zone": ({"at": datetime(2026, 11, 2, 10, 0)}, "dolum zamanı"),
-    "at-not_time": ({"at": "2026-11-02"}, "dolum zamanı"),
-    "at-before_opening": ({"at": OPENED - timedelta(seconds=1)}, "açılıştan"),
+    "fee-negative": ({"fee": Decimal("-0.001")}, ("komisyon",)),
+    "fee-nan": ({"fee": Decimal("NaN")}, ("komisyon",)),
+    "fee-tiny": ({"fee": Decimal("1E-1000000")}, ("komisyon 1E-1000000 ölçeği",)),
+    "id-empty": ({"client_order_id": ""}, ("clientOrderId",)),
+    "id-37_chars": ({"client_order_id": "x" * 37}, ("clientOrderId",)),
+    "id-space": ({"client_order_id": "cb a"}, ("clientOrderId",)),
+    "id-unicode": ({"client_order_id": "cb-ğüş"}, ("clientOrderId",)),
+    "id-not_text": ({"client_order_id": 42}, ("clientOrderId",)),
+    "pair-not_text": ({"pair": NOTHING}, ("çift None ve yön 'buy' metin",)),
+    "side-not_text": ({"side": NOTHING}, ("çift 'BTC/USDT' ve yön None metin",)),
+    "at-no_zone": ({"at": datetime(2026, 11, 2, 10, 0)}, ("dolum zamanı",)),
+    "at-not_time": ({"at": "2026-11-02"}, ("dolum zamanı",)),
+    "at-before_opening": ({"at": OPENED - timedelta(seconds=1)}, ("açılıştan",)),
 }
 
 
@@ -241,14 +242,15 @@ INVALID |= {
 def test_invalid_fill_is_named(case: str) -> None:
     """AC-8 (R-2, R-11): sayı kuralına, ölçeğe, 28 basamağa ya da biçime uymayan girdi ve açılıştan
     önceki dolum → "geçersiz girdi", girdi adlandırılır, istisna yok, defter değişmez."""
-    overrides, label = INVALID[case]
+    overrides, fragments = INVALID[case]
     ledger = opened()
 
     result = record(ledger, **overrides)
 
     assert result.outcome is LedgerOutcome.INVALID_INPUT and result.position is None
     assert result.ledger is ledger
-    assert "geçersiz girdi" in result.message and label in result.message
+    assert "geçersiz girdi" in result.message
+    assert all(fragment in result.message for fragment in fragments), result.message
     assert len(result.message) < 500
 
 
