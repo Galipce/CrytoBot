@@ -41,6 +41,7 @@ EXAMPLES = 300
 PAIR = "ADA/USDT"
 RULES = PairRules(Decimal("0.00000001"), Decimal(0), Decimal(0))
 VENUE = PaperExchange()
+LONG = 45  # digits: proceeds this long are what the 60 digit bound is for (R-5)
 STOP = Decimal("1E-20")  # below every price: a sale here is always at its target
 
 
@@ -64,11 +65,20 @@ def scaled(digits: int, whole: int = 10) -> Any:
 trades = st.builds(
     Trade, scaled(8), scaled(8), scaled(8), st.sampled_from([True, True, True, False])
 )
+# the longest proceeds of R-5: a big amount bought for little and sold high, at full digit rates
+TOP = 10**18 - 1
+long_trades = st.builds(
+    Trade,
+    st.integers(TOP - 10**6, TOP).map(lambda n: Decimal(n).scaleb(-8)),
+    st.just(Decimal("0.00000001")),
+    st.integers(TOP - 10**6, TOP).map(lambda n: Decimal(n).scaleb(-8)),
+    st.just(True),
+)
 cases = st.tuples(
     scaled(0, whole=13),
-    st.integers(0, 999).map(lambda n: Decimal(n).scaleb(-6)),  # slippage below 0.001
-    st.integers(0, 9999).map(lambda n: Decimal(n).scaleb(-5)),  # fee rate below 0.1
-    st.lists(trades, min_size=1, max_size=5),
+    st.sampled_from([*range(990, 1000), 0, 5, 500]).map(lambda n: Decimal(n).scaleb(-6)),
+    st.sampled_from([*range(9990, 10000), 0, 75, 100]).map(lambda n: Decimal(n).scaleb(-5)),
+    st.lists(st.one_of(trades, long_trades), min_size=1, max_size=5),
 )
 
 
@@ -141,7 +151,9 @@ def run(case: Any) -> list[str]:
         seen.append("closed")
         assert ledger.balance is not None
         assert (Fraction(ledger.balance), Fraction(ledger.realized)) == (balance, realized)
-        assert len(ledger.balance.as_tuple().digits) <= 60
+        assert closed.closure is not None
+        if len(closed.closure.proceeds.as_tuple().digits) >= LONG:
+            seen.append("long_proceeds")
     return seen
 
 
@@ -154,7 +166,7 @@ def test_fills_match_the_model(case: Any) -> None:
 
 
 def test_fill_outcomes_are_not_vacuous() -> None:
-    """AC-8: üreteç alımı, kapanışı ve yetersiz bakiyeyi yeterince üretir."""
+    """AC-8: üreteç alımı, kapanışı, yetersiz bakiyeyi ve uzun satış gelirini yeterince üretir."""
     record: Counter[str] = Counter()
 
     @settings(max_examples=EXAMPLES)
@@ -164,6 +176,5 @@ def test_fill_outcomes_are_not_vacuous() -> None:
 
     collect()
 
-    assert {o: record[o] for o in ("recorded", "closed", "insufficient") if record[o] < 20} == {}, (
-        record
-    )
+    wanted = ("recorded", "closed", "insufficient", "long_proceeds")
+    assert {o: record[o] for o in wanted if record[o] < 20} == {}, record
