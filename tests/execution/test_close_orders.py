@@ -79,7 +79,7 @@ def test_close_sells_at_target() -> None:
     result = place()
 
     order = result.order
-    assert result.outcome is OrderOutcome.CREATED and order is not None
+    assert result.outcome is OrderOutcome.CREATED and result.created and order is not None
     assert (order.client_order_id, order.position_id, order.pair, order.side) == (
         CID,
         "cb-s1-btc-0001",
@@ -141,6 +141,7 @@ def test_unapproved_close_is_refused(case: str) -> None:
     result = place(approval=UNAPPROVED[case])
 
     assert result.outcome is OrderOutcome.UNAPPROVED and result.order is None
+    assert not result.created
     assert result.state is EMPTY_EXECUTION and "onaysız kapanış" in result.message
 
 
