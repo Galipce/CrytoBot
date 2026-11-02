@@ -80,7 +80,9 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   `__eq__`'i istisna fırlatan çift `TypeError` (R-12), hep True dönen çift emir oluşturur (R-2) — Source: spec 0006,
   VERIFY ikinci geçiş F-1 — Severity: Low — Recommendation: AC-2'ye `__eq__`'i hep True dönen ve istisna fırlatan çift
   nesneli iki vaka, beklenen "onaysız öneri" — Deferred by: Galip Badem, 2026-11-02, fix turu kalmadı (R-06
-  orantısız); bugün davranış doğru, yalnız elle kurulmuş onayda; execution'a dokunan sonraki spec'te kapanır.
+  orantısız); bugün davranış doğru, yalnız elle kurulmuş onayda; execution'a dokunan sonraki spec'te kapanır. Not (spec 0009,
+  review round 3 F-4): `__str__`/`__eq__`/`__ne__`'i ezilmiş bir `str` alt sınıfı yön, `place_order`'ın alım denetimini aşar;
+  alım tarafında `type(side) is str` bu sınıfla birlikte kapanır.
 - **B-15** — Sayı kuralında büyüklük sınırı yok: `_significant` sondaki sıfırları saymadığından `10**4300` (ve
   `Decimal("1E+999999")`) tek anlamlı basamaklı, ölçek içi ve geçerli; defter 4301 basamaklı bakiyeyle açılır, stop
   ya da hedefi anlamsız pozisyon kaydedilir, değerler riske aynen gider. Aynı kural `risk` ve `execution`'da da
@@ -107,4 +109,7 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   Source: spec 0009, review round 1 F-3 (`src/crytobot/risk/_close.py`, `src/crytobot/execution/_close.py`) —
   Severity: Low — Recommendation: üç modüldeki `_show` kuralını birlikte değiştir (uzun metni karakter sayısıyla
   kısalt); B-11 ve B-15 ile aynı change akışında — Deferred by: Galip Badem, 2026-11-02, gerçekçi değil (talep
-  defterin doğrulanmış alanlarından kurulur); düzeltme kopya kuralını üç modülde birlikte değiştirir.
+  defterin doğrulanmış alanlarından kurulur); düzeltme kopya kuralını üç modülde birlikte değiştirir. Not (spec 0009, review
+  round 3 F-2b; Severity: Medium): `_show` yalnız `ValueError` yakalar; `__repr__`'i fırlatan nesne ve aşırı derin iç içe
+  değer (`RecursionError`) ret mesajı yazılırken istisna fırlatır; spec 0009 R-13 bu sınıfı güvence dışı sayar. Alım ve
+  `query_order` da aynı.

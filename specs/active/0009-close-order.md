@@ -58,10 +58,12 @@ da stop-limit emir, reddedilmiş bir kapanış emrinin yeniden denenmesi, kalıc
   geçersiz girdi (tek ret nedeni).
 - R-13: **Sayı ve girdi kuralları** spec 0006 R-12 ile aynıdır: miktar ve güncel fiyat sıfırdan büyük, en fazla 28
   anlamlı basamak; oranlar 0 ile 1 arasında (1 hariç); adım sıfırdan büyük, asgariler negatif olmayan; sonlu
-  `Decimal`/`int` (mantıksal değer ve kayan nokta hariç), üssü ±999999 içinde; çift metin; neden yalnızca `stop` ya da
-  `hedef`; zaman dilimi taşıyan zaman. Değilse "geçersiz girdi", girdi adlandırılır. Tam sonucu 28 basamağa sığmayan
+  `Decimal`/`int` (mantıksal değer ve kayan nokta hariç), üssü ±999999 içinde; pozisyon kimliği, çift ve neden tam `str`
+  (alt sınıfı değil); neden yalnızca `stop` ya da `hedef`; zaman dilimi taşıyan zaman. Değilse "geçersiz girdi", girdi adlandırılır. Tam sonucu 28 basamağa sığmayan
   hesap yuvarlanmaz, "geçersiz girdi: ölçek hesaplanamıyor". Hiçbir girdi için onay ya da emir isteği istisna
-  fırlatmaz; ret mesajı ham girdiyi kısa yazar.
+  fırlatmaz; ret mesajı ham girdiyi kısa yazar. "Hiçbir girdi" veri değerleri içindir (sayı, metin, kapsayıcı, `None`,
+  zaman); davranışı kasıtlı ezilmiş sınıflar (`__repr__`, `__eq__`…) ve aşırı derin iç içe değerler güvence dışıdır
+  (plan A-4, backlog B-18).
 - R-14: **Deftere uyum:** dolu bir kapanış emrinin `clientOrderId`'si, pozisyon kimliği, miktarı, dolum fiyatı,
   komisyonu, nedeni ve zamanı, spec 0008'in kapanış kaydına aynen verilebilir ve kabul edilir.
 - R-15: Durum ve emir kayıtları değişmez değerlerdir (spec 0006 R-13). Spec 0006'nın alım davranışı (R-1…R-14) ve
@@ -118,7 +120,7 @@ none — no user interface. (Kapanışların ve bildirimlerin gösterimi `contro
   bildirimi (R-10, R-11).
 - [ ] AC-9 — Geçersiz girdi: talepte biçime uymayan pozisyon kimliği (`cb-` öneki yok, 33 karakterlik öneri kimliği,
   boşluk), metin olmayan çift, 0/negatif/`NaN`/kayan nokta/mantıksal değer/29 basamak miktar, `stop`/`hedef` dışında
-  neden; emirde geçersiz fiyat, oran, kural, zaman → "geçersiz girdi", girdi adlandırılır, istisna yok; sığmayan
+  neden, `str` alt sınıfı metin alanları; emirde geçersiz fiyat, oran, kural, zaman → "geçersiz girdi", girdi adlandırılır, istisna yok; sığmayan
   hesap → "ölçek hesaplanamıyor"; mesaj kısa; bilinmeyen ya da metin olmayan mod → "mod desteklenmiyor" (R-1, R-5,
   R-13).
 - [ ] AC-10 — Ret sırası: geçersiz girdi + desteklenmeyen mod → "geçersiz girdi"; sığmayan satış dolumu +
@@ -128,8 +130,8 @@ none — no user interface. (Kapanışların ve bildirimlerin gösterimi `contro
   istek durumu aynen bırakır (R-15).
 - [ ] AC-12 — Property: rastgele alım ve kapanış talebi, onay, emir ve sorgu dizilerinde (bağımsız modelle birebir)
   bir pozisyon için en fazla bir kapanış emri oluşur, kapanış hiçbir giriş limiti ya da güvenli mod yüzünden
-  reddedilmez, dolum fiyatı ve komisyon modelle aynıdır, hiçbir girdi istisna fırlatmaz; her sonuç türü yeterince
-  üretilir (R-1…R-13).
+  reddedilmez, dolum fiyatı ve komisyon modelle aynıdır, hiçbir veri girdisi istisna fırlatmaz (R-13); her sonuç türü
+  yeterince üretilir (R-1…R-13).
 
 ## Definition of Done
 - [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
