@@ -1,10 +1,14 @@
 """Pozisyonlar, bakiye mutabakatı, kâr/zarar defteri.
 
-Bugün yalnızca paper alımların defteri vardır (spec 0007): `open_ledger` boş defteri bir başlangıç
-yatırmasıyla açar, `record_fill` dolan her alımı silinmez bir kayıt ve ayrı bir pozisyon olarak
-yazar ve bedelini USDT bakiyesinden düşer. Bakiye negatife düşmez; aynı `clientOrderId` ikinci bir
-kayıt doğurmaz. `account_state` defterden serbest bakiyeyi, açık pozisyonları ve çift başına güncel
-fiyatla değerlenmiş kasayı türetir: `risk`'in hesap girdisi (`AccountState`'e `app` çevirir).
+Paper alımların ve kapanışlarının defteri (spec 0007, 0008): `open_ledger` boş defteri bir
+başlangıç yatırmasıyla açar, `record_fill` dolan her alımı silinmez bir kayıt ve ayrı bir pozisyon
+olarak yazar ve bedelini USDT bakiyesinden düşer. `exit_decisions` güncel fiyatlarla stop'a ya da
+hedefe ulaşan açık pozisyonları belirler (defteri değiştirmez); `close_position` dolan kapanış
+satışını yazar: pozisyon tamamen kapanır, satış geliri bakiyeye eklenir, komisyonlar dahil net
+kâr/zarar gerçekleşir. Bakiye negatife düşmez; alım ve kapanış aynı kimlik alanını paylaşır, aynı
+`clientOrderId` ikinci bir kayıt doğurmaz. `account_state` defterden serbest bakiyeyi, açık
+pozisyonları, çift başına güncel fiyatla değerlenmiş kasayı ve gerçekleşen kâr/zarar toplamını
+türetir: `risk`'in hesap girdisi (`AccountState`'e `app` çevirir).
 """
 
 from crytobot.portfolio._close import (
