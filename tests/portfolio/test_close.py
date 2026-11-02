@@ -414,6 +414,15 @@ def test_invalid_close_is_named(case: str) -> None:
     assert len(result.message) < 500
 
 
+def test_close_at_the_position_opening_is_accepted() -> None:
+    """AC-9 (R-8; plan 0008 A-1): pozisyonun açılışına eşit kapanış zamanı önce değildir → kabul
+    (alımla aynı anda dolan stop kapanışı)."""
+    result = close(at=NOW)
+
+    assert result.outcome is CloseOutcome.CLOSED and result.closure is not None
+    assert result.closure.closed_at == result.closure.position.opened_at == NOW
+
+
 UNREPRESENTABLE: dict[str, tuple[Decimal, dict[str, Any], str]] = {
     # in scale and within 28 significant digits each, but the sale or the new balance is not
     "long_price": (
