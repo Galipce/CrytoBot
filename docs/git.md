@@ -7,13 +7,22 @@
 - Refactors: `refactor/<spec-no>-<short-name>` (mini-spec with Changed behavior = none).
 - Fixes: `fix/<report-id>-<short-name>` (bug fixes carry a report, not a spec number);
   incidents: `incident/<date>-<short-name>`; trivial changes: `trivial/<short-name>` (see below).
+- Bootstrap: `chore/bootstrap` — the bootstrap output (`workflows/bootstrap.md`), merged like
+  any branch.
 
 ## Commits
 - Conventional Commits, with a plan reference: `feat(catalog): paging endpoint [plan 0001/3]`.
   Review fixes name their fix round instead of the step:
   `fix(catalog): empty page size [plan 0001/fix-2]` — the reviewer counts rounds from these
   (R-06 after round 3).
-- Agent commits follow the same standard: the agent writes the message, the human approves.
+- Agent commits follow the same standard: the agent writes the message, the human approves it
+  through the gate before the commit, not one by one — an approved plan covers its
+  `[plan NNNN/n]` and `[plan NNNN/fix-k]` commits, the ship approval the ship commit. Every
+  message stays visible in the branch and the PR. Lite and strict alike.
+- Only `./scripts/check`'s own exit code gates a commit or a push. Never pipe its output into
+  another command in the chain that decides it: in `./scripts/check | grep … && git commit` the
+  chain takes grep's exit code, so a red check commits. Keep the output aside and gate on check
+  alone: `./scripts/check > check.log 2>&1 && git commit …` (then show `check.log`).
 - Commit named paths only: `git commit -- <paths>`, never `git add -A`, `git add .` or
   `commit -a`. Another session or tool may have written or staged files in the same tree.
 
@@ -27,6 +36,7 @@
 - Policy: **(3) everything goes through a mini-spec** (`specs/TEMPLATE-mini.md`) — chosen at bootstrap
   2026-10-29. Küçük değişiklikler de mini-spec + branch + PR + bağımsız review ile yapılır; direkt commit yok.
   (Alternatives not chosen: (1) PR + one reviewer, no spec · (2) direct commit on a `trivial/<short-name>` branch.)
+  Mini-spec'te ANALYZE yoktur: `prompts/spec.md`'nin self-critique geçişi yapılır, ardından `Self-critique: done`.
 - Always: one narrow commit, `scripts/check` green. A second file or a new test means re-triage.
 
 ## Pull requests

@@ -17,6 +17,10 @@ specific gate. In **strict**, each role runs its own segment command in its own 
    refuse with the exact message; soft checks warn and ask whether to proceed.
 2. **Work** — run the workflow steps with the referenced prompt as written.
 3. **Gate** — stop and wait for the human where marked. Nothing is applied without approval.
+   **One decision per gate message.** Ask exactly one decision. Several open items are asked one
+   per message, or offered as the single decision "accept every recommendation listed above",
+   each item and its recommendation written out. An answer that does not say which decision it
+   answers is asked back, never interpreted.
 4. **Handoff** — finish with a summary that names the artifact, its status, and the line
    `Next: <segment> — <who runs it>`. Then **stop**. Never start the next segment.
 
@@ -30,17 +34,18 @@ the review report. The next role starts a **new session** and reads them.
 |---|---|---|---|---|---|---|---|
 | **ANALYZE** | Analyst | 1–2 | *Hard:* no twin — if a spec in `specs/active/` matches the request, offer to resume it; never open a second spec for the same work. New number = highest in `active/`, `done/`, `plans/` + 1. | `prompts/clarify.md`, then `prompts/spec.md` (incl. self-critique) | Spec approval (always, in every mode — it is PLAN's entry condition; lite folds clarify into the draft, except in a sensitive area — `docs/domain.md`) | spec `Status: Approved` | "no open questions remain" · `Next: PLAN — Developer` |
 | **PLAN** | Developer | 3–4 | *Hard:* spec has `Status: Approved` (or `In progress` when revising mid-work). Else refuse: **"Spec not approved — run ANALYZE or get approval first."** If a plan file exists, offer to revise it. | `prompts/plan.md` | Plan approval; never start building | plan `Status: Approved` + `Approved by / on: <name>, <YYYY-MM-DD>` (ask for the name; propose `git config user.name`) | `Next: BUILD — Developer` |
-| **BUILD** | Developer | 5 | *Hard:* plan's `Approved by / on` holds a name and date (empty, `—`, or comment only = not approved). Else refuse: **"Plan not approved — run PLAN and get the approval recorded first."** | `prompts/build.md` | — (deviation → R-07) | spec `Status: In progress` before the first change; if already `In progress`, resume from the plan's next unfinished step | changed files vs. plan list + real `./scripts/check` output · `Next: INDEPENDENT REVIEW — fresh session / read-only reviewer` |
-| **REVIEW** | Reviewer | 6 | *Soft:* pushed commits on the branch and a spec `In progress` exist. It does not wait for CI's full run — TRIAGE does. | `prompts/review.md` | — | nothing (read-only) | findings verbatim, no softening · `Next: TRIAGE — human (real / noise / defer / investigate); then Developer fix rounds, then VERIFY` |
-| **VERIFY** | QA | 9 | *Soft:* triage is complete — every finding real (fixed), noise (rationale written), defer (entry in `specs/backlog.md`), or investigate. A one-pass review ("The chainer") writes its table before triage instead; triage confirms it. | `prompts/verify.md` | — | nothing (no production code) | criterion ↔ evidence table · `Next: SHIP — human (DoD, PR, merge, move spec to specs/done/, Status: Shipped)` |
+| **BUILD** | Developer | 5 | *Hard:* plan's `Approved by / on` holds a name and date (empty, `—`, or comment only = not approved). Else refuse: **"Plan not approved — run PLAN and get the approval recorded first."** *Then:* print doctor's per-profile verdict; if it differs from the plan's Risks (another machine, a changed environment), stop: **"Environment differs from the plan — R-13."** A `check fails on the check.conf errors above` verdict is a conf error, not R-13: fix check.conf first. | `prompts/build.md` | — (deviation → R-07) | spec `Status: In progress` before the first change; if already `In progress`, resume from the plan's next unfinished step | changed files vs. plan list (as amended) + real `./scripts/check` output, its verdict lines in the plan's `## Build evidence` · `Next: INDEPENDENT REVIEW — fresh session / read-only reviewer` |
+| **REVIEW** | Reviewer | 6 | *Soft:* pushed commits on the branch and a spec `In progress` exist. It does not wait for CI's full run — TRIAGE does. Evidence for HEAD in the plan's `## Build evidence` is cited, not re-run. | `prompts/review.md` | — | nothing (read-only) | findings verbatim, no softening · `Next: TRIAGE — human (real / noise / defer / investigate); then Developer fix rounds, then VERIFY` |
+| **VERIFY** | QA | 9 | *Soft:* triage is complete — the plan's `## Triage` has every finding as real (fixed), noise (rationale written), defer (entry in `specs/backlog.md`), or investigate. A one-pass review ("The chainer") writes its table before triage instead; triage confirms it. | `prompts/verify.md` | — | nothing (no production code) | criterion ↔ evidence table · `Next: SHIP — human (DoD, tick the proven criteria, move spec to specs/done/ with Status: Shipped in the PR, merge; an unprovable criterion is moved out, never waived — R-08)` |
 
 The CHANGE lane of `change-request.md` runs these same segments with `specs/TEMPLATE-mini.md`
 as the spec (Source mandatory, changed + preserved criteria); entry checks and gates are identical.
 
 Steps 7 (triage) and 10 (ship) belong to the human; step 8 (fix rounds) is the Developer applying
 triage with `prompts/build.md §fixes`, followed by REVIEW again on the fix diff when the round
-holds a Medium or higher finding; a Low/Info-only round goes on to VERIFY
-(`feature-development.md`, step 8).
+holds a Medium or higher finding (in a sensitive area: every round); a Low/Info-only round, and
+in any area a round that touches documentation only, goes on to VERIFY (`feature-development.md`,
+step 8).
 
 ## The chainer
 
@@ -61,8 +66,9 @@ holds a Medium or higher finding; a Low/Info-only round goes on to VERIFY
   concurrency, money, authorization, boundary values). It reviews first. On a "clean" verdict it
   announces the hat switch to QA and adds the criterion ↔ evidence table to the same report,
   citing the full green of HEAD as usual (still running → the table waits for it). UI
-  screenshots: the table names each one it needs; the human takes them and attaches them to the
-  PR before SHIP and adds their links to the table. Any review finding ends the pass at the review —
+  screenshots: the session captures them (`docs/testing.md`, Evidence for UI criteria), outside
+  the repo, and the table lists them for the SHIP gallery. Any review finding ends the pass at
+  the review —
   triage, fix rounds and a separate VERIFY follow as usual; gaps in the table go to triage the
   same way. Handoff: `Next: TRIAGE — human (confirm the clean verdict and the evidence table);
   then SHIP`. The triage and ship gates stay. It saves a session and a handoff, never a gate;

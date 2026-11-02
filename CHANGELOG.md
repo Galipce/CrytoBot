@@ -19,6 +19,275 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
    ADRs are never renumbered.
 6. Write the new version into `.anew-version`.
 
+## v1.24 — From the bütçe pilot
+
+A Python expense tracker built with v1.23 (lite, local-only, Money declared a sensitive area)
+shipped six specs. Its records show proof work that grew without finding more, a rule silent on
+growing lists, a commit that passed on a red check, and plans naming tests that don't exist.
+No invariant rule changes.
+
+- **A sensitive area costs one break per criterion.** Every criterion is still proven red by a
+  deliberate break; more breaks only where a criterion holds several risky behaviors, each named
+  (`prompts/verify.md`). A fix round that touches documentation only goes on to VERIFY, which
+  reads its diff, instead of a re-review — in any area.
+- **Lists that grow** (`docs/testing.md`, Protected-tests rule). A test of a list that later work
+  extends asserts what its criterion needs, not the whole list. Adding an item to a shipped
+  test's exact list is an allowed, recorded edit when a new criterion needs it — except for an
+  allow-list or a list in a sensitive area, which takes the CHANGE lane (the shipped spec stays).
+  Removing or loosening is forbidden; reordering needs a criterion.
+- **Only check's own exit code gates a commit** (`docs/git.md`): never `check | grep … && git
+  commit`.
+- **doctor names a criterion-map entry no file holds.** Each backticked name in an active plan's
+  "Proven by" column must be a path, a basename or text in a file outside `specs/` and
+  `.anew-dev/`. WARN, never FAIL.
+
+### Upgrading
+
+- `scripts/doctor` — behavior list:
+  - for each plan whose spec is in `specs/active/`, the backticked names in the third column of
+    `## Criterion ↔ test map` are checked; `a::b` per part, a part cut at its first `*`, `[` or
+    `(`, parts under 3 characters skipped;
+  - a part is held by a file's path or basename, or by a file's text, among the files outside
+    `specs/` and `.anew-dev/`: with git, tracked and untracked but not ignored (`git ls-files`,
+    `git grep -F --untracked`); without git, every file `find` reaches, `.git` and `node_modules`
+    pruned (one `grep -F` batch per part); directories never hold a name;
+  - `WARN  plan <NNNN>: criterion map names \`<name>\` — no file holds it …` in every mode, and
+    `ok    criterion maps checked (<n> name(s))`; exit codes unchanged; shipped plans are not
+    scanned.
+
+  Selftest: new criterion-map scenarios (git and no-git); copy `scripts/selftest` with it.
+- `prompts/verify.md`: intent: one break per criterion in a sensitive area; a documents-only fix
+  round is read, not re-reviewed.
+- `workflows/feature-development.md` (step 8), `workflows/README.md` (Modes), `docs/domain.md`
+  (Sensitive areas comment), `prompts/build.md` (fixes), `docs/commands.md` (`/review`),
+  `workflows/segments.md`, `docs/roles/qa.md`: intent: a documents-only fix round goes on to
+  VERIFY in any area, a sensitive area included; QA reads its diff.
+- `docs/testing.md`: intent: the "Lists that grow" paragraph under the Protected-tests rule
+  (allow-lists and sensitive areas take the CHANGE lane).
+- `docs/git.md`: intent: only check's own exit code gates a commit or a push; the right form.
+- `specs/plans/TEMPLATE.md`, `docs/commands.md` (doctor): intent: map names in backticks are
+  checked by doctor.
+- Full diff: `/compare/v1.23...v1.24`.
+
+## v1.23 — From the randevu pilot
+
+A TypeScript appointment system built with v1.22.1 (lite) shipped its walking skeleton in about
+71 minutes. Besides the 4 lite gates it needed 5 extra human decisions, 3 of them caused by two
+rules that work against an agent-driven workflow. This release removes both and closes the
+smaller gaps from the same field log; no invariant rule changes.
+
+- **The residue test counts only what check left running** (ANEW-0007, revised). Each survivor's
+  parent chain decides:
+  - an orphan (parent gone, or handed to init or a subreaper) is check's;
+  - a process under a live parent from before the first run (another agent session, an OS
+    service) is listed as `not from check` with its parent and never fails the test.
+  No idle machine is needed. Memory is reported, not judged.
+- **Residue is the agent's job.** It runs whenever `check.conf` changes (BUILD's Done, never an
+  acceptance criterion). The gate shows one line, `Residue: clean (fast + full)`, and a human
+  decides only on RESIDUE FOUND.
+- **Build evidence lives in the plan** (`## Build evidence`): pointer lines `CHECK GREEN (full,
+  …) @<sha>` and `RESIDUE … @<sha>`. Review and VERIFY cite them instead of re-running.
+- **The agent captures screenshots, the human looks.** The capture is scripted and headless, runs
+  outside the repo and check, and produces one gallery per screen and state at the SHIP gate. The
+  ship approval covers looking at it. A human captures only what the agent cannot reach; a PR
+  attachment is optional.
+- **Greenfield bootstrap.**
+  - A stack & versions topic.
+  - The forbidden module dependencies are folded into the architecture topic.
+  - The output is committed on `chore/bootstrap`.
+  - The REPORT asks about remote and CI.
+  - `check.conf` is a commented plan until the first spec, a **walking skeleton**, activates it.
+    Its PLAN gate carries the per-profile verdict (R-13).
+  - Deferred bootstrap decisions go to the backlog as `Source: bootstrap <date>`.
+- **Commit messages are covered by the gate before them** (the plan, the ship approval), not
+  approved one by one (`docs/git.md`).
+- **`.gitattributes`: LF in the repository by default** (`* text=auto eol=lf`); `*.cmd` and
+  `*.bat` keep CRLF.
+
+### Upgrading
+
+- `scripts/residue` — behavior list:
+  - `measure` records parent pid, and on Windows the creation time, which is part of a
+    process's identity. MSYS's `ps -el` repairs parent ids broken by exec; without it, nothing
+    is repaired and the test still runs;
+  - each survivor is judged by its parent chain: `C` (check's: orphaned, handed to init or a
+    subreaper, too deep or circular) or `F` (a live baseline parent outside the test's own
+    ancestry);
+  - output per run: `after run n: P processes, k survivor(s), m not from check`; survivor lines
+    and `not from check` lines both name `(parent <pid> <name> | gone)`;
+  - only `C` survivors fail the test (exit codes unchanged);
+  - memory over `ANEW_RESIDUE_MB` prints `(informational: …)` and no longer fails;
+  - macOS memory is chosen by `uname`.
+
+  Selftest: new residue scenarios, the Windows path among them (fake `powershell.exe` and
+  `ps`, so CI proves it on Linux); copy `scripts/selftest` with it.
+- `docs/testing.md`:
+  - intent (Resource hygiene 2): attribution by parent chain, no idle machine, the agent runs it
+    when check.conf changes, one-line gate result;
+  - intent (Test layers 4, Evidence for UI criteria, Evidence policy 3): agent capture by
+    default, a gallery at SHIP, human fallback.
+- `specs/plans/TEMPLATE.md`: intent: add `## Build evidence`. Existing plans may add it.
+- `prompts/build.md`, `prompts/review.md`, `prompts/verify.md`, `workflows/segments.md`: intent:
+  write and cite the build evidence lines; residue in BUILD's Done; screenshots captured by the
+  agent.
+- `workflows/feature-development.md`, `workflows/change-request.md`, `specs/TEMPLATE-mini.md`,
+  `docs/roles/qa.md`, and the Claude Code and Copilot `reviewer` agents: intent: screenshots are
+  agent-captured, judged at SHIP.
+- `prompts/bootstrap.md`, `workflows/bootstrap.md`: intent: stack topic, folded dependencies
+  topic, commented check.conf in greenfield, `chore/bootstrap`, remote/CI question, the walking
+  skeleton, deferred decisions to the backlog, one-line residue report.
+- `docs/git.md`: intent: `chore/bootstrap` branch; the gate covers commit messages.
+  `specs/backlog.md`: intent: `Source: bootstrap <date>` is valid.
+- `docs/commands.md`, `README.md`, ANEW-0007: intent: the residue test as revised.
+- `.gitattributes`: intent: LF by default, CRLF for `*.cmd`/`*.bat`. Optional: `git add
+  --renormalize .` and commit, if your repository holds CRLF files; it can produce a large diff,
+  so it is never required.
+- Full diff: `/compare/v1.22.1...v1.23`.
+
+## v1.22.1 — The plan as amended
+
+- `prompts/build.md`: "done" means the changed-file list matches the plan **as amended** — an
+  approved amendment (R-07 or triage) no longer contradicts the definition; the BUILD handoff
+  compares against the same list. `workflows/feature-development.md` step 5 names where a
+  deviation is recorded: the plan's Amendments.
+- Credit: Faruk Atasoy ([@farukatasoy](https://github.com/farukatasoy)) found two gaps before
+  they were closed — the missing executable bit on `scripts/` (PR #2, fixed in v1.3) and the plan
+  having no home for R-07's deviations (PR #3, closed by `## Amendments` in v1.18). This entry
+  carries the rest of PR #3.
+
+### Upgrading
+
+No script changes.
+
+- `prompts/build.md`: intent: done = the changed-file list matches the plan as amended.
+- `workflows/segments.md` (BUILD row), `docs/commands.md` (`/build`, Stops at) and the Claude Code
+  `/build` command: intent: the handoff compares changed files against the plan as amended.
+- `workflows/feature-development.md` (step 5): intent: a deviation is recorded in the plan's
+  Amendments.
+- Full diff: `/compare/v1.22...v1.22.1`.
+
+## v1.22 — Process records
+
+From the same field pilot, and from ANEW's own first run of v1.21: five places where the process
+had no written record, so agents improvised. Each now has one place and one rule; no invariant
+rule is weakened.
+
+- **Moved out, never waived** (ANEW-0012): proven criteria are ticked at ship; one that cannot be
+  proven is moved out at the ship gate (R-08) — its line stays, struck through, `→ moved to
+  B-<n> | spec <NNNN> — <name>, <date>, <why>`, to open work. A sensitive-area criterion cannot
+  move. `scripts/doctor` checks every new ship (on a pull request in CI).
+- **Triage lives in the plan** (`## Triage`): lite has no PR at triage time; the PR links it.
+- **The ship commit inherits the full green** (`docs/testing.md`, Two speeds rule 6) when
+  everything after the cited green touches only `specs/` and `doctor --strict` judged the ship.
+- **Self-critique has a status** (`- Self-critique: done | pending (<condition>)`).
+- **One decision per gate message** (`workflows/segments.md`, Contract, Gate).
+
+### Upgrading
+
+**Tick proven criteria before your next ship.** doctor now judges each new ship: a criterion
+left `- [ ]` is a gate unless it is moved out. If your team kept the evidence table and left the
+boxes empty, tick the proven ones (`- [x]`) at ship from now on — doctor tells you which.
+
+- `scripts/doctor` — behavior: (1) new ships — specs added to `specs/done/` vs the base ref
+  (`$ANEW_BASE_REF`, else the PR's merge-base, else HEAD plus untracked files there): every
+  unchecked criterion line — fail closed: a line with a checkbox (`[ ]`, `[]`, `[x]`, `[X]`)
+  followed by an `AC-|CB-|PB-<n>` id with only punctuation or emphasis between, whatever its
+  bullet; the line's first box and id decide, `[x]`/`[X]` is ticked; a box in backticks or a
+  table cell still counts — without
+  `→ moved to` / `-> moved to` after the id (after the closing `~~` when the id is struck;
+  outside backticks) → gate `unchecked criterion in a new ship: <file> <id> — tick it ([x]) if VERIFY
+  proved it, else move it out`; a `B-<n>` target needs `**B-<n>**` in `specs/backlog.md`, a
+  `spec <NNNN>` target a file in `specs/active/` that is not the spec itself, else gate; any move
+  in a sensitive spec → gate: a line starting (after bullet / emphasis) with "sensitive area" or
+  "sensitive area(s)" and a separator (`:`, `—`, `-`), any case, unless its value (past emphasis,
+  quotes or brackets) starts with none or n/a — an empty value is sensitive; a new ship with no criterion line → WARN.
+  Paths are read unquoted and workspace-relative (non-ASCII names, a workspace in a
+  subdirectory), also in the immutability check's messages; the check runs under `LC_ALL=C`, so
+  specs in other encodings are read byte for byte. Specs already
+  in `specs/done/` at the base are not checked. (2) `- Self-critique: pending …` (any case) in
+  `specs/active/`: Draft → WARN with the condition (expected until approval); Approved / In
+  progress → gate. No field → nothing.
+- `scripts/selftest` — scenarios for the behaviors above.
+- `specs/TEMPLATE.md`, `specs/TEMPLATE-mini.md`: intent: the Self-critique field and the
+  moved-out line format. `prompts/spec.md`: intent: sets the field. `specs/plans/TEMPLATE.md`:
+  intent: `## Triage`. `prompts/recovery/spec-change.md`: intent: R-08 covers the ship-gate move.
+- `workflows/feature-development.md` (steps 7, 10), `workflows/segments.md` (Contract, Gate;
+  VERIFY; SHIP handoff), `prompts/verify.md`, `prompts/recovery/flaky-test.md`,
+  `.github/pull_request_template.md`, `docs/commands.md`: intent: the triage record is the plan;
+  descoping at ship; one decision per gate. `docs/testing.md`: intent: rule 6's specs-only
+  inheritance with its proving command. The four `new-feature` adapters: intent: one decision
+  per gate message; so do the `change`, `fix-bug`, `refactor` and `bootstrap` adapters.
+  `workflows/refactor.md`, `workflows/change-request.md`: intent: tick or move out at ship; the
+  move to done/ is part of the PR (also in step 10 and the segments SHIP handoff).
+  `workflows/refactor.md` (step 2), `workflows/incident.md` (step 3) and the `/refactor`
+  adapters: intent: lanes without ANALYZE run the self-critique pass and set the field, so their
+  mini-specs pass the new gate; `docs/git.md` trivial policy (3) says the same. `specs/backlog.md`:
+  intent: ship-gate moves land there too.
+- Decisions: `docs/decisions/anew/ANEW-0012-descope-not-waive.md` (new).
+- Full diff: `/compare/v1.21...v1.22`.
+
+## v1.21 — The environment is asked, not assumed
+
+From a field project (.NET, Windows + Git Bash) whose container runtime was too old for its
+integration tests: nobody knew until the end of BUILD, a criterion shipped with its full proof
+missing, and every full proof cost a push and a CI round. ANEW still names no tool (ANEW-0011):
+the project declares what a step needs, ANEW runs it and reports.
+
+- **Step prerequisites** (`docs/testing.md`, Two speeds rule 9): `requires <step>: <command>` in
+  `scripts/check.conf`, exit 0 = met. `scripts/check` runs the profile's prerequisites before the
+  first step and fails on an unmet one — never skips the step. `scripts/doctor` says per profile
+  whether this machine can run it. Bootstrap's gate, the plan's Risks and BUILD's entry show that
+  verdict, so a profile that cannot run here is decided before work depends on it.
+- **R-13 — Environment gap** (`prompts/recovery/environment-gap.md`): when the environment cannot
+  satisfy a rule or a step (a missing tool, a permission layer refusing what a rule requires, a
+  profile that cannot run locally): stop, show the constraint, options with costs, the human
+  decides, a plan amendment records it. Never work around the rule.
+
+### Upgrading
+
+Update the scripts **before** adding `requires` lines: a v1.20 check runs `requires x: cmd` as a
+step named "requires x" (it fails if unmet — never a false green, but the output misleads).
+The other way round: a step whose name starts with `requires` and a space or tab is now read as
+a prerequisite — rename it before updating. If the rest of its name matches no step, v1.21 check
+fails on it (`requires names no step`); if it does match one, the old step silently stops being a
+step and runs as that step's prerequisite.
+
+- `scripts/check` — behavior: lines `requires <step>: <command>` (first non-blank word
+  `requires`, then a space or tab — the same rule in doctor and residue) are prerequisites, not
+  steps; only a conf with such a line runs the prerequisite pass. Before the first step, every
+  prerequisite of the profile's steps runs once per distinct command text (from the repo root,
+  stdin from /dev/null). Met → `ok    prerequisite: <cmd> (steps: …)`, output hidden; unmet →
+  its output, then `CHECK FAILED (<profile>) prerequisite not met: <cmd> (steps: …) — environment
+  gap, see prompts/recovery/environment-gap.md (R-13)`; all are reported, then exit 1 with no
+  step run. `--fast` skips prerequisites of full-only steps. Malformed `requires` lines fail
+  check the same way, before any step: naming no step (`requires names no step: <name>`), an
+  empty or comment-only command (`requires has no command: <step>`), no `:` (`requires line has
+  no ':': <line>`); an empty step name prints as `(empty)`.
+  A step is listed once per command. No `requires` line → output unchanged.
+- `scripts/doctor` — behavior: messages print through `printf` (backslashes kept). A conf with
+  only `requires` lines has no steps (WARN as before). With `requires` lines: each distinct
+  command runs once; met → ok, unmet → WARN plus its output; a malformed line (as in check) →
+  WARN; then `profile fast|full: runnable on this machine` (ok), `not runnable on this machine
+  (steps: …)` (WARN, computed from exact step↔command pairs), or, with a malformed line, `check
+  fails on the check.conf errors above` (WARN). WARN in every mode, also `--strict`. Recovery
+  catalog expects 13 ramps.
+- `scripts/residue` — behavior: `requires` lines are not steps (a conf of only those →
+  `RESIDUE NOT MEASURED`).
+- `scripts/selftest` — scenarios for the behaviors above.
+- `scripts/check.conf.example`: intent: shows the `requires` format with a tool-neutral example
+  and two container runtimes side by side.
+- `prompts/recovery/environment-gap.md` (new), `prompts/recovery/README.md`: intent: R-13. Every
+  "R-01…R-12" reference (README, prompts/README, docs/commands.md, the four `/recover` adapters)
+  reads R-01…R-13; `docs/roles/developer.md` lists R-13.
+- `workflows/bootstrap.md`, `prompts/bootstrap.md`: intent: VERIFY shows doctor's per-profile
+  verdict; a profile not runnable here comes with a recommendation for the human (R-13).
+  `prompts/plan.md`, `specs/plans/TEMPLATE.md`: intent: unmet prerequisites are plan risks.
+  `prompts/build.md`, `workflows/segments.md`: intent: BUILD prints its verdict first and stops
+  on R-13 when it differs from the plan's. `docs/testing.md`: intent: Two speeds rule 9.
+  `docs/commands.md`: intent: the prerequisite outputs of check and doctor.
+- Decisions: `docs/decisions/anew/ANEW-0011-tool-neutral.md` (new).
+- Full diff: `/compare/v1.20...v1.21`.
+
 ## v1.20 — e2e is optional
 
 ANEW read as if every project had browser end-to-end tests: bootstrap asked "which e2e tool?",

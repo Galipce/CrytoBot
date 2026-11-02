@@ -75,6 +75,57 @@ mkdir -p "$TMP/nodate"; printf '#!/bin/sh\necho unknown\n' > "$TMP/nodate/date";
 run env PATH="$TMP/nodate:$PATH" sh "$C/scripts/check" --fast
 matches '^CHECK GREEN \(fast, 1 steps\)$' "no usable clock: times are left out, the run still counts"
 
+# Prerequisites (requires <step>: <command>): evaluated before step 1, once per distinct command.
+conf 'compile [fast]: echo compile ran' 'e2e: echo e2e ran'
+check
+hasnt "prerequisite" "no requires line → no prerequisite output (unchanged behavior)"
+conf 'compile [fast]: echo compile ran' 'unit [fast]: echo unit ran' 'e2e: echo e2e ran' \
+     'requires compile: echo met-output; true' 'requires e2e: echo miss""ing-runtime-text; exit 4'
+check
+exits 1 "unmet prerequisite fails check"
+hasnt "compile ran" "unmet prerequisite on the last step: not even the first step runs"
+hasnt "==>" "… no step marker at all";            hasnt "CHECK GREEN" "… and no green line"
+has "CHECK FAILED (full) prerequisite not met: echo miss\"\"ing-runtime-text; exit 4 (steps: e2e)" "failure names command and step"
+has "environment gap, see prompts/recovery/environment-gap.md (R-13)" "failure points at R-13"
+has "missing-runtime-text" "an unmet prerequisite shows its output"
+has "ok    prerequisite: echo met-output; true (steps: compile)" "a met prerequisite is one ok line"
+printf '%s\n' "$out" | grep -qx 'met-output'; [ $? -ne 0 ]; report $? "a met prerequisite's output is not printed"
+check --fast
+exits 0 "--fast ignores prerequisites of full-only steps"; has "CHECK GREEN (fast, 2 steps" "… and runs the fast steps"
+conf 'a: echo a ran' 'requires a: no-such-cmd-anew'
+check
+exits 1 "missing prerequisite command → not met";  has "not found" "… with the shell's error text"
+has "CHECK FAILED (full) prerequisite not met: no-such-cmd-anew" "… reported, check does not abort"
+conf 'a: echo a ran' 'requires b: true'
+check
+exits 1 "requires naming no step fails check";     has "requires names no step: b" "… and names it"
+: > "$TMP/req-count"
+conf 'a [fast]: true' 'b: true' 'c: true' "requires a: echo x >> '$TMP/req-count'" \
+     "requires b: echo x >> '$TMP/req-count'" "requires c: echo x >> '$TMP/req-count'"
+check
+exits 0 "shared prerequisite, met";                has "(steps: a, b, c)" "… listed once for all its steps"
+[ "$(wc -l < "$TMP/req-count" | tr -d ' ')" -eq 1 ]; report $? "a prerequisite on three steps runs once per check run"
+conf 'a: true' 'requires a: true' 'requires a: true'
+check;             has "ok    prerequisite: true (steps: a)" "the same requires line twice lists its step once"
+conf 'a: echo a ran' 'requires a:'
+check
+exits 1 "requires with an empty command fails check"; has "CHECK FAILED (full) requires has no command: a" "… and says so"
+hasnt "a ran" "… before any step"
+conf 'a: echo a ran' 'requires a: # runtime to be decided'
+check
+exits 1 "a comment-only prerequisite command fails check"; has "requires has no command: a" "… as no command"
+conf 'a: echo a ran' 'requires : true'
+check;             has "requires names no step: (empty)" "an empty step name is shown as (empty)"
+conf 'a: echo a ran' 'requires a'
+check
+exits 1 "requires line without ':' fails check";  has "requires line has no ':': requires a" "… as a conf error"
+hasnt "environment gap" "… not as an environment gap"
+printf 'requires\fx: echo ff ran\n' > "$C/scripts/check.conf"
+check;             has "ff ran" "only a space or tab after 'requires' makes a requires line (as in doctor and residue)"
+printf 'a: echo a ran\r\nrequires a: true\r\n' > "$C/scripts/check.conf"
+check
+exits 0 "CRLF conf with a requires line";         has "ok    prerequisite: true (steps: a)" "… pairs step and prerequisite"
+
 # --- scripts/residue: same bare copy. Assertions never require an idle machine: they look for
 # this run's own marker, so another process starting meanwhile cannot make them flaky.
 cp "$ROOT/scripts/residue" "$C/scripts/residue"
@@ -88,6 +139,12 @@ printf '# only a comment\n\n  # indented\n \r\n' > "$C/scripts/check.conf"
 residue
 exits 0 "residue: conf without steps";           has "RESIDUE NOT MEASURED (full)" "no steps → not measured, never clean"
 hasnt "baseline: " "no steps → nothing is measured"
+conf '# a prerequisite alone' 'requires unit: true'
+residue
+has "RESIDUE NOT MEASURED (full)" "residue: a requires line is not a step"
+printf 'requires\fx: true\n' > "$C/scripts/check.conf"
+residue
+hasnt "RESIDUE NOT MEASURED" "residue: only a space or tab after 'requires' makes a requires line (as in check)"
 conf 'unit [fast]: exit 3'
 residue
 exits 1 "residue: red check";                    has "RESIDUE TEST ABORTED (full): check failed in run 1" "red check aborts the residue test"
@@ -97,22 +154,44 @@ has "baseline: " "residue: measures a baseline";   has "after run 2: " "residue:
 has "==> run 2/2: ./scripts/check --fast" "residue --fast runs the fast profile twice"; hasnt "e2e ran" "residue --fast skips full-only steps"
 if printf '%s\n' "$out" | grep '^  survivor  ' | grep -qF "$LEAK"; then report 1 "a step that waits for its child leaves no survivor"
 else report 0 "a step that waits for its child leaves no survivor"; fi
-conf "unit: echo unit ran" "server: sh -c 'sleep 25; :' $LEAK >/dev/null 2>&1 &"
+# The scenario processes below write their pid and are stopped afterwards: the selftest itself
+# leaves nothing running. Each one also ends on its own after ~30 s, should a kill miss it.
+LIVE='echo $$ >> "$1"; i=0; while [ $i -lt 30 ]; do sleep 1; i=$((i + 1)); done'
+conf "unit: echo unit ran" "server: sh -c '$LIVE' $LEAK '$TMP/leak.pid' >/dev/null 2>&1 &"
 residue
+kill $(cat "$TMP/leak.pid" 2>/dev/null) 2>/dev/null
 exits 1 "residue: leaked process";               has "RESIDUE FOUND (full)" "leak is reported"
 has "$LEAK" "the survivor is named with its command line"
-# The POSIX path on any machine: a fake uname and ps. After the baseline, a kernel thread appears
-# (never a survivor) and, with $ZOMBIE set, a zombie too (always one).
+if printf '%s\n' "$out" | grep '^  survivor  ' | grep -F "$LEAK" | grep -qF '(parent '; then report 0 "the survivor names its parent"
+else report 1 "the survivor names its parent"; fi
+# A process started meanwhile by something outside check — here a watcher started before the
+# baseline, not an ancestor of the test — is not check's: listed with its parent, never failing.
+GO="$TMP/go"; FOREIGN_MARK=anew-residue-foreign-$$
+( while [ ! -f "$GO" ]; do sleep 1; done; sh -c "$LIVE" "$FOREIGN_MARK" "$TMP/foreign.pid" & wait ) &
+WATCH=$!
+conf "unit: touch '$GO' && sleep 3"
+residue
+kill "$WATCH" $(cat "$TMP/foreign.pid" 2>/dev/null) 2>/dev/null
+exits 0 "residue: a process from outside check does not fail it"; has "RESIDUE CLEAN (full, 2 runs)" "… the verdict is clean"
+if printf '%s\n' "$out" | grep '^  not from check  ' | grep -F "$FOREIGN_MARK" | grep -qF '(parent '; then report 0 "… and it is listed as not from check, with its parent"
+else report 1 "… and it is listed as not from check, with its parent"; fi
+# The POSIX path on any machine: a fake uname and ps (pid, ppid, args). After the baseline, a
+# kernel thread appears (never a survivor) and, on request, a zombie (always one), a process whose
+# parent is a live baseline process (not from check), and orphans: one handed to init, one whose
+# parent is a new process whose own parent is gone (both check's).
 mkdir -p "$TMP/fakeps"
 printf '#!/bin/sh\necho Linux\n' > "$TMP/fakeps/uname"
-cat > "$TMP/fakeps/ps" <<'EOF'
+cat > "$TMP/fakeps/ps" <<'EOF2'
 #!/bin/sh
 n=$(($(cat "$PSCOUNT" 2>/dev/null || echo 0) + 1)); echo "$n" > "$PSCOUNT"
-echo "    1 /sbin/init"
+echo "    1     0 /sbin/init"
+echo "  100     1 /usr/bin/anew-other-session"
 [ "$n" -gt 2 ] || exit 0
-echo " 4242 [kworker/0:1-events]"
-[ -z "${ZOMBIE:-}" ] || echo " 4243 [anew-zombie] <defunct>"
-EOF
+echo " 4242     2 [kworker/0:1-events]"
+[ -z "${ZOMBIE:-}" ] || echo " 4243     1 [anew-zombie] <defunct>"
+[ -z "${FOREIGN:-}" ] || echo " 4244   100 anew-foreign --flag"
+[ -z "${ORPHANS:-}" ] || { echo " 4245     1 anew-orphan"; echo " 4246  4247 anew-child"; echo " 4247  9999 anew-parent-gone"; }
+EOF2
 chmod +x "$TMP/fakeps/uname" "$TMP/fakeps/ps"
 conf 'unit [fast]: echo unit ran'
 fakeps() { rm -f "$TMP/fakeps/count"; run env PATH="$TMP/fakeps:$PATH" PSCOUNT="$TMP/fakeps/count" "$@" \
@@ -121,6 +200,89 @@ fakeps
 exits 0 "residue: a kernel thread is not a survivor"; hasnt "kworker" "kernel threads are never listed"
 fakeps ZOMBIE=1
 exits 1 "residue: a zombie is a survivor";       has "[anew-zombie] <defunct>" "the zombie is named"
+fakeps FOREIGN=1
+exits 0 "residue: a child of a live baseline process is not check's"
+has "  not from check  4244  anew-foreign --flag  (parent 100 anew-other-session)" "… listed with its parent"
+has "0 survivor(s), 1 not from check" "… counted apart";  hasnt "  survivor  4244" "… never as a survivor"
+fakeps FOREIGN=1 ORPHANS=1
+exits 1 "residue: orphans are check's"
+has "  survivor  4245  anew-orphan  (parent 1 init)" "an orphan handed to init is a survivor"
+has "  survivor  4247  anew-parent-gone  (parent 9999 gone)" "a process whose parent is gone is a survivor"
+has "  survivor  4246  anew-child  (parent 4247 anew-parent-gone)" "a child of an orphan is a survivor too"
+has "  not from check  4244" "… while the other session's process stays not from check"
+# Memory is reported, never judged: a fake Darwin with vm_stat whose free pages halve after the
+# baseline drops ~3.9 GB, over a 512 MB tolerance, with nothing of check's left.
+mkdir -p "$TMP/fakemac"
+printf '#!/bin/sh\necho Darwin\n' > "$TMP/fakemac/uname"
+cat > "$TMP/fakemac/vm_stat" <<'EOF2'
+#!/bin/sh
+n=$(($(cat "$VMCOUNT" 2>/dev/null || echo 0) + 1)); echo "$n" > "$VMCOUNT"
+echo "Mach Virtual Memory Statistics: (page size of 4096 bytes)"
+if [ "$n" -gt 2 ]; then echo "Pages free:                     1000000."; else echo "Pages free:                     2000000."; fi
+EOF2
+cp "$TMP/fakeps/ps" "$TMP/fakemac/ps"
+chmod +x "$TMP/fakemac/uname" "$TMP/fakemac/vm_stat" "$TMP/fakemac/ps"
+rm -f "$TMP/fakemac/count" "$TMP/fakemac/vmcount"
+run env PATH="$TMP/fakemac:$PATH" PSCOUNT="$TMP/fakemac/count" VMCOUNT="$TMP/fakemac/vmcount" \
+  ANEW_RESIDUE_SETTLE=1 ANEW_RESIDUE_MB=512 sh "$C/scripts/residue" --fast
+exits 0 "residue: a memory drop alone does not fail it"
+has "over the 512 MB tolerance (informational" "… it is reported as informational"
+has "RESIDUE CLEAN (fast, 2 runs)" "… and the verdict is clean"
+# The Windows path on any machine: a fake uname, powershell.exe (pid, ppid, creation time, name,
+# command) and MSYS ps -el. Baseline: claude.exe 500; MSYS bash 550 (msys 50) and, under it, bash
+# 600 (msys 60) of another session. After the baseline 550 exits, so 600's MSYS parent becomes 1:
+# it must keep its identity (not new, not a survivor). On request: an orphan whose parent is gone
+# and one whose parent pid was reused by a younger process (check's), a native child of claude.exe
+# and an MSYS child (msys 90, a status letter before its PID) whose Windows parent id is a dead
+# exec stub while its MSYS parent is bash 600 (both not from check).
+mkdir -p "$TMP/fakewin"
+printf '#!/bin/sh\necho MINGW64_NT-10.0-19045\n' > "$TMP/fakewin/uname"
+cat > "$TMP/fakewin/powershell.exe" <<'EOF2'
+#!/bin/sh
+n=$(($(cat "$PSCOUNT" 2>/dev/null || echo 0) + 1)); echo "$n" > "$PSCOUNT"
+t=$(printf '\t')
+echo "MEM${t}8000"
+echo "4${t}0${t}${t}System${t}System"
+echo "500${t}4${t}20260101000000001${t}claude.exe${t}claude.exe"
+echo "960${t}4${t}20260101000000020${t}x.exe${t}x.exe reuser"
+[ "$n" -gt 2 ] || echo "550${t}500${t}20260101000000002${t}bash.exe${t}bash.exe"
+echo "600${t}550${t}20260101000000003${t}bash.exe${t}bash.exe other-session"
+[ "$n" -gt 2 ] || exit 0
+[ -z "${ORPHANS:-}" ] || { echo "700${t}777${t}20260101000000010${t}sleep.exe${t}sleep.exe anew-win-orphan"
+                           echo "950${t}960${t}20260101000000005${t}x.exe${t}x.exe anew-win-reused"; }
+[ -z "${NATIVE:-}" ] || echo "800${t}500${t}20260101000000011${t}dotnet.exe${t}dotnet.exe anew-win-foreign"
+[ -z "${OTHERS:-}" ] || { echo "800${t}500${t}20260101000000011${t}dotnet.exe${t}dotnet.exe anew-win-foreign"
+                          echo "900${t}901${t}20260101000000012${t}tail.exe${t}tail.exe anew-win-repaired"; }
+EOF2
+cat > "$TMP/fakewin/ps" <<'EOF2'
+#!/bin/sh
+[ -z "${NOPS:-}" ] || exit 1
+n=$(($(cat "$MSYSCOUNT" 2>/dev/null || echo 0) + 1)); echo "$n" > "$MSYSCOUNT"
+echo "      PID    PPID    PGID     WINPID   TTY         UID    STIME COMMAND"
+if [ "$n" -gt 2 ]; then
+  echo "       60       1      60        600  cons0     197609   Oct 28 /usr/bin/bash"
+  echo "S      90      60      90        900  cons0     197609 10:00:01 /usr/bin/tail"
+else
+  echo "       50       1      50        550  cons0     197609   Oct 28 /usr/bin/bash"
+  echo "       60      50      60        600  cons0     197609   Oct 28 /usr/bin/bash"
+fi
+EOF2
+chmod +x "$TMP/fakewin/uname" "$TMP/fakewin/powershell.exe" "$TMP/fakewin/ps"
+fakewin() { rm -f "$TMP/fakewin/count" "$TMP/fakewin/msyscount"
+            run env PATH="$TMP/fakewin:$PATH" PSCOUNT="$TMP/fakewin/count" MSYSCOUNT="$TMP/fakewin/msyscount" "$@" \
+              ANEW_RESIDUE_SETTLE=1 ANEW_RESIDUE_MB=1000000 sh "$C/scripts/residue" --fast; }
+fakewin
+exits 0 "residue (Windows): a process whose MSYS parent exits keeps its identity"; hasnt "  600  " "… and is never listed"
+fakewin OTHERS=1
+exits 0 "residue (Windows): processes from outside check do not fail it"
+has "  not from check  800  dotnet.exe anew-win-foreign  (parent 500 claude.exe)" "… a native child of a baseline process"
+has "  not from check  900  tail.exe anew-win-repaired  (parent 600 bash.exe)" "… an MSYS child behind a dead exec stub (status letter read past)"
+fakewin ORPHANS=1
+exits 1 "residue (Windows): orphans are check's"
+has "  survivor  700  sleep.exe anew-win-orphan  (parent 777 gone)" "… a process whose parent is gone"
+has "  survivor  950  x.exe anew-win-reused  (parent 960 gone)" "… a process whose parent pid was reused by a younger process"
+fakewin NOPS=1 NATIVE=1
+exits 0 "residue (Windows): no MSYS ps still measures"; has "  not from check  800" "… and still attributes"
 
 # --- scripts/doctor: a git-initialised copy of the ANEW core only, reset between scenarios ---
 # Only what doctor reads: no application code, and no real specs or plans (a project's own specs
@@ -155,6 +317,56 @@ doctor;            has "WARN  scripts/check.conf has no steps" "a conf without s
 put scripts/check.conf 'unit [fast]: echo unit ran'
 doctor;            hasnt "check.conf has no steps" "a conf with a step is fine"
 has "ok    verification contract configured" "… and reported as configured"
+hasnt "prerequisite" "no requires line → no prerequisite output";  hasnt "profile fast" "… and no profile verdict"
+put scripts/check.conf 'requires unit: true'
+doctor;            has "WARN  scripts/check.conf has no steps" "a requires line is not a step"
+
+# Prerequisites: reported per command and as a per-profile verdict; WARN in every mode.
+reset; put scripts/check.conf 'compile [fast]: true' 'e2e: true' 'requires compile: true' \
+  'requires e2e: echo runtime-miss""ing-text; exit 4'
+doctor;            exits 0 "unmet prerequisite only warns"
+has "ok    prerequisite met: true (steps: compile)" "a met prerequisite is an ok line naming its step"
+has "WARN  prerequisite not met: echo runtime-miss\"\"ing-text; exit 4 (steps: e2e)" "an unmet one is a WARN naming step and command"
+has "runtime-missing-text" "… with the command's output"
+has "ok    profile fast: runnable on this machine" "unmet on a full-only step: fast stays runnable"
+has "WARN  profile full: not runnable on this machine (steps: e2e)" "… full is not runnable, naming the step"
+doctor --strict;   exits 0 "unmet prerequisite under --strict still only warns"
+has "WARN  prerequisite not met" "… as a WARN, not a FAIL"
+put scripts/check.conf 'compile [fast]: true' 'e2e: true' 'requires compile: exit 1'
+doctor;            has "WARN  profile fast: not runnable on this machine (steps: compile)" "unmet on a fast step: fast not runnable"
+has "WARN  profile full: not runnable on this machine (steps: compile)" "… and full neither"
+put scripts/check.conf 'a: true' 'requires a: no-such-cmd-anew'
+doctor;            exits 0 "missing prerequisite command does not abort doctor"
+has "WARN  prerequisite not met: no-such-cmd-anew" "… it is reported as not met";  has "not found" "… with the shell's error text"
+put scripts/check.conf 'a: true' 'requires b: true'
+doctor;            has "WARN  check.conf: requires names no step: b" "a requires line naming no step is reported"
+has "WARN  profile full: check fails on the check.conf errors above" "… and no profile is called runnable"
+put scripts/check.conf 'a: true' 'requires a: # runtime to be decided'
+doctor;            has "WARN  check.conf: requires has no command: a" "a comment-only prerequisite command is a conf error"
+put scripts/check.conf 'a: true' 'requires : true'
+doctor;            has "requires names no step: (empty)" "an empty step name is shown as (empty)"
+: > "$TMP/doc-count"
+put scripts/check.conf 'a [fast]: true' 'b: true' 'c: true' "requires a: echo x >> '$TMP/doc-count'" \
+  "requires b: echo x >> '$TMP/doc-count'" "requires c: echo x >> '$TMP/doc-count'"
+doctor;            has "(steps: a, b, c)" "a shared prerequisite is listed once for all its steps"
+[ "$(wc -l < "$TMP/doc-count" | tr -d ' ')" -eq 1 ]; report $? "a prerequisite on three steps runs once per doctor run"
+put scripts/check.conf 'e2e: true' 'requires e2e: true' 'requires e2e: exit 1'
+doctor;            has "ok    prerequisite met: true (steps: e2e)" "one step, one met prerequisite: ok"
+has "WARN  prerequisite not met: exit 1 (steps: e2e)" "… and one unmet: WARN";  has "WARN  profile full: not runnable on this machine (steps: e2e)" "… the step is not runnable"
+put scripts/check.conf 'lint, format [fast]: true' 'e2e: true' 'requires lint, format: false'
+doctor;            has "WARN  profile fast: not runnable on this machine (steps: lint, format)" "a step name with ', ' keeps the verdict exact"
+put scripts/check.conf 'a\tb [fast]: true' 'requires a\tb: false'
+doctor;            has "WARN  profile fast: not runnable on this machine (steps: a\tb)" "a backslash in a step name keeps the verdict exact"
+put scripts/check.conf 'a: true' 'requires a:'
+doctor;            has "WARN  check.conf: requires has no command: a" "an empty prerequisite command is a conf error"
+has "WARN  profile full: check fails on the check.conf errors above" "… and no profile is called runnable"
+put scripts/check.conf 'a: true' 'requires a'
+doctor;            has "WARN  check.conf: requires line has no ':': requires a" "a requires line without ':' is a conf error"
+put scripts/check.conf 'a: true' 'requires a: true' 'requires a: true'
+doctor;            has "ok    prerequisite met: true (steps: a)" "the same requires line twice lists its step once"
+printf 'requires\fx: true\n' > "$W/scripts/check.conf"
+doctor;            hasnt "check.conf has no steps" "only a space or tab after 'requires' makes a requires line (as in check)"
+hasnt "profile fast" "… and no prerequisite verdict is printed for it"
 
 reset; put specs/plans/0001-plan.md '# Plan 0001' '- Approved by / on: —'
 doctor;            has "WARN  plan exists for unapproved spec 0001" "plan without a spec → WARN locally"
@@ -177,6 +389,194 @@ doctor;            has "duplicate spec number 0005" "twin spec numbers are caugh
 
 reset; put specs/done/0006-c.md '# Spec 0006' '- Status: Approved'
 doctor;            has "specs/done/0006-c.md is not marked 'Status: Shipped'" "unmarked shipped spec is caught"
+
+# Self-critique status: pending on a Draft warns; past approval it is a gate.
+reset; put specs/active/0030-sc.md '# Spec 0030' '- Status: Draft' '- Self-critique: pending (after 0029 ships)'
+doctor;            has "WARN  self-critique pending (after 0029 ships): specs/active/0030-sc.md" "pending self-critique on a Draft → WARN with its condition"
+put specs/active/0030-sc.md '# Spec 0030' '- Status: Approved' '- Self-critique: pending (after 0029 ships)'
+doctor --strict;   exits 1 "pending self-critique on an Approved spec under --strict"
+has "FAIL  self-critique still pending (after 0029 ships) on a spec past approval" "… is a gate"
+put specs/active/0030-sc.md '# Spec 0030' '- Status: In progress' '- Self-critique: pending (x)'
+doctor;            has "WARN  self-critique still pending (x) on a spec past approval" "… In progress too (WARN locally)"
+put specs/active/0030-sc.md '# Spec 0030' '- Status: Approved' '- Self-critique: Pending (y)'
+doctor;            has "self-critique still Pending (y) on a spec past approval" "the pending status in any case"
+put specs/active/0030-sc.md '# Spec 0030' '- Status: Approved' '- Self-critique: done'
+doctor;            hasnt "self-critique" "self-critique done → no line"
+put specs/active/0030-sc.md '# Spec 0030' '- Status: Approved'
+doctor;            hasnt "self-critique" "no Self-critique field (older spec) → no line"
+
+# Criterion ↔ test map: every backticked name in an active plan must be held by a file outside
+# specs/ (path, basename or text); WARN only; shipped plans are not scanned.
+reset
+rm -f "$W/scripts/selftest"   # its own text holds every name below
+put specs/active/0040-map.md '# Spec 0040' '- Status: In progress' 'mentions test_only_in_spec'
+put specs/plans/0040-plan.md '# Plan 0040' '- Approved by / on: Ada, 2026-11-02' '' '## Criterion ↔ test map' \
+  '| Acceptance criterion | Proven by | Profile |' '|---|---|---|' \
+  '| AC-1 | `test_present_one`; `tests/unit/sample_test.txt::test_in_file`; `sample_test.txt` | fast |' \
+  '| AC-2 | `test_wild_*`; `test_param[a-b]`; `test_only_in_spec` | fast |' \
+  '| AC-3 | `test_absent_name`; `tests/unit/sample_test.txt::test_not_in_file`; `nomatch_*`; `specs/active/0040-map.md` | fast |' \
+  '' '## Build evidence' '| AC-9 | `test_outside_the_map` | fast |'
+put tests/unit/sample_test.txt 'def test_present_one(): ...' 'def test_in_file(): ...' 'def test_wild_card(): ...' 'def test_param(): ...'
+put specs/done/0041-old.md '# Spec 0041' '- Status: Shipped'
+put specs/plans/0041-plan.md '# Plan 0041' '- Approved by / on: Ada, 2026-10-01' '## Criterion ↔ test map' \
+  '| Acceptance criterion | Proven by | Profile |' '|---|---|---|' '| AC-1 | `test_renamed_since` | fast |'
+doctor
+has "WARN  plan 0040: criterion map names \`test_absent_name\` — no file holds it" "a map name no file holds → WARN"
+has "names \`tests/unit/sample_test.txt::test_not_in_file\`" "… a missing part of a::b → WARN"
+has "names \`nomatch_*\`" "… a wildcard prefix no file holds → WARN"
+has "names \`test_only_in_spec\`" "… a name found only under specs/ → WARN"
+has "names \`specs/active/0040-map.md\`" "… a path under specs/ → WARN"
+hasnt "\`test_present_one\`" "a name in an untracked test file is held"
+hasnt "\`tests/unit/sample_test.txt::test_in_file\`" "a path::name with both parts held is fine"
+hasnt "\`sample_test.txt\`" "a basename is held"
+hasnt "\`test_wild_*\`" "a wildcard is cut to its prefix"
+hasnt "\`test_param[a-b]\`" "a [param] is cut off"
+hasnt "test_outside_the_map" "a table outside the map section is not scanned"
+hasnt "test_renamed_since" "a shipped plan is not scanned"
+has "ok    criterion maps checked (10 name(s))" "the scan reports how many names it checked"
+doctor --strict;   exits 0 "a missing map name stays a WARN under --strict"
+NG="$TMP/no[git]*"   # glob characters in ROOT are never a pattern
+rm -rf "$NG"; cp -R "$W" "$NG"; rm -rf "$NG/.git"
+run env GIT_CEILING_DIRECTORIES="$TMP" sh "$NG/scripts/doctor"   # no outer repo either
+has "names \`test_absent_name\`" "without git: a missing name → WARN"
+hasnt "\`test_present_one\`" "without git: a name in a file is held"
+hasnt "\`sample_test.txt\`" "without git: a basename is held"
+has "names \`test_only_in_spec\`" "without git: specs/ still does not count"
+has "names \`specs/active/0040-map.md\`" "without git: a path under specs/ is not held"
+rm -rf "$NG"
+put .gitignore 'ignored/'; put ignored/x.txt 'test_absent_name'
+doctor;            has "names \`test_absent_name\`" "a git-ignored file does not hold a name"
+
+# New ships (vs the base ref): every criterion checked, or moved out at the ship gate with a target.
+doctor_base() { run sh -c 'unset GITHUB_BASE_REF GITHUB_EVENT_PATH; ANEW_BASE_REF=$1; export ANEW_BASE_REF; shift; exec sh "$0" "$@"' "$W/scripts/doctor" "$@"; }
+reset; put specs/done/0020-new.md '# Spec 0020' '- Status: Shipped' '- [x] AC-1 — proven' '- [ ] AC-2 — unproven'
+doctor;            has "WARN  unchecked criterion in a new ship: specs/done/0020-new.md AC-2" "an uncommitted new ship with an unproven criterion → WARN"
+hasnt "0020-new.md AC-1" "… a checked criterion is fine"
+commit "ship 0020"
+doctor_base "$BASE" --strict
+exits 1 "new ship with an unproven criterion under --strict"; has "FAIL  unchecked criterion in a new ship: specs/done/0020-new.md AC-2" "… FAIL, naming spec and criterion"
+doctor;            hasnt "criterion in a new ship" "a spec already shipped at the base is not judged again"
+reset; put specs/done/0021-mini.md '# Spec 0021 (mini)' '- Status: Shipped' '- [x] CB-1 — done' '- [ ] PB-1 — not proven'
+doctor;            has "unchecked criterion in a new ship: specs/done/0021-mini.md PB-1" "mini-spec CB-/PB- lines are judged too"
+reset; put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' '- [ ] ~~AC-1 — c~~ → moved to B-3 — Ada, 2026-10-29, needs a newer runtime'
+doctor;            has "moved criterion has no backlog entry: specs/done/0022-move.md AC-1 → B-3" "a move to a backlog entry that does not exist → gate"
+put specs/backlog.md '# Backlog' '- **B-3** — needs a newer runtime'
+doctor;            hasnt "0022-move.md" "a move to an existing backlog entry is accepted"
+put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' '- [ ] AC-1 — c -> moved to B-3 — Ada, 2026-10-29'
+doctor;            hasnt "0022-move.md" "the ASCII arrow is accepted too"
+put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' '- [ ] ~~AC-1 — c~~'
+doctor;            has "unchecked criterion in a new ship: specs/done/0022-move.md AC-1" "striking a criterion through without a target does not move it"
+put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' '- [ ] AC-1 — c → moved to spec 0007'
+doctor;            has "moved criterion has no open target spec: specs/done/0022-move.md AC-1 → spec 0007" "a move to a spec that does not exist → gate"
+put specs/active/0007-later.md '# Spec 0007' '- Status: Draft'
+doctor;            hasnt "0022-move.md" "a move to an existing spec is accepted"
+put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' 'Sensitive area: payments' '- [ ] AC-1 — c → moved to spec 0007'
+doctor;            has "a sensitive-area criterion cannot be moved out: specs/done/0022-move.md AC-1" "a sensitive-area criterion is never moved out"
+put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' '- Sensitive area: none' '- [ ] AC-1 — c → moved to spec 0007'
+doctor;            hasnt "0022-move.md" "'Sensitive area: none' is not a sensitive area"
+put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' 'This is not a Sensitive area: just prose.' '- [ ] AC-1 — c → moved to spec 0007'
+doctor;            hasnt "0022-move.md" "prose mentioning a sensitive area is not a declaration"
+put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' '- sensitive areas: payments' '- [ ] AC-1 — c → moved to spec 0007'
+doctor;            has "a sensitive-area criterion cannot be moved out: specs/done/0022-move.md AC-1" "'Sensitive areas:' in any case is a declaration"
+put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' '- [ ] AC-1 — c → moved to foo'
+doctor;            has "moved criterion has no target: specs/done/0022-move.md AC-1" "an unknown move target → gate"
+put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' '- [ ] AC-1 — c → moved to spec 0022'
+doctor;            has "moved criterion targets its own spec: specs/done/0022-move.md AC-1" "a spec cannot move a criterion to itself"
+put specs/done/0005-old.md '# Spec 0005' '- Status: Shipped' '- [x] AC-1 — ok'
+put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' '- [ ] AC-1 — c → moved to spec 0005'
+doctor;            has "moved criterion has no open target spec: specs/done/0022-move.md AC-1 → spec 0005" "a shipped spec is no target (moved work stays open)"
+put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' '- [ ] AC-1 — doctor rejects a line without `→ moved to B-3` marker'
+doctor;            has "unchecked criterion in a new ship: specs/done/0022-move.md AC-1" "a marker in backticks is quoted text, not a move"
+put specs/backlog.md '# Backlog' '- B-4 — bare id, not an entry'
+put specs/done/0022-move.md '# Spec 0022' '- Status: Shipped' '- [ ] ~~AC-1 — c~~ → moved to B-4'
+doctor;            has "moved criterion has no backlog entry: specs/done/0022-move.md AC-1 → B-4" "a backlog entry is **B-<n>**, not a bare mention"
+reset; put specs/done/0023-md.md '# Spec 0023' '- Status: Shipped' '* [ ] AC-1 — star bullet' '1. [ ] **AC-2** — numbered, bold' '- [X] AC-3 — capital X is ticked'
+doctor;            has "unchecked criterion in a new ship: specs/done/0023-md.md AC-1 —" "a '*' bullet criterion is judged (exact id)"
+has "unchecked criterion in a new ship: specs/done/0023-md.md AC-2" "a numbered, bold criterion is judged";  hasnt "0023-md.md AC-3" "[X] counts as ticked"
+reset; put specs/done/0032-fc.md '# Spec 0032' '- Status: Shipped' '1) [ ] AC-1 — paren list' '- []AC-2 — empty box' '| AC-3 | evidence row, no box |' '- [x] **AC-4** — ticked'
+doctor;            has "unchecked criterion in a new ship: specs/done/0032-fc.md AC-1 —" "fail closed: a '1)' list criterion is judged"
+has "unchecked criterion in a new ship: specs/done/0032-fc.md AC-2 —" "… an empty box is unchecked"
+hasnt "0032-fc.md AC-3" "… a line without a checkbox (evidence table) is not a criterion";  hasnt "0032-fc.md AC-4" "… a ticked one is fine"
+put specs/backlog.md '# Backlog' '- **B-3** — x'
+put specs/done/0032-fc.md '# Spec 0032' '- Status: Shipped' '- [ ] AC-1 — c → moved to B-3 — Ada, 2026-10-29, was ~~B-2~~'
+doctor;            hasnt "0032-fc.md" "a ~~ after the marker does not hide the move"
+put specs/active/0007-later.md '# Spec 0007' '- Status: Draft'
+for decl in '- **Sensitive area:** payments' '* Sensitive area: payments' '__Sensitive areas__: payments'; do
+  put specs/done/0032-fc.md '# Spec 0032' '- Status: Shipped' "$decl" '- [ ] AC-1 — c → moved to spec 0007'
+  doctor;          has "a sensitive-area criterion cannot be moved out: specs/done/0032-fc.md AC-1" "sensitive declared as '$decl' blocks a move"
+done
+for decl in '- Sensitive area: None — docs only' '- Sensitive area: n/a'; do
+  put specs/done/0032-fc.md '# Spec 0032' '- Status: Shipped' "$decl" '- [ ] AC-1 — c → moved to spec 0007'
+  doctor;          hasnt "0032-fc.md" "'$decl' is not sensitive"
+done
+reset; put specs/done/0034-first.md '# Spec 0034' '- Status: Shipped' '- [ ] AC-2 — unproven, depends on [x] AC-1' '- [ ] AC-3 — a ship shows `- [x] AC-1` lines' '- [x] AC-4 — proven; see [ ] AC-9'
+doctor;            has "unchecked criterion in a new ship: specs/done/0034-first.md AC-2 —" "a [x] AC-n inside the text does not tick the criterion"
+has "unchecked criterion in a new ship: specs/done/0034-first.md AC-3 —" "… nor in backticks";  hasnt "0034-first.md AC-9" "the first box and id decide (a ticked line is not judged by a later box)"
+hasnt "0034-first.md AC-1" "… and the id is the first one on the line"
+put specs/active/0007-later.md '# Spec 0007' '- Status: Draft'
+for decl in '- Sensitive area(s): none' '- Sensitive area — none' '- Sensitive area: `none`' '- Sensitive area: (none)' 'Sensitive areas are not touched by this change.'; do
+  put specs/done/0034-first.md '# Spec 0034' '- Status: Shipped' "$decl" '- [ ] AC-1 — c → moved to spec 0007'
+  doctor;          hasnt "0034-first.md" "'$decl' does not make the spec sensitive"
+done
+for decl in '- Sensitive area:' '1) Sensitive area: payments' '- Sensitive area: nonexistent-flag'; do
+  put specs/done/0034-first.md '# Spec 0034' '- Status: Shipped' "$decl" '- [ ] AC-1 — c → moved to spec 0007'
+  doctor;          has "a sensitive-area criterion cannot be moved out: specs/done/0034-first.md AC-1" "'$decl' makes the spec sensitive (fail closed)"
+done
+put specs/backlog.md '# Backlog' '- **B-3** — x'
+put specs/done/0034-first.md '# Spec 0034' '- Status: Shipped' '- [ ] ~~AC-1 — c~~ → moved to B-3'
+doctor;            hasnt "0034-first.md" "a struck id is cut at its closing ~~, the marker after it counts"
+put specs/done/0034-first.md '# Spec 0034' '- Status: Shipped' '- [ ] ~~AC-1 — → moved to B-3 inside the strike~~ no marker after'
+doctor;            has "unchecked criterion in a new ship: specs/done/0034-first.md AC-1 —" "… a marker inside the struck text does not count"
+reset; put "specs/done/0035-ödeme.md" '# Spec 0035' '- Status: Shipped' '- [x] AC-1 — ok'; commit "ship 0035"
+put "specs/done/0035-ödeme.md" '# Spec 0035' '- Status: Shipped' '- [x] AC-1 — ok' 'edited'
+doctor;            has "shipped spec changed: specs/done/0035-ödeme.md" "immutability names a non-ASCII spec unquoted"
+reset; put specs/done/0033-old.md '# Spec 0033' '- Status: Shipped' '- [ ] AC-1 — old, unchecked'; commit "ship 0033"
+put specs/done/0033-old.md '# Spec 0033' '- Status: Shipped' '- [ ] AC-1 — old, unchecked' 'edited'
+doctor;            has "shipped spec changed: specs/done/0033-old.md" "an edited shipped spec is an immutability gate"
+hasnt "criterion in a new ship" "… and never judged as a new ship"
+reset; put specs/done/0024-none.md '# Spec 0024' '- Status: Shipped' 'criteria lost in an edit'
+doctor;            has "WARN  new ship has no criterion line: specs/done/0024-none.md" "a new ship with no criterion line warns"
+reset; put "specs/done/0025-ödeme.md" '# Spec 0025' '- Status: Shipped' '- [ ] AC-1 — x'
+doctor;            has "unchecked criterion in a new ship: specs/done/0025-ödeme.md AC-1" "a non-ASCII spec name is judged (untracked)"
+git -C "$W" add -A
+doctor;            has "unchecked criterion in a new ship: specs/done/0025-ödeme.md AC-1" "… and staged"
+reset; printf '# Spec 0026\n- Status: Shipped\n- [ ] AC-1 \377 latin-1 byte\n' > "$W/specs/done/0026-enc.md"
+run env LC_ALL=C.UTF-8 sh -c 'unset ANEW_BASE_REF GITHUB_BASE_REF GITHUB_EVENT_PATH; exec sh "$0"' "$W/scripts/doctor"
+has "unchecked criterion in a new ship: specs/done/0026-enc.md AC-1 —" "a spec with a non-UTF-8 byte is read, its id exact (UTF-8 locale)"
+put specs/backlog.md '# Backlog' '- **B-3** — x'
+printf '# Spec 0026\n- Status: Shipped\n- [ ] ~~AC-1 caf\351~~ \342\206\222 moved to B-3 \342\200\224 Ada\n' > "$W/specs/done/0026-enc.md"
+run env LC_ALL=C.UTF-8 sh -c 'unset ANEW_BASE_REF GITHUB_BASE_REF GITHUB_EVENT_PATH; exec sh "$0"' "$W/scripts/doctor"
+hasnt "0026-enc.md" "a valid move in a Latin-1 spec is accepted under a UTF-8 locale"
+printf '# Spec 0026\n- Status: Shipped\n- [ ] AC-1 caf\351 \342\206\222 moved to B-3 \342\200\224 Ada\n' > "$W/specs/done/0026-enc.md"
+run env LC_ALL=C.UTF-8 sh -c 'unset ANEW_BASE_REF GITHUB_BASE_REF GITHUB_EVENT_PATH; exec sh "$0"' "$W/scripts/doctor"
+hasnt "0026-enc.md" "… also with the Latin-1 byte outside a strike (bytes, not characters)"
+reset; put specs/done/0027-mini.md '# Spec 0027 (mini)' '- Status: Shipped' '- [x] CB-1 — ok' '- [ ] CB-2 — not proven'
+doctor;            has "unchecked criterion in a new ship: specs/done/0027-mini.md CB-2" "an unchecked CB- line is judged"
+# Base refs: an old ship next to a new one; the active → done move; the PR merge-base path.
+reset; put specs/done/0028-old.md '# Spec 0028' '- Status: Shipped' '- [ ] AC-1 — old, unchecked'; commit "ship 0028"
+OLD=$(git -C "$W" rev-parse HEAD)
+put specs/active/0029-new.md '# Spec 0029' '- Status: In progress' '- [ ] AC-1 — new, unchecked'; commit "work 0029"
+git -C "$W" mv specs/active/0029-new.md specs/done/0029-new.md; commit "ship 0029"
+doctor_base "$OLD"
+has "unchecked criterion in a new ship: specs/done/0029-new.md AC-1" "a committed active → done move is a new ship vs the base"
+hasnt "0028-old.md" "… a spec already shipped at the base is not judged next to it"
+git -C "$W" update-ref refs/remotes/origin/main "$OLD"
+run sh -c 'unset ANEW_BASE_REF GITHUB_EVENT_PATH; GITHUB_BASE_REF=main; export GITHUB_BASE_REF; exec sh "$0" --strict' "$W/scripts/doctor"
+exits 1 "PR base (GITHUB_BASE_REF): the new ship fails under --strict"
+has "FAIL  unchecked criterion in a new ship: specs/done/0029-new.md AC-1" "… seen through the merge-base"
+git -C "$W" update-ref -d refs/remotes/origin/main
+# A workspace in a subdirectory of its repository: paths are workspace-relative.
+reset; S="$TMP/sub"; mkdir -p "$S/ws"
+( cd "$W" && tar -cf - --exclude=.git . ) | ( cd "$S/ws" && tar -xf - )
+git -C "$S" init -q; git -C "$S" add -A
+git -C "$S" -c user.name=selftest -c user.email=selftest@example.invalid commit -qm fixture
+mkdir -p "$S/ws/specs/done"; printf '%s\n' '# Spec 0031' '- Status: Shipped' '- [ ] AC-1 — x' > "$S/ws/specs/done/0031-sub.md"
+git -C "$S" add -A; git -C "$S" -c user.name=selftest -c user.email=selftest@example.invalid commit -qm ship
+run sh -c 'unset GITHUB_BASE_REF GITHUB_EVENT_PATH; ANEW_BASE_REF=HEAD~1; export ANEW_BASE_REF; exec sh "$0"' "$S/ws/scripts/doctor"
+has "unchecked criterion in a new ship: specs/done/0031-sub.md AC-1" "a workspace in a subdirectory of its repo sees a committed new ship"
+printf '%s\n' '# Spec 0031' '- Status: Shipped' '- [ ] AC-1 — x' 'edited' > "$S/ws/specs/done/0031-sub.md"
+run sh -c 'unset GITHUB_BASE_REF GITHUB_EVENT_PATH ANEW_BASE_REF; exec sh "$0"' "$S/ws/scripts/doctor"
+has "shipped spec changed: specs/done/0031-sub.md" "immutability names the spec workspace-relative in a subdirectory"
 
 reset; put specs/done/0010-fast.md '# Spec 0010' '- Status: Shipped' '| AC-1 | CHECK GREEN (fast, 2 steps, 4 s) |'
 doctor;            exits 0 "fast evidence only warns"; has "WARN  fast output cited as evidence: specs/done/0010-fast.md" "a shipped spec citing only fast output is reported"
