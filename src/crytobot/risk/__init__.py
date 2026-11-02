@@ -10,6 +10,9 @@ durumu ister ve günlük zarar ya da drawdown limitinde reddeder; durdurmayı ya
 ile kaldırır. Önerinin hedefe kadar beklenen kârı, efektif maliyetin (komisyon + spread +
 slippage) katını geçmiyorsa öneri reddedilir. Onay sonucu karara bağladığı öneriyi değiştirmeden
 taşır (`TradeApproval.intent`); `execution` emri yalnızca o öneriden oluşturur.
+Açık pozisyonun stop ya da hedefte kapanışı yeni işlem değildir (spec 0009): `approve_close`
+talebi yalnızca biçimine bakarak onaylar — hiçbir giriş limiti, beyaz liste ya da kill switch
+kapanışı engellemez; `execution` satışı yalnızca bu onaydan oluşturur (BR-9).
 """
 
 from crytobot.risk._approval import (
@@ -19,6 +22,14 @@ from crytobot.risk._approval import (
     TradeApproval,
     TradeIntent,
     approve_trade,
+)
+from crytobot.risk._close import (
+    CLOSE_REASONS,
+    CloseApproval,
+    CloseRefusal,
+    CloseRequest,
+    approve_close,
+    close_request_problems,
 )
 from crytobot.risk._limits import (
     DEFAULT_LIMITS,
@@ -46,6 +57,7 @@ from crytobot.risk._tracking import (
 )
 
 __all__: list[str] = [
+    "CLOSE_REASONS",
     "DEFAULT_LIMITS",
     "EMPTY_STATE",
     "HARD_CAPS",
@@ -54,6 +66,9 @@ __all__: list[str] = [
     "ApprovalReason",
     "ChangeDecision",
     "Channel",
+    "CloseApproval",
+    "CloseRefusal",
+    "CloseRequest",
     "HardCaps",
     "LimitChange",
     "LoadedLimits",
@@ -67,7 +82,9 @@ __all__: list[str] = [
     "TrackingReason",
     "TradeApproval",
     "TradeIntent",
+    "approve_close",
     "approve_trade",
+    "close_request_problems",
     "decide_change",
     "load_limits",
     "observe",

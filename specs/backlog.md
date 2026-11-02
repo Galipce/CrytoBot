@@ -80,7 +80,9 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   `__eq__`'i istisna fırlatan çift `TypeError` (R-12), hep True dönen çift emir oluşturur (R-2) — Source: spec 0006,
   VERIFY ikinci geçiş F-1 — Severity: Low — Recommendation: AC-2'ye `__eq__`'i hep True dönen ve istisna fırlatan çift
   nesneli iki vaka, beklenen "onaysız öneri" — Deferred by: Galip Badem, 2026-11-02, fix turu kalmadı (R-06
-  orantısız); bugün davranış doğru, yalnız elle kurulmuş onayda; execution'a dokunan sonraki spec'te kapanır.
+  orantısız); bugün davranış doğru, yalnız elle kurulmuş onayda; execution'a dokunan sonraki spec'te kapanır. Not (spec 0009,
+  review round 3 F-4): `__str__`/`__eq__`/`__ne__`'i ezilmiş bir `str` alt sınıfı yön, `place_order`'ın alım denetimini aşar;
+  alım tarafında `type(side) is str` bu sınıfla birlikte kapanır.
 - **B-15** — Sayı kuralında büyüklük sınırı yok: `_significant` sondaki sıfırları saymadığından `10**4300` (ve
   `Decimal("1E+999999")`) tek anlamlı basamaklı, ölçek içi ve geçerli; defter 4301 basamaklı bakiyeyle açılır, stop
   ya da hedefi anlamsız pozisyon kaydedilir, değerler riske aynen gider. Aynı kural `risk` ve `execution`'da da
@@ -95,3 +97,29 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   Severity: Info — Recommendation: iki fonksiyonda birlikte, fiyat okumasını adlandırılmış bir "geçersiz girdi"
   retine çeviren tek bir yardımcı ya da girdiyi `dict`'e kopyalamak — Deferred by: Galip Badem, 2026-11-02, gerçek
   çağıran (`app`) düz `dict` verir; düzeltme shipped spec 0007'nin koduna da dokunur; `app` spec'inde kapanır.
+- **B-17** — Reddedilmiş bir kapanış emri yeniden denenemez: kapanış `clientOrderId`'si pozisyondan deterministik
+  türediği için (`cb-` → `cx-`) aynı pozisyonun sonraki kapanış isteği, durumu `reddedildi` olan emri "zaten var" ile
+  döndürür ve pozisyon açık kalır — Source: spec 0009, clarify S7 — Severity: Medium — Recommendation: live spec'inde
+  borsanın aynı `clientOrderId`'yi final durumdan sonra yeniden kabul davranışıyla birlikte karar verilsin (ör. deneme
+  sayısı taşıyan kimlik ya da reddedilmiş emrin yerine yeni emir) — Deferred by: Galip Badem, 2026-11-02, paper'da ret
+  yalnız ayarlanmış simülatörde olur; karar borsa davranışına bağlı.
+- **B-18** — Ret mesajı ham metin girdisini kısaltmaz: `risk`'in `_show`'u (ve onu kullanan `_short`) ile
+  `execution`'daki `_show(pair)` sınırsız `repr` yazar; milyon karakterlik bir kimlik ya da neden ~2 MB'lık mesaj
+  üretir ("mesaj kısa", spec 0009 R-13). Aynı kalıp spec 0006'nın öneri kimliği ve çift mesajlarında da var —
+  Source: spec 0009, review round 1 F-3 (`src/crytobot/risk/_close.py`, `src/crytobot/execution/_close.py`) —
+  Severity: Low — Recommendation: üç modüldeki `_show` kuralını birlikte değiştir (uzun metni karakter sayısıyla
+  kısalt); B-11 ve B-15 ile aynı change akışında — Deferred by: Galip Badem, 2026-11-02, gerçekçi değil (talep
+  defterin doğrulanmış alanlarından kurulur); düzeltme kopya kuralını üç modülde birlikte değiştirir. Not (spec 0009, review
+  round 3 F-2b; Severity: Medium): `_show` yalnız `ValueError` yakalar; `__repr__`'i fırlatan nesne ve aşırı derin iç içe
+  değer (`RecursionError`) ret mesajı yazılırken istisna fırlatır; spec 0009 R-13 bu sınıfı güvence dışı sayar. Alım ve
+  `query_order` da aynı. Not (spec 0009, review round 4 F-3): özel `tzinfo` ile `place_order` ve
+  `query_order`'daki `now.utcoffset()` da korumasız (`src/crytobot/execution/_orders.py`).
+- **B-19** — Dolu emri defter reddedebiliyor: `execution` ile `portfolio` aynı 28 basamak sınırını farklı hesaplara
+  uyguluyor. 8 ondalıklı olağan değerlerle (12345.67890123 @ 0.12345678, ücret 0.00075, bakiye 100000) emir `dolu` olur,
+  `close_position` "ölçek hesaplanamıyor" der; pozisyon açık kalır, tekrar isteği "zaten var" döner (B-17). Alımda da aynı
+  (`place_order` / `record_fill`). Ayrıca fiyat `1E-999999`, slippage 0.5 ile dolum fiyatı ±999999 ölçeğinin dışına
+  çıkar — Source: spec 0009, review round 4 F-1 (`src/crytobot/execution/_close.py`, `src/crytobot/portfolio/_close.py`)
+  — Severity: High — Recommendation: `app` paper döngüsünden (0011) ÖNCE kendi spec'inde: 28 basamak sınırını gerçek
+  değerlerle yeniden değerlendir (defter bakiyesinde daha geniş sınır), "dolu ama defter reddetti" akışını tanımla,
+  alım ve kapanışı birlikte çöz — Deferred by: Galip Badem, 2026-11-02, R-06: bakiyeye bağlı kısım `execution`'da
+  çözülemez, tek taraflı yama alımı açıkta bırakır; bugün emir yalnız paper ve döngüye bağlı değil.

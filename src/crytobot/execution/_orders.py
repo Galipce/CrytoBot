@@ -22,6 +22,7 @@ from crytobot.execution._paper import OrderStatus, PaperExchange
 from crytobot.risk import PairRules, TradeApproval, TradeIntent
 
 PAPER = "paper"
+BUY = "buy"
 CLIENT_ID_PREFIX = "cb-"
 # ASCII only: exchanges accept at most 36 of [A-Za-z0-9_-] in a client order id (R-6)
 _INTENT_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
@@ -74,11 +75,29 @@ class Order:
 
 
 @dataclass(frozen=True)
-class ExecutionState:
-    """Emirler `clientOrderId`'ye göre, oluşturulma sırasıyla; değer değişmez (R-13). `quotes`,
-    durumu bilinmeyen emrin dolarsa alacağı dolum fiyatı ve komisyondur (plan 0006 Risk 5)."""
+class CloseOrder:
+    """Kapanış emri kaydı (spec 0009 R-10): yön `sell`; stop ve hedef yerine kapatılan pozisyonun
+    kimliği ve kapanış nedeni. Dolum fiyatı ve komisyon yalnızca `FILLED` iken dolu."""
 
-    orders: Mapping[str, Order]
+    client_order_id: str
+    position_id: str
+    pair: str
+    side: str
+    amount: Decimal
+    reason: str
+    status: OrderStatus
+    fill_price: Decimal | None
+    fee: Decimal | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class ExecutionState:
+    """Emirler `clientOrderId`'ye göre, oluşturulma sırasıyla; değer değişmez (R-13). Alım (`cb-`)
+    ve kapanış (`cx-`, spec 0009) emirleri birlikte. `quotes`, durumu bilinmeyen emrin dolarsa
+    alacağı dolum fiyatı ve komisyondur (plan 0006 Risk 5)."""
+
+    orders: Mapping[str, Order | CloseOrder]
     quotes: Mapping[str, tuple[Decimal, Decimal]]
 
     @property
@@ -134,7 +153,7 @@ class QueryResult:
 
     state: ExecutionState
     outcome: QueryOutcome
-    order: Order | None
+    order: Order | CloseOrder | None
     message: str
     notifications: tuple[Notification, ...] = ()
 
@@ -316,6 +335,7 @@ def place_order(
     client_order_id = CLIENT_ID_PREFIX + checked.intent_id
     existing = state.orders.get(client_order_id)
     if existing is not None:
+        assert isinstance(existing, Order)  # a "cb-" id is a buy's; a close's is "cx-"
         if _content(existing) == _content(checked):
             return OrderResult(
                 state,
@@ -343,6 +363,10 @@ def place_order(
         )
     if _judged_differently(approval.intent, checked):
         return reject(OrderOutcome.UNAPPROVED, "onaysız öneri: onay başka bir öneri için verilmiş")
+    if checked.side != BUY:  # a sale comes only from a close approval (spec 0009 R-4, BR-9)
+        return reject(
+            OrderOutcome.UNAPPROVED, f"onaysız öneri: yön {_show(checked.side)} alım değil"
+        )
     if off_step:
         return reject(
             OrderOutcome.EXCHANGE_RULE,
@@ -396,7 +420,9 @@ def place_order(
     )
 
 
-def _notify(kind: NotificationKind, order: Order, now: datetime, what: str) -> Notification:
+def _notify(
+    kind: NotificationKind, order: Order | CloseOrder, now: datetime, what: str
+) -> Notification:
     return Notification(
         kind,
         order.client_order_id,
