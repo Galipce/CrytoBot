@@ -136,6 +136,7 @@ BAD_ETH: dict[str, dict[str, Any]] = {
     "negative": {"ETH/USDT": Decimal(-1)},
     "nan": {"ETH/USDT": Decimal("NaN")},
     "float": {"ETH/USDT": 61.0},
+    "29_digits": {"ETH/USDT": Decimal("1." + "2" * 28)},
 }
 
 
