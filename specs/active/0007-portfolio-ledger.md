@@ -1,6 +1,6 @@
 # Spec 0007 — Portföy defteri: dolan paper alımlardan bakiye, pozisyon ve kasa
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0007-plan.md`
 
