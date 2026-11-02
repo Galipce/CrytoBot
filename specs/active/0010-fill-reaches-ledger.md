@@ -1,6 +1,6 @@
 # Spec 0010 — Dolan her emir deftere yazılır: hesap sınırı ve modüller arası sözleşme
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0010-plan.md`
 - Self-critique: done
