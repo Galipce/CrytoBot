@@ -1,6 +1,6 @@
 """Spec 0009 AC-3…AC-11: kapanış onayından paper piyasa satışı."""
 
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import MappingProxyType
@@ -486,3 +486,19 @@ def test_refused_close_leaves_the_state() -> None:
     assert refused.state is first.state
     assert other.state is not first.state and list(first.state.orders) == [CID]
     assert list(other.state.orders) == [CID, "cx-s1-eth-0001"]
+
+
+def test_close_state_and_order_are_immutable() -> None:
+    """AC-11 (R-15): kapanış sonrası durum ve kapanış emri değişmez değerlerdir."""
+    result = place()
+    order = result.order
+    assert order is not None
+
+    with pytest.raises(FrozenInstanceError):
+        order.amount = Decimal(1)  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        result.state.orders = {}  # type: ignore[misc]
+    with pytest.raises(TypeError):
+        result.state.orders[CID] = order  # type: ignore[index]
+    with pytest.raises(TypeError):
+        result.state.quotes[CID] = (Decimal(1), Decimal(1))  # type: ignore[index]
