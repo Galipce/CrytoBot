@@ -65,7 +65,10 @@ da stop-limit emir, reddedilmiş bir kapanış emrinin yeniden denenmesi, kalıc
   zaman); davranışı kasıtlı ezilmiş sınıflar (`__repr__`, `__eq__`…) ve aşırı derin iç içe değerler güvence dışıdır
   (plan A-4, backlog B-18).
 - R-14: **Deftere uyum:** dolu bir kapanış emrinin `clientOrderId`'si, pozisyon kimliği, miktarı, dolum fiyatı,
-  komisyonu, nedeni ve zamanı, spec 0008'in kapanış kaydına aynen verilebilir ve kabul edilir.
+  komisyonu, nedeni ve zamanı, spec 0008'in kapanış kaydına aynen verilebilir ve defterin kendi ölçek sınırı içinde
+  kabul edilir. Defterin hesabı (satış geliri, bakiye toplamı) 28 basamağa sığmazsa defter "ölçek hesaplanamıyor" ile
+  reddeder; emir dolu kalır, pozisyon açık kalır, iki kayıt ayrışır. `execution` bakiyeyi bilmediği için bunu önceden
+  göremez; bu akış backlog B-19'da, `app` döngüsünden önce çözülür (plan A-5).
 - R-15: Durum ve emir kayıtları değişmez değerlerdir (spec 0006 R-13). Spec 0006'nın alım davranışı (R-1…R-14) ve
   spec 0003–0005'in onay davranışı değişmez; mevcut testleri değişmeden geçer.
 
