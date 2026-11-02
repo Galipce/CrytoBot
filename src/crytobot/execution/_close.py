@@ -144,7 +144,10 @@ def place_close_order(
     try:  # the fill depends on the order's own inputs only: invalid input before the mode (A-1)
         with localcontext(BOUNDED):
             fill = price * (1 - numbers["slippage"])
+        fits = _in_scale(fill)  # exact but out of scale: the ledger would refuse it (spec 0010 R-4)
     except DecimalException:
+        fits = False
+    if not fits:
         return reject(
             OrderOutcome.INVALID_INPUT,
             f"geçersiz girdi: ölçek hesaplanamıyor (fiyat {_brief(price)}, slippage"
@@ -164,12 +167,16 @@ def place_close_order(
     pair = str(close.pair)
     assert amount is not None  # checked by the request rules
     step = numbers["miktar adımı"]
-    try:  # the exact result does not fit in 28 digits: refused, never rounded (plan 0009 Risk 5)
+    try:  # the exact result does not fit in 60 digits: refused, never rounded (plan 0009 Risk 5)
         with localcontext(BOUNDED):
             notional = amount * fill
             fee = notional * numbers["ücret"]
             off_step = amount % step != 0
+            _proceeds = notional - fee  # the ledger credits this: it must fit too (spec 0010 R-4)
+        fits = _in_scale(fee)
     except DecimalException:
+        fits = False
+    if not fits:
         return reject(
             OrderOutcome.INVALID_INPUT,
             f"geçersiz girdi: ölçek hesaplanamıyor (miktar {_brief(amount)}, dolum fiyatı"

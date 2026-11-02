@@ -6,6 +6,15 @@ from typing import Any
 
 import pytest
 
+from crytobot.execution import (
+    EMPTY_EXECUTION,
+    CloseOrderRequest,
+    OrderOutcome,
+    OrderRequest,
+    PaperExchange,
+    place_close_order,
+    place_order,
+)
 from crytobot.portfolio import (
     EMPTY_LEDGER,
     Close,
@@ -18,6 +27,7 @@ from crytobot.portfolio import (
     open_ledger,
     record_fill,
 )
+from crytobot.risk import CloseRequest, PairRules, TradeApproval, TradeIntent, approve_close
 
 OPENED = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
 NOW = OPENED + timedelta(hours=1)
@@ -90,3 +100,45 @@ def test_inputs_stay_at_twenty_eight_digits(case: str) -> None:
 
     assert result.outcome.value == "invalid_input"
     assert "28 anlamlı basamaktan uzun" in result.message
+
+
+PLAIN = PairRules(Decimal(1), Decimal(0), Decimal(0))  # no step or minimum in the way
+# (amount, price, slippage, fee rate): the ledger could not take the fill
+REFUSED: dict[str, tuple[Decimal, Decimal, Decimal, Decimal]] = {
+    # the fill alone is out of scale: amount and fee rate bring the fee back in
+    "fill_out_of_scale": (Decimal("1E+27"), Decimal("1E-999999"), Decimal("0.5"), Decimal("0.1")),
+    "fee_out_of_scale": (Decimal(1), Decimal("1E-999990"), Decimal(0), Decimal("1E-20")),
+    # the sale and the fee fit; the buy's cost and the close's proceeds need 61 digits
+    "cost_beyond_the_bound": (Decimal("1E+20"), Decimal(1), Decimal(0), Decimal("1E-61")),
+}
+
+
+def buy_order(amount: Decimal, price: Decimal, slip: Decimal, rate: Decimal) -> Any:
+    intent = TradeIntent(PAIR, "buy", price, Decimal("0.1"), Decimal("0.2"))
+    approval = TradeApproval(amount, None, False, "", intent)
+    request = OrderRequest("a", intent, approval, PLAIN, price, rate, slip, "paper")
+    return place_order(EMPTY_EXECUTION, request, PaperExchange(), NOW)
+
+
+def sell_order(amount: Decimal, price: Decimal, slip: Decimal, rate: Decimal) -> Any:
+    approval = approve_close(CloseRequest("cb-a", PAIR, amount, "hedef"))
+    request = CloseOrderRequest(approval, PLAIN, price, rate, slip, "paper")
+    return place_close_order(EMPTY_EXECUTION, request, PaperExchange(), NOW)
+
+
+# slippage only raises a buy's fill: only a close's fill can fall out of scale
+CASES = [
+    pytest.param(buy_order, "fee_out_of_scale", id="buy-fee_out_of_scale"),
+    pytest.param(buy_order, "cost_beyond_the_bound", id="buy-cost_beyond_the_bound"),
+    *[pytest.param(sell_order, case, id=f"close-{case}") for case in REFUSED],
+]
+
+
+@pytest.mark.parametrize(("place", "case"), CASES)
+def test_order_the_ledger_cannot_take_is_refused(place: Any, case: str) -> None:
+    """AC-5 (R-4): ölçek dışı dolum fiyatı ya da komisyon üreten, satış geliri ya da alım maliyeti
+    sığmayan istek emir oluşturmaz: "ölçek hesaplanamıyor", durum değişmez."""
+    result = place(*REFUSED[case])
+
+    assert result.outcome is OrderOutcome.INVALID_INPUT, result.message
+    assert result.state is EMPTY_EXECUTION and "ölçek hesaplanamıyor" in result.message

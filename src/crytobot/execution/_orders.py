@@ -319,7 +319,13 @@ def place_order(
             notional = size * fill
             fee = notional * checked.fee
             off_step = size % checked.step != 0
-    except DecimalException:  # the exact result does not fit in 28 digits (plan 0006 Risk 3)
+            _cost = notional + fee  # what the ledger debits must fit too (spec 0010 R-4)
+        # a tiny fee stays exact but out of scale: the ledger would refuse it (spec 0010 R-4);
+        # slippage only raises a buy's fill, so the fill cannot fall out of scale here
+        fits = _in_scale(fee)
+    except DecimalException:  # the exact result does not fit in 60 digits (plan 0006 Risk 3)
+        fits = False
+    if not fits:
         return reject(
             OrderOutcome.INVALID_INPUT,
             "geçersiz girdi: ölçek hesaplanamıyor (miktar"
