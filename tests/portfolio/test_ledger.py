@@ -98,6 +98,17 @@ def test_insufficient_balance_changes_nothing() -> None:
     assert "gereken 1928.7517249" in result.message and "bakiye 1928.7517248" in result.message
 
 
+def test_insufficient_balance_needs_no_difference() -> None:
+    """AC-5 (R-5; plan 0007 A-2): bakiyeyi aşan dolum, bakiye farkı 28 basamağa sığmasa da
+    "yetersiz bakiye" alır."""
+    ledger = opened(Decimal("1E-27"))  # 1E-27 - 1E+27 needs 55 digits
+
+    result = record(ledger, amount=Decimal("1E+27"), price=Decimal(1), fee=Decimal(0))
+
+    assert result.outcome is LedgerOutcome.INSUFFICIENT_BALANCE and result.ledger is ledger
+    assert f"gereken {10**27} USDT" in result.message and "bakiye 1E-27" in result.message
+
+
 def test_exact_balance_is_accepted() -> None:
     """AC-5 (R-5): tam eşit dolum kabul edilir, bakiye sıfır olur."""
     result = record(opened(Decimal("1928.7517249")))

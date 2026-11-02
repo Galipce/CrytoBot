@@ -283,17 +283,17 @@ def record_fill(ledger: Ledger, fill: Fill) -> LedgerResult:
             LedgerOutcome.UNSUPPORTED_SIDE,
             f"{checked.pair}: desteklenmeyen yön {_show(checked.side)}: yalnızca {BUY}",
         )
-    try:  # after the record checks: a retry does not depend on the balance (plan 0007 A-1)
-        with localcontext(BOUNDED):
-            after = balance - cost
-    except DecimalException:
-        return unrepresentable(balance)
-    if after < 0:
+    if cost > balance:  # exact; needs no difference (plan 0007 A-2)
         return reject(
             LedgerOutcome.INSUFFICIENT_BALANCE,
             f"{checked.pair}: yetersiz bakiye: gereken {_brief(cost)} USDT, bakiye"
             f" {_brief(balance)} USDT",
         )
+    try:  # after the record checks: a retry does not depend on the balance (plan 0007 A-1)
+        with localcontext(BOUNDED):
+            after = balance - cost
+    except DecimalException:
+        return unrepresentable(balance)
     positions = dict(ledger.positions)
     positions[position.client_order_id] = position
     entry = Entry(EntryKind.FILL, checked.at, cost, position)
