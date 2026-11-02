@@ -152,6 +152,9 @@ def run(case: Any) -> list[str]:
         assert ledger.balance is not None
         assert (Fraction(ledger.balance), Fraction(ledger.realized)) == (balance, realized)
         assert closed.closure is not None
+        # BR-2's arithmetic stays within the bound (R-2): exact, never over 60 digits
+        for value in (ledger.balance, ledger.realized, closed.closure.proceeds):
+            assert len(value.as_tuple().digits) <= 60
         if len(closed.closure.proceeds.as_tuple().digits) >= LONG:
             seen.append("long_proceeds")
     return seen
