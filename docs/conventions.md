@@ -65,7 +65,7 @@
   girdi her zaman `_show` ile, config'te `ValueError` → `RiskConfigError` — from spec 0005, review round 1 F-1,
   round 2 F-1
 - Ölçek içindeki değerler de toplamda dev sonuç üretir: `1 + oran` (oran `1E-999999`) ~1M basamaklıdır, `miktar %
-  adım` üs farkı büyükse dev bölüm ister — `execution`'da hesap 28 basamaklı, sonucu yuvarlamak yerine fırlatan
+  adım` üs farkı büyükse dev bölüm ister — `execution` ve `portfolio`'da hesap 60 basamaklı (girdi 28; spec 0010), sonucu yuvarlamak yerine fırlatan
   bağlamda (`BOUNDED`) yapılır, sığmayan sonuç "ölçek hesaplanamıyor" retti; mesajdaki uzun sayı basamak
   sayısıyla yazılır — from spec 0006, plan Risk 3
 - Sayı yardımcıları (`_number`, `_in_scale`, `_significant`, `_brief`, `_show`, `BOUNDED`) üç modülde kopya:
@@ -73,6 +73,10 @@
   başka modülün iç alt modülü import edilemez (R-3d); kurallardan biri değişirse üçü birlikte değişir; `risk`'in
   `_show`'u uzun sayıyı kısaltmaz, kısa mesaj gereken yerde `_brief` kullanılır — from spec 0007, plan Risk 2;
   spec 0009, plan Risk 2
+
+- İki modülün aynı basamak sınırı aynı hesabı sınamaz: `execution` emri doldururken defterin sonraki hesabı (gelir, maliyet,
+  bakiye) sığmayabilir; 8 ondalıklı olağan değerlerde 28 basamak yetmedi. `execution` çıktısı defterin kapısından geçmeli,
+  bakiyeye bağlı kalan ret `app`'te BR-11 sayılır — from spec 0009, review round 4 F-1; spec 0010
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
