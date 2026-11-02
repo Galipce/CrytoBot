@@ -53,35 +53,73 @@ class Position:
     opened_at: datetime
 
 
+class CloseReason(Enum):
+    """Kapanış nedeni (spec 0008 R-1, R-3)."""
+
+    STOP = "stop"
+    TARGET = "hedef"
+
+
+@dataclass(frozen=True)
+class Closure:
+    """Kapanmış pozisyon (spec 0008 R-5, R-6): kapanış satışı, geliri ve net kâr/zararı."""
+
+    client_order_id: str
+    position: Position
+    amount: Decimal
+    price: Decimal
+    fee: Decimal
+    reason: CloseReason
+    closed_at: datetime
+    proceeds: Decimal
+    realized: Decimal
+
+
 class EntryKind(Enum):
     OPENING = "opening"
     FILL = "fill"
+    CLOSE = "close"
 
 
 @dataclass(frozen=True)
 class Entry:
-    """Defter kaydı (R-9): açılışta yatırılan, dolumda düşülen USDT tutarı."""
+    """Defter kaydı (R-9): açılışta yatırılan, dolumda düşülen, kapanışta eklenen USDT tutarı."""
 
     kind: EntryKind
     at: datetime
     usdt: Decimal
     position: Position | None
+    closure: Closure | None = None
 
 
 @dataclass(frozen=True)
 class Ledger:
-    """Kayıtlar eklenme sırasıyla; değer değişmez (R-9). Bakiye `None`: defter açılmamış."""
+    """Kayıtlar eklenme sırasıyla; değer değişmez (R-9). Bakiye `None`: defter açılmamış.
+    `positions` açık pozisyonlar; `closures` kapanış kimliği → kapanış, kapanma sırasıyla;
+    `realized` gerçekleşen kâr/zarar toplamı (spec 0008 R-5, R-6)."""
 
     entries: tuple[Entry, ...]
     balance: Decimal | None
     positions: Mapping[str, Position]
+    closures: Mapping[str, Closure]
+    realized: Decimal
 
     @property
     def opened_at(self) -> datetime | None:
         return self.entries[0].at if self.entries else None
 
+    def bought(self, client_order_id: str) -> Position | None:
+        """Bu kimlikle kaydedilmiş alımın pozisyonu, açık ya da kapanmış (spec 0008 R-9)."""
+        position = self.positions.get(client_order_id)
+        if position is not None:
+            return position
+        for closure in self.closures.values():
+            if closure.position.client_order_id == client_order_id:
+                return closure.position
+        return None
 
-EMPTY_LEDGER = Ledger((), None, MappingProxyType({}))
+
+EMPTY_LEDGER = Ledger((), None, MappingProxyType({}), MappingProxyType({}), Decimal(0))
 
 
 class LedgerOutcome(Enum):
@@ -215,7 +253,7 @@ def open_ledger(ledger: Ledger, amount: object, at: object) -> LedgerResult:
         )
     entry = Entry(EntryKind.OPENING, opened, deposit, None)
     return LedgerResult(
-        Ledger((entry,), deposit, ledger.positions),
+        Ledger((entry,), deposit, ledger.positions, ledger.closures, ledger.realized),
         LedgerOutcome.OPENED,
         None,
         f"defter açıldı: {_brief(deposit)} USDT",
@@ -265,7 +303,12 @@ def record_fill(ledger: Ledger, fill: Fill) -> LedgerResult:
         checked.target,
         checked.at,
     )
-    existing = ledger.positions.get(checked.client_order_id)
+    if checked.client_order_id in ledger.closures:  # one id space for buys and closes (0008 R-9)
+        return reject(
+            LedgerOutcome.RECORD_CONFLICT,
+            f"kayıt çakışması: {checked.client_order_id} bir kapanışın kimliği",
+        )
+    existing = ledger.bought(checked.client_order_id)  # a closed buy is still recorded (0008 R-9)
     if existing is not None:
         if _content(existing, BUY) == _content(position, checked.side):
             return LedgerResult(
@@ -298,7 +341,13 @@ def record_fill(ledger: Ledger, fill: Fill) -> LedgerResult:
     positions[position.client_order_id] = position
     entry = Entry(EntryKind.FILL, checked.at, cost, position)
     return LedgerResult(
-        Ledger((*ledger.entries, entry), after, MappingProxyType(positions)),
+        Ledger(
+            (*ledger.entries, entry),
+            after,
+            MappingProxyType(positions),
+            ledger.closures,
+            ledger.realized,
+        ),
         LedgerOutcome.RECORDED,
         position,
         f"{position.pair}: {position.client_order_id} kaydedildi: miktar {_brief(position.amount)},"
@@ -318,13 +367,14 @@ class SnapshotOutcome(Enum):
 
 @dataclass(frozen=True)
 class AccountSnapshot:
-    """R-7, R-8: `risk`'in hesap girdisi (kasa, serbest bakiye, açık pozisyon sayısı) ve açık
-    pozisyonlar eklenme sırasıyla."""
+    """R-7, R-8: `risk`'in hesap girdisi (kasa, serbest bakiye, açık pozisyon sayısı), açık
+    pozisyonlar eklenme sırasıyla ve gerçekleşen kâr/zarar toplamı (spec 0008 R-11)."""
 
     equity: Decimal
     free_balance: Decimal
     open_positions: int
     positions: tuple[Position, ...]
+    realized: Decimal
 
 
 @dataclass(frozen=True)
@@ -383,7 +433,7 @@ def account_state(ledger: Ledger, prices: object) -> SnapshotResult:
         )
     return SnapshotResult(
         SnapshotOutcome.READY,
-        AccountSnapshot(equity, balance, len(positions), positions),
+        AccountSnapshot(equity, balance, len(positions), positions, ledger.realized),
         f"kasa {_brief(equity)} USDT, serbest bakiye {_brief(balance)} USDT, açık pozisyon"
         f" {len(positions)}",
     )
