@@ -381,10 +381,18 @@ def test_invalid_close_order_is_named(case: str) -> None:
     assert len(result.message) < 500
 
 
+class AlwaysPaper(str):
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    def __hash__(self) -> int:
+        return 0
+
+
 @pytest.mark.parametrize(
     "mode",
-    ["live", "backtest", "PAPER", "", NOTHING, 42, Decimal(1)],
-    ids=["live", "backtest", "upper", "empty", "none", "int", "decimal"],
+    ["live", "backtest", "PAPER", "", NOTHING, 42, Decimal(1), AlwaysPaper("live")],
+    ids=["live", "backtest", "upper", "empty", "none", "int", "decimal", "text_subclass"],
 )
 def test_unsupported_close_mode_is_named(mode: Any) -> None:
     """AC-9 (R-5): bilinmeyen ya da metin olmayan mod → "mod desteklenmiyor", "geçersiz girdi"

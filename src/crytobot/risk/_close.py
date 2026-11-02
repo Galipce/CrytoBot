@@ -54,12 +54,12 @@ def close_request_problems(request: CloseRequest) -> list[str]:
     """R-8, R-13: talebin biçimi; `execution` onaylı talebi de bununla yeniden denetler."""
     problems: list[str] = []
     position_id = request.position_id
-    if not (isinstance(position_id, str) and _POSITION_ID.fullmatch(position_id)):
+    if not (type(position_id) is str and _POSITION_ID.fullmatch(position_id)):  # plain str (A-4)
         problems.append(
             f"pozisyon kimliği {_short(position_id)} cb- ve 1-32 karakterlik harf, rakam, - ya da _"
             " olmalı"
         )
-    if not isinstance(request.pair, str):
+    if type(request.pair) is not str:
         problems.append(f"çift {_short(request.pair)} metin olmalı")
     amount = _number(request.amount)
     if amount is None or amount <= 0:
@@ -69,7 +69,7 @@ def close_request_problems(request: CloseRequest) -> list[str]:
     elif _significant(amount) > DIGITS:
         problems.append(f"miktar {_brief(amount)} {DIGITS} anlamlı basamaktan uzun")
     reason = request.reason
-    if not (isinstance(reason, str) and reason in CLOSE_REASONS):
+    if not (type(reason) is str and reason in CLOSE_REASONS):
         problems.append(f"neden {_short(reason)} stop ya da hedef olmalı")
     return problems
 

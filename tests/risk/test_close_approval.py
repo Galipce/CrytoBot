@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from enum import Enum
 from fractions import Fraction
 from typing import Any
 
@@ -99,6 +100,18 @@ def test_entry_limits_do_not_block_a_close(case: str) -> None:
     assert close.approved
 
 
+# a text subclass passes `isinstance` but its value is not what is checked: only plain `str` (A-4)
+TextEnum = Enum("TextEnum", {"HEDEF": "hedef", "BTC": "BTC/USDT", "ID": "cb-s1"}, type=str)
+
+
+class AlwaysEqual(str):
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    def __hash__(self) -> int:
+        return 0
+
+
 LONG = Decimal("1." + "2" * 28)  # 29 significant digits
 INVALID: dict[str, tuple[dict[str, Any], str]] = {
     "position-no_prefix": ({"position_id": "s1-btc-0001"}, "pozisyon kimliği 's1-btc-0001'"),
@@ -116,6 +129,10 @@ INVALID: dict[str, tuple[dict[str, Any], str]] = {
     "amount-huge_int": ({"amount": -(10**4300)}, "miktar <4301 basamaklı sayı> sıfırdan büyük"),
     "amount-out_of_scale": ({"amount": Decimal("1E+1000000")}, "ölçeği varsayılan üs aralığı"),
     "amount-29_digits": ({"amount": LONG}, "<29 basamaklı sayı> 28 anlamlı basamaktan uzun"),
+    "position-text_subclass": ({"position_id": TextEnum.ID}, "pozisyon kimliği"),
+    "pair-text_subclass": ({"pair": TextEnum.BTC}, "çift"),
+    "reason-text_subclass": ({"reason": TextEnum.HEDEF}, "neden"),
+    "reason-always_equal": ({"reason": AlwaysEqual("junk")}, "neden"),
     "reason-other": ({"reason": "elle"}, "neden 'elle' stop ya da hedef"),
     "reason-not_text": ({"reason": NOTHING}, "neden None stop ya da hedef"),
 }

@@ -140,7 +140,7 @@ def place_close_order(
             f"geçersiz girdi: ölçek hesaplanamıyor (fiyat {_brief(price)}, slippage"
             f" {_brief(numbers['slippage'])})",
         )
-    if not (isinstance(request.mode, str) and request.mode == PAPER):
+    if not (type(request.mode) is str and request.mode == PAPER):  # plain str (plan A-4)
         return reject(
             OrderOutcome.UNSUPPORTED_MODE,
             f"mod {_show(request.mode)} desteklenmiyor: yalnızca paper",
