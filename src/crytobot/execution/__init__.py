@@ -4,8 +4,13 @@ Bugün yalnızca paper mod vardır (spec 0006): `place_order`, `risk`'in onaylad
 (`TradeApproval.intent`) simülatörde anında dolan bir piyasa alımı oluşturur. Öneri kimliği
 `clientOrderId`'yi belirler (`cb-` + kimlik); aynı kimlik ikinci bir emir oluşturmaz. Miktar
 yuvarlanmaz: adımın katı değilse ya da asgarilerin altındaysa istek reddedilir. Durumu bilinmeyen
-bir emir varken (güvenli mod, BR-11) yeni emir oluşmaz; `query_order` durumu netleştirir, güvenli
+bir emir varken (güvenli mod, BR-11) yeni alım oluşmaz; `query_order` durumu netleştirir, güvenli
 moda giriş ve çıkış birer `Notification` üretir.
+
+`place_close_order` (spec 0009), `risk`'in kapanış onayından (`CloseApproval`) açık bir pozisyonun
+paper piyasa satışını oluşturur: dolum fiyatı = fiyat * (1 - slippage), kimlik pozisyonunkinden
+türer (`cb-` → `cx-`), aynı pozisyon iki kez satılmaz. Kapanış koruyucudur: güvenli mod onu
+durdurmaz; ama durumu bilinmeyen bir kapanış da yeni alımları durdurur.
 """
 
 from crytobot.execution._close import (

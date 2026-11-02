@@ -69,8 +69,10 @@
   bağlamda (`BOUNDED`) yapılır, sığmayan sonuç "ölçek hesaplanamıyor" retti; mesajdaki uzun sayı basamak
   sayısıyla yazılır — from spec 0006, plan Risk 3
 - Sayı yardımcıları (`_number`, `_in_scale`, `_significant`, `_brief`, `_show`, `BOUNDED`) üç modülde kopya:
-  `risk` (kaynak), `execution/_numbers.py`, `portfolio/_numbers.py` — başka modülün iç alt modülü import
-  edilemez (R-3d); kurallardan biri değişirse üçü birlikte değişir — from spec 0007, plan Risk 2
+  `risk` (`_limits.py`, `_approval.py`; `BOUNDED` yok), `execution/_numbers.py`, `portfolio/_numbers.py` —
+  başka modülün iç alt modülü import edilemez (R-3d); kurallardan biri değişirse üçü birlikte değişir; `risk`'in
+  `_show`'u uzun sayıyı kısaltmaz, kısa mesaj gereken yerde `_brief` kullanılır — from spec 0007, plan Risk 2;
+  spec 0009, plan Risk 2
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.

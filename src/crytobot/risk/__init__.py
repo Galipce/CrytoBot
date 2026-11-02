@@ -10,6 +10,9 @@ durumu ister ve günlük zarar ya da drawdown limitinde reddeder; durdurmayı ya
 ile kaldırır. Önerinin hedefe kadar beklenen kârı, efektif maliyetin (komisyon + spread +
 slippage) katını geçmiyorsa öneri reddedilir. Onay sonucu karara bağladığı öneriyi değiştirmeden
 taşır (`TradeApproval.intent`); `execution` emri yalnızca o öneriden oluşturur.
+Açık pozisyonun stop ya da hedefte kapanışı yeni işlem değildir (spec 0009): `approve_close`
+talebi yalnızca biçimine bakarak onaylar — hiçbir giriş limiti, beyaz liste ya da kill switch
+kapanışı engellemez; `execution` satışı yalnızca bu onaydan oluşturur (BR-9).
 """
 
 from crytobot.risk._approval import (
