@@ -367,6 +367,12 @@ TOO_SMALL = replace(RULES, min_amount=Decimal("20"))
 REFUSALS: dict[str, tuple[bool, dict[str, Any], OrderOutcome]] = {
     # (an existing close in the state, overrides): two problems each; R-12's order wins
     "invalid_and_mode": (False, {"price": Decimal(0), "mode": "live"}, OrderOutcome.INVALID_INPUT),
+    # the fill depends on the order's own inputs only: its scale comes before the mode (plan A-1)
+    "unrepresentable_fill_and_mode": (
+        False,
+        {"price": Decimal("109.9450000000000000000000001"), "mode": "live"},
+        OrderOutcome.INVALID_INPUT,
+    ),
     "mode_and_unapproved": (
         False,
         {"mode": "live", "approval": NOTHING},

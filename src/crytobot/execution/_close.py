@@ -114,9 +114,9 @@ def place_close_order(
     state: ExecutionState, request: CloseOrderRequest, exchange: PaperExchange, now: object
 ) -> CloseOrderResult:
     """BR-9: kapanış onayından paper piyasa satışı oluşturur ya da isteği adlandırarak reddeder.
-    Ret sırası (R-12, plan 0009 Risk 4): emrin kendi girdileri → mod → onaysız kapanış → talebin
-    girdileri ve ölçek → zaten var / kimlik çakışması → borsa kuralı. Güvenli mod kapanışı
-    durdurmaz (R-11)."""
+    Ret sırası (R-12, plan 0009 A-1): emrin kendi girdileri ve dolum ölçeği → mod → onaysız kapanış
+    → talebin girdileri ve miktara bağlı ölçek → zaten var / kimlik çakışması → borsa kuralı.
+    Güvenli mod kapanışı durdurmaz (R-11)."""
     approval = request.approval
     close = approval.request if isinstance(approval, CloseApproval) else None
     pair = close.pair if close is not None else None
@@ -129,6 +129,16 @@ def place_close_order(
     if problems:
         return reject(OrderOutcome.INVALID_INPUT, "geçersiz girdi: " + "; ".join(problems))
     assert isinstance(now, datetime)  # checked above
+    price = numbers["fiyat"]
+    try:  # the fill depends on the order's own inputs only: invalid input before the mode (A-1)
+        with localcontext(BOUNDED):
+            fill = price * (1 - numbers["slippage"])
+    except DecimalException:
+        return reject(
+            OrderOutcome.INVALID_INPUT,
+            f"geçersiz girdi: ölçek hesaplanamıyor (fiyat {_brief(price)}, slippage"
+            f" {_brief(numbers['slippage'])})",
+        )
     if not (isinstance(request.mode, str) and request.mode == PAPER):
         return reject(
             OrderOutcome.UNSUPPORTED_MODE,
@@ -142,19 +152,17 @@ def place_close_order(
     position_id, amount, reason = str(close.position_id), _number(close.amount), str(close.reason)
     pair = str(close.pair)
     assert amount is not None  # checked by the request rules
-    step, price = numbers["miktar adımı"], numbers["fiyat"]
+    step = numbers["miktar adımı"]
     try:  # the exact result does not fit in 28 digits: refused, never rounded (plan 0009 Risk 5)
         with localcontext(BOUNDED):
-            fill = price * (1 - numbers["slippage"])
             notional = amount * fill
             fee = notional * numbers["ücret"]
             off_step = amount % step != 0
     except DecimalException:
         return reject(
             OrderOutcome.INVALID_INPUT,
-            f"geçersiz girdi: ölçek hesaplanamıyor (miktar {_brief(amount)}, fiyat"
-            f" {_brief(price)}, slippage {_brief(numbers['slippage'])}, ücret"
-            f" {_brief(numbers['ücret'])}, adım {_brief(step)})",
+            f"geçersiz girdi: ölçek hesaplanamıyor (miktar {_brief(amount)}, dolum fiyatı"
+            f" {fill}, ücret {_brief(numbers['ücret'])}, adım {_brief(step)})",
         )
     client_order_id = CLOSE_ID_PREFIX + position_id.removeprefix("cb-")  # deterministic (R-8)
     existing = state.orders.get(client_order_id)
@@ -217,7 +225,7 @@ def place_close_order(
         ExecutionState(MappingProxyType(orders), MappingProxyType(quotes)),
         OrderOutcome.CREATED,
         order,
-        f"{pair}: {client_order_id} {status.value}: {position_id} satışı, miktar {_brief(amount)}"
-        + (f", dolum fiyatı {fill}" if filled else ""),
+        f"{pair}: {client_order_id} {status.value}: {position_id} satışı, miktar"
+        f" {_brief(amount)}" + (f", dolum fiyatı {fill}" if filled else ""),
         notifications,
     )
