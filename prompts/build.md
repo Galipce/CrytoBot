@@ -22,6 +22,8 @@ Two speeds, rule 7). Before every push, run --fast plus the full-only tests of t
 with the test tool's filter (rule 8); when CI runs full on the pushed commit, do not run full
 locally as well. The handoff carries the FULL profile output, shown — CHECK GREEN (full, …)
 (docs/testing.md, Two speeds, one contract).
+Project rule (docs/testing.md, Two speeds, rule 10): the full run happens once per spec, in CI on the
+pull request opened at ship; until then --fast green stands wherever this prompt says full green.
 Done means: all steps complete, ./scripts/check GREEN (full), changed-file list matches the plan
 as amended (its Amendments); if scripts/check.conf changed in this work, ./scripts/residue and
 ./scripts/residue --fast are clean (docs/testing.md, Resource hygiene 2) — you run them, never

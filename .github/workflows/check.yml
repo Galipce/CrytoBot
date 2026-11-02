@@ -1,7 +1,9 @@
 name: check
+# The one full run of a spec: the pull request opened at ship (docs/testing.md, Two speeds, rule 10).
+# Branch pushes and merges to main run nothing; workflow_dispatch is the manual rerun.
 on:
-  push:
   pull_request:
+  workflow_dispatch:
 
 # Least privilege: no job writes to the repository (review 0001, L-2).
 permissions:

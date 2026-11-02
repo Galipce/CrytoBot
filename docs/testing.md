@@ -190,6 +190,15 @@ A screenshot proves a criterion only against the spec's "User experience": every
    project writes, exit 0 = met; ANEW names no tool (ANEW-0011). check runs them before the first
    step (unmet → red, never skipped); doctor says which profile this machine can run. A profile
    that cannot run here is decided at bootstrap or plan time, not found at BUILD's end (R-13).
+10. **Bu projede full koşu spec başına birdir** (proje kararı, Galip Badem, 2026-11-02; kural 2'nin ve
+    segment çıkışlarının "full green" şartının önüne geçer).
+    - Build, review, fix turları ve VERIFY `--fast` ile ilerler; yerelde full koşulmaz. Handoff `CHECK GREEN
+      (fast, …)` gösterir ve full'un PR'da koşacağını yazar. VERIFY kanıtı: adı geçen test, `--fast` ve kasıtlı bozma.
+    - Tek full koşu, ship onayından sonra açılan PR'daki CI'dır. `check.yml` yalnız `pull_request` ile koşar; dal
+      push'u ve `main`'e merge koşmaz; gerekirse elle `workflow_dispatch`.
+    - Spec'in `specs/done/`'a taşınması, kriter işaretleri ve skor kartı aynı PR'dadır; ayrı ship PR'ı açılmaz.
+    - Merge bu koşu yeşil olmadan yapılmaz. Kırmızı → BUILD'e döner; düzeltme push'u PR'ı yeniden koşturur.
+    - Bedeli: `test-slow` ve coverage kapısı yalnız bu koşuda görülür; hata review ve VERIFY'dan sonra çıkabilir.
 
 ## Determinism
 Flaky tests are fixed, not retried or skipped — see R-03. Evidence of a fix: 5 consecutive green runs.
