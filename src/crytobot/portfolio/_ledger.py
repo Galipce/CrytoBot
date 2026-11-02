@@ -241,16 +241,20 @@ def record_fill(ledger: Ledger, fill: Fill) -> LedgerResult:
             f"geçersiz girdi: dolum zamanı {checked.at.isoformat()} açılıştan"
             f" ({opened_at.isoformat()}) önce",
         )
-    try:  # before the record checks: an incalculable fill is invalid input first (R-10)
-        with localcontext(BOUNDED):
-            cost = checked.amount * checked.price + checked.fee
-            after = balance - cost
-    except DecimalException:  # the exact result does not fit in 28 digits (plan 0007 Risk 3)
+
+    def unrepresentable(balance: Decimal) -> LedgerResult:
+        """The exact result does not fit in 28 digits (plan 0007 Risk 3)."""
         return reject(
             LedgerOutcome.INVALID_INPUT,
             f"geçersiz girdi: ölçek hesaplanamıyor (miktar {_brief(checked.amount)}, dolum fiyatı"
             f" {_brief(checked.price)}, komisyon {_brief(checked.fee)}, bakiye {_brief(balance)})",
         )
+
+    try:  # before the record checks: an incalculable fill is invalid input first (R-10)
+        with localcontext(BOUNDED):
+            cost = checked.amount * checked.price + checked.fee
+    except DecimalException:
+        return unrepresentable(balance)
     position = Position(
         checked.client_order_id,
         checked.pair,
@@ -279,6 +283,11 @@ def record_fill(ledger: Ledger, fill: Fill) -> LedgerResult:
             LedgerOutcome.UNSUPPORTED_SIDE,
             f"{checked.pair}: desteklenmeyen yön {_show(checked.side)}: yalnızca {BUY}",
         )
+    try:  # after the record checks: a retry does not depend on the balance (plan 0007 A-1)
+        with localcontext(BOUNDED):
+            after = balance - cost
+    except DecimalException:
+        return unrepresentable(balance)
     if after < 0:
         return reject(
             LedgerOutcome.INSUFFICIENT_BALANCE,

@@ -116,6 +116,24 @@ def test_same_fill_is_already_recorded() -> None:
     assert "zaten kayıtlı" in again.message
 
 
+def test_retry_is_already_recorded_whatever_the_balance() -> None:
+    """AC-6 (R-6, R-10; plan 0007 A-1): bakiye farkı artık 28 basamağa sığmasa da birebir aynı retry
+    → "zaten kayıtlı"; sonuç defterin geçmişine bağlı değil."""
+    first = record(opened(Decimal("2E+27")), amount=Decimal("1E+27"), price=Decimal(1), fee=0)
+    ledger = record(
+        first.ledger, client_order_id="cb-2", amount=Decimal("1E+27") - 1, price=1, fee=0
+    ).ledger
+    ledger = record(
+        ledger, client_order_id="cb-3", amount=1 - Decimal("1E-27"), price=1, fee=0
+    ).ledger
+    assert ledger.balance == Decimal("1E-27")  # 1E-27 - 1E+27 needs 55 digits
+
+    again = record(ledger, amount=Decimal("1E+27"), price=Decimal(1), fee=0)
+
+    assert again.outcome is LedgerOutcome.ALREADY_RECORDED and again.ledger is ledger
+    assert again.position == first.position
+
+
 CONFLICTS: dict[str, dict[str, Any]] = {
     "pair": {"pair": "ETH/USDT"},
     "side": {"side": "sell"},
