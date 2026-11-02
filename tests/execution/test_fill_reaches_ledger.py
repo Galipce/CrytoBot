@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from fractions import Fraction
 from typing import Any
 
 import pytest
@@ -11,6 +12,7 @@ from crytobot.execution import (
     CloseOrderRequest,
     OrderOutcome,
     OrderRequest,
+    OrderStatus,
     PaperExchange,
     place_close_order,
     place_order,
@@ -23,6 +25,7 @@ from crytobot.portfolio import (
     Fill,
     Ledger,
     LedgerOutcome,
+    account_state,
     close_position,
     open_ledger,
     record_fill,
@@ -142,3 +145,150 @@ def test_order_the_ledger_cannot_take_is_refused(place: Any, case: str) -> None:
 
     assert result.outcome is OrderOutcome.INVALID_INPUT, result.message
     assert result.state is EMPTY_EXECUTION and "ölçek hesaplanamıyor" in result.message
+
+
+STEP = PairRules(Decimal("0.00000001"), Decimal(0), Decimal(0))
+
+
+def test_b19_close_reaches_the_ledger() -> None:
+    """AC-1 (R-2, R-3, R-5, R-8; B-19): 8 ondalıklı olağan değerlerle kapanış emri dolar ve defter
+    kabul eder; bakiye ve kâr tam aritmetikle, yuvarlamasız."""
+    ledger = record_fill(opened(), fill()).ledger
+    assert ledger.balance == Decimal("98517.4085318524")
+    approval = approve_close(CloseRequest("cb-a", PAIR, AMOUNT, "hedef"))
+    request = CloseOrderRequest(
+        approval, STEP, Decimal("0.12345678"), Decimal("0.00075"), Decimal("0.0005"), "paper"
+    )
+
+    order = place_close_order(EMPTY_EXECUTION, request, PaperExchange(), LATER).order
+
+    assert order is not None and order.fill_price is not None and order.fee is not None
+    assert order.fill_price == Decimal("0.123395051610")
+    assert order.fee == Decimal("1.1425467638833229568602250")
+    closed = close_position(
+        ledger,
+        close(client_order_id=order.client_order_id, price=order.fill_price, fee=order.fee),
+    )
+    assert closed.outcome is CloseOutcome.CLOSED, closed.message
+    assert closed.ledger.balance == Decimal("100039.661670266280619523439775")
+    assert closed.ledger.realized == Decimal("39.661670266280619523439775")
+
+
+def test_b19_buy_reaches_the_ledger() -> None:
+    """AC-2 (R-2, R-3): aynı değerlerle alım emri dolar, defter dolumu kabul eder, bakiye tam
+    tutar."""
+    price, rate = Decimal("0.12345678"), Decimal("0.00075")
+    intent = TradeIntent(PAIR, "buy", price, Decimal("0.1"), Decimal("0.2"))
+    request = OrderRequest(
+        "a", intent, TradeApproval(AMOUNT, None, False, "", intent), STEP, price, rate,
+        Decimal("0.0005"), "paper",
+    )  # fmt: skip
+
+    order = place_order(EMPTY_EXECUTION, request, PaperExchange(), NOW).order
+
+    assert order is not None and order.fill_price is not None and order.fee is not None
+    result = record_fill(opened(), fill(price=order.fill_price, fee=order.fee))
+    fill_price = Fraction(price) * (1 + Fraction("0.0005"))
+    notional = Fraction(AMOUNT) * fill_price
+    assert result.outcome is LedgerOutcome.RECORDED, result.message
+    assert result.ledger.balance is not None
+    assert Fraction(result.ledger.balance) == 100000 - notional * (1 + Fraction(rate))
+
+
+def close_with(amount: Any, price: Any, slip: Any, rate: Any) -> Any:
+    approval = approve_close(CloseRequest("cb-a", PAIR, Decimal(amount), "hedef"))
+    request = CloseOrderRequest(
+        approval, PLAIN, Decimal(price), Decimal(rate), Decimal(slip), "paper"
+    )
+    return place_close_order(EMPTY_EXECUTION, request, PaperExchange(), NOW)
+
+
+def balance_after(deep: Decimal) -> Any:
+    return record_fill(opened(Decimal("1E+20")), fill(amount=1, price=1, fee=deep))
+
+
+def realized_after(deep: Decimal) -> Any:
+    """A big realized profit, then the balance spent: only the realized total stays long."""
+    ledger = record_fill(opened(Decimal(10)), fill(amount=1, price=1, fee=0)).ledger
+    gain = close(amount=1, price=Decimal("1E+20"), fee=0)
+    ledger = close_position(ledger, gain).ledger
+    spend = fill(client_order_id="cb-b", amount=1, price=Decimal("1E+20"), fee=0)
+    ledger = record_fill(ledger, spend).ledger
+    third = fill(client_order_id="cb-c", amount=1, price=2, fee=0)
+    ledger = record_fill(ledger, third).ledger
+    last = close(client_order_id="cx-c", position_id="cb-c", amount=1, price=2, fee=deep)
+    return close_position(ledger, last)
+
+
+def equity_with(mark: Decimal) -> Any:
+    ledger = record_fill(
+        opened(Decimal(1)), fill(amount=1, price=Decimal("0.5"), fee=Decimal("1E-40"))
+    ).ledger
+    return account_state(ledger, {PAIR: mark})
+
+
+# (what fits in exactly 60 digits, what needs 61): each one a calculation of R-2
+BOUND: dict[str, tuple[Any, Any]] = {
+    "fill": (
+        lambda: close_with(1, 1, "1E-60", 0),
+        lambda: close_with(1, 1, "1E-61", 0),
+    ),
+    "notional": (
+        lambda: close_with(3, 1, "1E-59", 0),
+        lambda: close_with(3, 1, "1E-60", 0),
+    ),
+    "fee": (
+        lambda: close_with(1, 1, 0, "0." + "3" * 60),
+        lambda: close_with(1, 1, 0, "0." + "3" * 61),
+    ),
+    "proceeds": (
+        lambda: close_with("1E+20", 1, 0, "1E-60"),
+        lambda: close_with("1E+20", 1, 0, "1E-61"),
+    ),
+    "balance": (
+        lambda: balance_after(Decimal("1E-40")),
+        lambda: balance_after(Decimal("1E-41")),
+    ),
+    "realized_total": (
+        lambda: realized_after(Decimal("1E-40")),
+        lambda: realized_after(Decimal("1E-41")),
+    ),
+    "equity": (
+        lambda: equity_with(Decimal("1E+19")),
+        lambda: equity_with(Decimal("1E+20")),
+    ),
+}
+
+
+@pytest.mark.parametrize("case", list(BOUND))
+def test_calculation_bound_is_sixty_digits(case: str) -> None:
+    """AC-3 (R-2, R-8): 60 basamağa tam sığan hesap kabul, 61 gerektiren → "ölçek hesaplanamıyor";
+    yuvarlama yok."""
+    fits, too_long = BOUND[case]
+
+    accepted, refused = fits(), too_long()
+
+    assert "ölçek hesaplanamıyor" not in accepted.message, accepted.message
+    assert accepted.outcome.value in ("created", "recorded", "closed", "ready")
+    assert refused.outcome.value == "invalid_input" and "ölçek hesaplanamıyor" in refused.message
+
+
+def test_balance_beyond_the_bound_diverges_by_name() -> None:
+    """AC-6 (R-6): emir dolu, bakiye toplamı 60 basamağa sığmayan defter → "ölçek hesaplanamıyor",
+    defter değişmez, emir dolu kalır, tekrar isteği "zaten var"."""
+    ledger = record_fill(opened(Decimal("1E+48")), fill()).ledger
+    approval = approve_close(CloseRequest("cb-a", PAIR, AMOUNT, "hedef"))
+    request = CloseOrderRequest(
+        approval, STEP, Decimal("0.12345678"), Decimal("0.00075"), Decimal("0.0005"), "paper"
+    )
+    placed = place_close_order(EMPTY_EXECUTION, request, PaperExchange(), LATER)
+    order = placed.order
+    assert order is not None and order.fill_price is not None and order.fee is not None
+
+    result = close_position(ledger, close(price=order.fill_price, fee=order.fee))
+    again = place_close_order(placed.state, request, PaperExchange(), LATER)
+
+    assert result.outcome is CloseOutcome.INVALID_INPUT and result.ledger is ledger
+    assert "ölçek hesaplanamıyor" in result.message
+    assert order.status is OrderStatus.FILLED and list(ledger.positions) == ["cb-a"]
+    assert again.outcome is OrderOutcome.ALREADY_EXISTS and again.order == order
