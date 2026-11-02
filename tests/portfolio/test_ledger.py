@@ -313,6 +313,8 @@ REFUSALS: dict[str, tuple[str, dict[str, Any], LedgerOutcome]] = {
     "invalid_and_not_opened": ("empty", {"amount": Decimal(0)}, LedgerOutcome.INVALID_INPUT),
     "repeat_and_sell": ("recorded", {"side": "sell"}, LedgerOutcome.RECORD_CONFLICT),
     "sell_and_insufficient": ("poor", {"side": "sell"}, LedgerOutcome.UNSUPPORTED_SIDE),
+    # the balance difference's scale belongs to the balance step (plan 0007 A-2)
+    "sell_and_unrepresentable_balance": ("huge", {"side": "sell"}, LedgerOutcome.UNSUPPORTED_SIDE),
     "unrepresentable_and_repeat": (
         "recorded",
         {"fee": Decimal("1E-999999")},
@@ -330,6 +332,7 @@ def test_refusal_order(case: str) -> None:
         "empty": EMPTY_LEDGER,
         "recorded": record().ledger,
         "poor": opened(Decimal("1")),
+        "huge": opened(Decimal("1E+999999")),
     }
 
     result = record(ledgers[kind], **overrides)

@@ -53,7 +53,9 @@ döngüsüne bağlama.
   düzeltme yeni bir kayıtla yapılır (domain invariant). Defter değişmez bir değerdir: her kabul edilen istek yeni bir
   defter döndürür; reddedilen istek defteri değiştirmez.
 - R-10: Ret sırası: geçersiz girdi → defter açılmamış / defter zaten açık → zaten kayıtlı / kayıt çakışması →
-  desteklenmeyen yön → yetersiz bakiye. Birden fazla sorun varsa bu sıradaki ilki döner.
+  desteklenmeyen yön → yetersiz bakiye. Birden fazla sorun varsa bu sıradaki ilki döner. Dolum bedelinin
+  (miktar × dolum fiyatı + komisyon) ölçeği geçersiz girdi adımında, bakiyeden düşülmesinin ölçeği yetersiz bakiye
+  adımında denetlenir (plan A-2).
 - R-11: Sayı ve girdi kuralları spec 0006 R-12 ile aynıdır: başlangıç tutarı, miktar, dolum fiyatı, stop, hedef ve
   güncel fiyatlar sıfırdan büyük; komisyon negatif olmayan; hepsi sonlu `Decimal`/`int` (mantıksal değer ve kayan
   nokta hariç), üssü varsayılan aralıkta (±999999) ve en fazla 28 anlamlı basamaklı olmalıdır; `clientOrderId`
@@ -112,7 +114,8 @@ spec'lerinde gelir.)
   backlog B-15); dolum ya da kasa hesabı 28 basamağa sığmayan girdi → "ölçek hesaplanamıyor"; uzun sayı mesajda
   basamak sayısıyla, mesaj kısa (R-2, R-7, R-11).
 - [ ] AC-9 — Ret sırası: geçersiz girdi + açılmamış defter → "geçersiz girdi"; tekrar eden kimlik + satış yönü →
-  "zaten kayıtlı"/"kayıt çakışması"; satış yönü + yetersiz bakiye → "desteklenmeyen yön" (R-10).
+  "zaten kayıtlı"/"kayıt çakışması"; satış yönü + yetersiz bakiye → "desteklenmeyen yön"; satış yönü + bakiyeden
+  düşülmesi hesaplanamayan dolum → "desteklenmeyen yön" (R-10).
 - [ ] AC-10 — Silinmez defter: yeni kayıt eklendikten sonra önceki kayıtlar ve sıraları aynıdır; reddedilen her istek
   defteri aynen bırakır (R-9).
 - [ ] AC-11 — Risk girdisi: defterden türetilen hesap durumuyla spec 0003 onayı ve spec 0004 gözlemi, aynı değerleri
