@@ -1,6 +1,6 @@
 # Spec 0007 — Portföy defteri: dolan paper alımlardan bakiye, pozisyon ve kasa
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0007-plan.md`
 
@@ -136,8 +136,8 @@ spec'lerinde gelir.)
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 2 onay sonrası, triage onaylı: AC-8 netleştirme (A-1), R-10 ve AC-9 ölçek adımları (A-2) |
+| Fix rounds | 3 (fix-1 review r1, fix-2 review r2, fix-3 VERIFY); review r3 ve r4 temiz |
+| Review findings: real / noise / deferred | 8 / 1 / 1 (r1: F-1…F-4 real, F-1'in büyüklük sınırı defer B-15 · r2: F-1…F-3 real · r3, r4: bulgu yok · VERIFY: F-1 real, F-2 noise) |
+| Regressions introduced | 0 davranış regresyonu; fix-1 (r1 F-2) satış + hesaplanamayan bakiye farkının ret sırasını değiştirdi, spec'e yazılmadı (r2 F-1); build'de test map kimlikleri yanlıştı (r1 F-3) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
