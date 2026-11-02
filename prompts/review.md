@@ -37,6 +37,11 @@ code broken on purpose (prompts/verify.md); if either fails, say so and review o
 "clean" verdict, announce the switch to QA and add the prompts/verify.md criterion ↔ evidence
 table to this report (UI screenshots: capture them as prompts/verify.md says, for the SHIP
 gallery). Any finding: stop at the review.
+Project rule, unrealistic values: a finding that needs a value no real exchange or caller produces
+(an exponent near +-999999, a million-character id, a deliberately overridden class, extreme nesting)
+and causes no money loss and no wrong record is marked `backlog-only`: recommend defer, it opens no
+fix round. Show why the value is unrealistic. Ordinary values (a few decimals) never qualify, and a
+wrong or diverging record never qualifies.
 Do not invent findings to appear useful — "clean" is a valid verdict. I will triage:
 real / noise / defer / investigate.
 Write in the docs language (AGENTS.md, Language); field labels stay English.
