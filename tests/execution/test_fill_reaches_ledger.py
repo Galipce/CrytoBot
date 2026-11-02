@@ -85,6 +85,15 @@ def test_ledger_takes_sixty_digit_fills(field: str) -> None:
     assert "60 anlamlı basamaktan uzun" in close_long.message
 
 
+def close_with(amount: Any, price: Any, slip: Any, rate: Any) -> Any:
+    approval = approve_close(CloseRequest("cb-a", PAIR, Decimal(amount), "hedef"))
+    rules = PairRules(Decimal(1), Decimal(0), Decimal(0))
+    request = CloseOrderRequest(
+        approval, rules, Decimal(price), Decimal(rate), Decimal(slip), "paper"
+    )
+    return place_close_order(EMPTY_EXECUTION, request, PaperExchange(), NOW)
+
+
 def order_with(**overrides: Any) -> Any:
     fields = {
         "stop": Decimal("0.1"),
@@ -109,6 +118,8 @@ INPUTS: dict[str, Any] = {
     ),
     "opening": lambda: open_ledger(EMPTY_LEDGER, LONG_29, OPENED),
     # the order refuses what the ledger would: it never fills first (plan 0010 A-2)
+    "order-price": lambda: order_with(price=LONG_29),
+    "close-order-price": lambda: close_with(AMOUNT, LONG_29, 0, 0),
     "order-stop": lambda: order_with(stop=LONG_29),
     "order-target": lambda: order_with(target=LONG_29),
 }
@@ -211,14 +222,6 @@ def test_b19_buy_reaches_the_ledger() -> None:
     assert result.outcome is LedgerOutcome.RECORDED, result.message
     assert result.ledger.balance is not None
     assert Fraction(result.ledger.balance) == 100000 - notional * (1 + Fraction(rate))
-
-
-def close_with(amount: Any, price: Any, slip: Any, rate: Any) -> Any:
-    approval = approve_close(CloseRequest("cb-a", PAIR, Decimal(amount), "hedef"))
-    request = CloseOrderRequest(
-        approval, PLAIN, Decimal(price), Decimal(rate), Decimal(slip), "paper"
-    )
-    return place_close_order(EMPTY_EXECUTION, request, PaperExchange(), NOW)
 
 
 def balance_after(deep: Decimal) -> Any:
