@@ -157,37 +157,47 @@ def test_changed_close_is_a_conflict(field: str) -> None:
     assert "kayıt çakışması: cb-x1" in result.message
 
 
-def test_close_with_a_buy_id_is_a_conflict() -> None:
-    """AC-7 (R-9): alımın kimliğiyle gelen kapanış → "kayıt çakışması"."""
-    ledger = bought()
+SHARED: dict[str, tuple[str, Any, Any, str]] = {
+    # (ledger, request, expected outcome, message fragment)
+    "close_with_a_buy_id": (
+        "bought",
+        replace(CLOSE, client_order_id="cb-s1-btc-0001"),
+        CloseOutcome.RECORD_CONFLICT,
+        "bir alımın kimliği",
+    ),
+    "buy_with_a_close_id": (
+        "closed",
+        replace(FILL, client_order_id="cb-x1"),
+        LedgerOutcome.RECORD_CONFLICT,
+        "bir kapanışın kimliği",
+    ),
+    # plan 0008 Risk 2: a closed buy is still recorded, so it is never written twice
+    "closed_buy_again": ("closed", replace(FILL, at=LATER), LedgerOutcome.ALREADY_RECORDED, ""),
+    "closed_buy_changed": (
+        "closed",
+        replace(FILL, amount=Decimal("1")),
+        LedgerOutcome.RECORD_CONFLICT,
+        "cb-s1-btc-0001 başka bir içerikle",
+    ),
+}
 
-    result = close(ledger, client_order_id="cb-s1-btc-0001")
 
-    assert result.outcome is CloseOutcome.RECORD_CONFLICT and result.ledger is ledger
-    assert "bir alımın kimliği" in result.message
+@pytest.mark.parametrize("case", list(SHARED))
+def test_ids_are_shared_by_buys_and_closes(case: str) -> None:
+    """AC-7 (R-9): alım ve kapanış tek kimlik alanını paylaşır: birinin kimliğiyle gelen öbürü →
+    "kayıt çakışması"; kapanmış pozisyonun alımı yeniden gelirse ikinci kez yazılmaz."""
+    kind, request, expected, fragment = SHARED[case]
+    ledger = bought() if kind == "bought" else close().ledger
 
+    result: Any = (
+        close_position(ledger, request)
+        if isinstance(request, Close)
+        else record_fill(ledger, request)
+    )
 
-def test_buy_with_a_close_id_is_a_conflict() -> None:
-    """AC-7 (R-9): kapanışın kimliğiyle gelen alım → "kayıt çakışması"."""
-    ledger = close().ledger
-
-    result = record_fill(ledger, replace(FILL, client_order_id="cb-x1"))
-
-    assert result.outcome is LedgerOutcome.RECORD_CONFLICT and result.ledger is ledger
-    assert "bir kapanışın kimliği" in result.message
-
-
-def test_closed_buy_stays_recorded() -> None:
-    """AC-7 (R-9; plan 0008 Risk 2): kapanmış pozisyonun alımı yeniden gelirse ikinci kez yazılmaz:
-    aynı içerik "zaten kayıtlı", farklı içerik "kayıt çakışması"."""
-    ledger = close().ledger
-
-    again = record_fill(ledger, replace(FILL, at=LATER))
-    changed = record_fill(ledger, replace(FILL, amount=Decimal("1")))
-
-    assert again.outcome is LedgerOutcome.ALREADY_RECORDED and again.ledger is ledger
-    assert again.position is not None and again.position.client_order_id == "cb-s1-btc-0001"
-    assert changed.outcome is LedgerOutcome.RECORD_CONFLICT and changed.ledger is ledger
+    assert result.outcome is expected and result.ledger is ledger
+    assert fragment in result.message
+    assert len(ledger.positions) == (1 if kind == "bought" else 0)
 
 
 def test_rejected_close_does_not_use_up_the_id() -> None:
