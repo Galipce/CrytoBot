@@ -76,8 +76,8 @@ long_trades = st.builds(
 )
 cases = st.tuples(
     scaled(0, whole=13),
-    st.sampled_from([*range(990, 1000), 0, 5, 500]).map(lambda n: Decimal(n).scaleb(-6)),
-    st.sampled_from([*range(9990, 10000), 0, 75, 100]).map(lambda n: Decimal(n).scaleb(-5)),
+    st.one_of(st.integers(0, 999), st.integers(990, 999)).map(lambda n: Decimal(n).scaleb(-6)),
+    st.one_of(st.integers(0, 9999), st.integers(9990, 9999)).map(lambda n: Decimal(n).scaleb(-5)),
     st.lists(st.one_of(trades, long_trades), min_size=1, max_size=5),
 )
 
