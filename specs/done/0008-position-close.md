@@ -1,6 +1,6 @@
 # Spec 0008 — Pozisyonun stop ya da hedefte kapanışı ve gerçekleşen kâr/zarar
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0008-plan.md`
 
@@ -148,8 +148,8 @@ spec'lerinde gelir.)
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 onay sonrası (sapmalar plan amendment A-1, A-2) |
+| Fix rounds | 2 (fix-1 review r1, fix-2 VERIFY); review r2 ve r3 temiz |
+| Review findings: real / noise / deferred | 4 / 0 / 1 (r1: F-1, F-2, F-4 real; F-3 defer B-16 · r2, r3: bulgu yok · VERIFY: F-1 real) |
+| Regressions introduced | 0 davranış regresyonu; build'de iki test boşluğu kaldı: R-8 sınırı (r1 F-1) ve doğrulamayı geçmeyen "istisna yok" property'si (VERIFY F-1) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
