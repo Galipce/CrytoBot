@@ -115,7 +115,7 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   `query_order` da aynı. Not (spec 0009, review round 4 F-3): özel `tzinfo` ile `place_order` ve
   `query_order`'daki `now.utcoffset()` da korumasız (`src/crytobot/execution/_orders.py`).
 - **B-19** — Dolu emri defter reddedebiliyor: `execution` ile `portfolio` aynı 28 basamak sınırını farklı hesaplara
-  uyguluyor. 8 ondalıklı olağan değerlerle (12345.67890123 @ 0.12345678, ücret 0.00075, bakiye 100000) emir `dolu` olur,
+  uyguluyor. 8 ondalıklı olağan değerlerle (12345.67890123 @ 0.12345678, ücret 0.00075, slippage 0.0005, bakiye 100000) emir `dolu` olur,
   `close_position` "ölçek hesaplanamıyor" der; pozisyon açık kalır, tekrar isteği "zaten var" döner (B-17). Alımda da aynı
   (`place_order` / `record_fill`). Ayrıca fiyat `1E-999999`, slippage 0.5 ile dolum fiyatı ±999999 ölçeğinin dışına
   çıkar — Source: spec 0009, review round 4 F-1 (`src/crytobot/execution/_close.py`, `src/crytobot/portfolio/_close.py`)
