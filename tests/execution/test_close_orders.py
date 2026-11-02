@@ -451,7 +451,7 @@ UNREPRESENTABLE: dict[str, tuple[dict[str, Any], str]] = {
         "miktar 1.2345",
     ),
     # the notional fits, the fee does not
-    "long_fee": ({"fee": Decimal("0.001" + "0" * 52 + "1")}, "ücret <"),
+    "long_fee": ({"fee": Decimal("0.001" + "0" * 52 + "1")}, "ücret <54 basamaklı sayı>"),
     # 1 - slippage fits (40 digits), the fill needs 68; the step's remainder does not fit either
     "long_price": (
         {"price": Decimal("109.9450000000000000000000001"), "slippage": Decimal("1E-40")},
