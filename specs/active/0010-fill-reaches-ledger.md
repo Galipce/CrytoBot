@@ -65,7 +65,8 @@ none — no user interface.
 - [ ] AC-3 — Hesap sınırı: 60 basamağa tam sığan hesap kabul, 61 basamak gerektiren hesap → "ölçek hesaplanamıyor", yuvarlama
   yok; tutar, komisyon, satış geliri, bakiye, gerçekleşen toplam ve kasa için ayrı ayrı (R-2, R-8).
 - [ ] AC-4 — Girdiler: 60 basamaklı dolum fiyatı ve komisyon kabul, 61 → "geçersiz girdi"; defterde ve `place_order`'da 29 basamaklı miktar, stop,
-  hedef, başlangıç tutarı ve güncel fiyat hâlâ "geçersiz girdi" (R-1, R-3).
+  hedef ve başlangıç tutarı hâlâ "geçersiz girdi"; 29 basamaklı güncel fiyat `place_order` ve `place_close_order`'da "geçersiz
+  girdi", defterin hesap durumu ve kararında "fiyat eksik" (0007, 0008) (R-1, R-3).
 - [ ] AC-5 — Sözleşme: ölçek dışı dolum fiyatı ya da komisyon üreten (fiyat `1E-999999`, slippage 0.5) ve satış geliri ya da alım
   maliyeti sığmayan istek emir oluşturmaz, "ölçek hesaplanamıyor", durum değişmez; alım ve kapanışta (R-4).
 - [ ] AC-6 — Kalan ayrışma: emir dolu, bakiye toplamı 60 basamağa sığmayan defter → "ölçek hesaplanamıyor", defter değişmez, emir
