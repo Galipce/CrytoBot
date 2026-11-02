@@ -365,6 +365,13 @@ def test_invalid_close_order_is_named(case: str) -> None:
 
 
 UNREPRESENTABLE: dict[str, tuple[dict[str, Any], str]] = {
+    # the fill fits, the notional does not: refused, never rounded (plan 0009 A-3)
+    "long_notional": (
+        {"price": Decimal("1234567890123456789012345.1"), "slippage": Decimal(0)},
+        "miktar 19.249",
+    ),
+    # the notional fits, the fee does not
+    "long_fee": ({"fee": Decimal("0.0010000000000000000000000001")}, "ücret 0.00100"),
     # in scale and within 28 significant digits each, but the fill or the step's remainder is not
     "long_price": ({"price": Decimal("109.9450000000000000000000001")}, "fiyat 109.945"),
     "tiny_step": ({"rules": replace(RULES, amount_step=Decimal("1E-999999"))}, "adım 1E-999999"),
