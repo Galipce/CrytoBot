@@ -27,7 +27,6 @@ from crytobot.persistence._codec import (
     encode_risk,
     encode_summary,
     order_resolution_allowed,
-    require_summary,
 )
 from crytobot.persistence._reconcile import conflicts
 from crytobot.portfolio import EMPTY_LEDGER, Ledger, ledger_problems
@@ -357,7 +356,10 @@ def _save(
         return header
     if header != base.revision:
         return _STALE
-    require_summary(meta["ledger"])  # overwritten below, and R-6 repairs nothing
+    # At this revision base is what the disk holds. The summary is overwritten below and R-6 repairs
+    # nothing; comparing text decodes no row (plan 0011 Risk 8).
+    if meta["ledger"] != encode_summary(base.ledger):
+        return _UNREADABLE
     stored_entries, stored_orders = _rows(database, "entries"), _rows(database, "orders")
     if not _history_allows(
         stored_entries, stored_orders, decode_risk(meta["risk"]), image, state.risk
