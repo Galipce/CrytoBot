@@ -1,5 +1,6 @@
 """Spec 0011 AC-11 (R-3, R-5, R-8): rastgele dizilerde her kayıt-yükleme sonrası durum, spec'ten
-yazılmış bağımsız modelle birebir aynıdır; geçmiş kaybolmaz; çelişkisiz dizide işaret yoktur."""
+yazılmış bağımsız modelle birebir aynıdır; geçmiş kaybolmaz; yasak yazım reddedilir ve diski
+değiştirmez; çelişkisiz dizide işaret yoktur."""
 
 import tempfile
 from dataclasses import dataclass, field, replace
@@ -9,11 +10,12 @@ from fractions import Fraction
 from pathlib import Path
 from types import MappingProxyType
 
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from crytobot.execution import OrderStatus, PaperExchange, query_order
-from crytobot.persistence import StoreOutcome, load_store
+from crytobot.persistence import StoredState, StoreOutcome, load_store
+from crytobot.portfolio import EMPTY_LEDGER, Ledger
 from crytobot.risk import resume
 from tests.persistence.chain import (
     DEPOSIT,
@@ -109,7 +111,42 @@ def assert_matches(model: Model, state: World) -> None:
     assert (None if day_start is None else Fraction(day_start)) == model.day_start
 
 
+def forbidden_writes(world: World, earlier_ledger: Ledger) -> dict[str, World]:
+    """R-8'in o anki duruma uyan yasak yazımları: `earlier_ledger`, son kaydı silinmiş defterdir."""
+    writes = {"entry_deleted": replace(world, ledger=earlier_ledger)}
+    orders = world.execution.orders
+    if orders:
+        cid = list(orders)[-1]
+        changed = {**orders, cid: replace(orders[cid], amount=orders[cid].amount + 1)}
+        execution = replace(world.execution, orders=MappingProxyType(changed))
+        writes["order_content_changed"] = replace(world, execution=execution)
+    risk = world.risk
+    if risk.last_time is not None:
+        earlier = risk.last_time - timedelta(seconds=1)
+        writes["observation_moved_back"] = replace(world, risk=replace(risk, last_time=earlier))
+    if risk.halted:
+        writes["halt_closed_unlike_resume"] = replace(world, risk=replace(risk, halted=False))
+    return writes
+
+
+def assert_refused(path: Path, state: StoredState, writes: dict[str, World]) -> None:
+    before = path.read_bytes()
+    for name, write in writes.items():
+        result = save(path, state, write)
+        assert result.outcome is StoreOutcome.HISTORY_IMMUTABLE, (name, result.message)
+        assert result.state is None
+        assert path.read_bytes() == before, name
+
+
 @given(steps=STEPS)
+# every forbidden write applies on this one: an observation, then a halt, with an order and a record
+@example(
+    steps=[
+        ("observe", "0.5", "100.10"),
+        ("buy", "0.5", "100.10"),
+        ("observe", "0.5", "100.10"),
+    ]
+)
 @settings(max_examples=EXAMPLES, deadline=None)
 def test_every_save_and_load_matches_the_model(steps: list[Step]) -> None:
     with tempfile.TemporaryDirectory(prefix="crytobot-store-") as folder:
@@ -120,11 +157,13 @@ def test_every_save_and_load_matches_the_model(steps: list[Step]) -> None:
         assert result.state is not None
         state = result.state
         model = Model()
+        earlier_ledger = EMPTY_LEDGER
         history: list[str] = []
         known_orders: list[str] = []
         at = T0
         for index, (kind, amount, price) in enumerate(steps):
             at += timedelta(minutes=1)
+            before_step = world.ledger
             cid = f"cb-{index}"
             if kind == "buy" and not any(s is OrderStatus.UNKNOWN for s in model.orders.values()):
                 world = bought(world, str(index), amount=amount, price=price, at=at)
@@ -190,3 +229,7 @@ def test_every_save_and_load_matches_the_model(steps: list[Step]) -> None:
             assert entries[: len(history)] == history
             assert orders[: len(known_orders)] == known_orders
             history, known_orders = entries, orders
+
+            if len(world.ledger.entries) > len(before_step.entries):
+                earlier_ledger = before_step
+            assert_refused(path, state, forbidden_writes(world, earlier_ledger))
