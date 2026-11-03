@@ -1,6 +1,6 @@
 # Spec 0011 — SQLite kalıcılık: defter, emirler ve risk durumu yeniden başlatmada korunsun
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0011-plan.md`
 - Self-critique: done
@@ -90,43 +90,43 @@ none — no user interface.
 - Para/oran değerleri `decimal.Decimal`; zamanlar timezone-aware (`docs/conventions.md`).
 
 ## Acceptance criteria
-- [ ] AC-1 — Kurulum: yeni yolda depo boş durumla oluşur; aynı yolda ikinci kurulum "depo zaten var" döner, içerik değişmez; üst dizin yoksa
+- [x] AC-1 — Kurulum: yeni yolda depo boş durumla oluşur; aynı yolda ikinci kurulum "depo zaten var" döner, içerik değişmez; üst dizin yoksa
   "yazılamadı", dizin oluşmaz; `backtest` ve bilinmeyen mod "geçersiz girdi" (R-1).
-- [ ] AC-2 — Olmayan depo "depo yok" döner, yolda dosya kalmaz, boş durum dönmez (R-2).
-- [ ] AC-3 — Birebir geri yükleme: alım → defter → gözlem → kapanış → defter dizisi kaydedilir, ayrı bir süreçte yüklenir; defter, emirler,
+- [x] AC-2 — Olmayan depo "depo yok" döner, yolda dosya kalmaz, boş durum dönmez (R-2).
+- [x] AC-3 — Birebir geri yükleme: alım → defter → gözlem → kapanış → defter dizisi kaydedilir, ayrı bir süreçte yüklenir; defter, emirler,
   dolum tahminleri ve risk durumu birebir aynıdır: 60 basamaklı değer, `1.10` gibi sondaki sıfır, UTC dışı fark ve sıralar dahil (R-3).
-- [ ] AC-4 — Kaydedilen davranış: yüklemeden sonra aynı öneri "zaten var"; bilinmeyen emir güvenli modda, sorgusu çözülür; durdurulmuş bot
+- [x] AC-4 — Kaydedilen davranış: yüklemeden sonra aynı öneri "zaten var"; bilinmeyen emir güvenli modda, sorgusu çözülür; durdurulmuş bot
   onay almaz, Telegram kaldıramaz, CLI kaldırır; aynı gün gün başı kasa ve zirve korunur; yeni günde gözlem öncesi onay yok (R-4).
-- [ ] AC-5 — Kesinti: yazım hatası enjekte edildiğinde ve gerçek süreç yazım sırasında öldürüldüğünde depoda önceki ya da yeni durumun
+- [x] AC-5 — Kesinti: yazım hatası enjekte edildiğinde ve gerçek süreç yazım sırasında öldürüldüğünde depoda önceki ya da yeni durumun
   tamamı bulunur, yarım durum yok; hata "yazılamadı" döner (R-5).
-- [ ] AC-6 — Okunamayan depo: R-6'daki her vaka için ayrı örnek (bozuk dosya, bozuk sayı, bilinmeyen durum, bakiye ya da pozisyon
+- [x] AC-6 — Okunamayan depo: R-6'daki her vaka için ayrı örnek (bozuk dosya, bozuk sayı, bilinmeyen durum, bakiye ya da pozisyon
   uyuşmazlığı, tutarsız risk durumu, tahminsiz bilinmeyen emir, bilinmeyen sürüm) adlandırılmış sonuç verir, durum dönmez (R-6, R-12).
-- [ ] AC-7 — Mutabakat: R-7'deki her çelişki türü yüklenir, işaret ve kimlik taşır; çelişkisiz durum ve boş depo işaret taşımaz; 0010 R-6'daki
+- [x] AC-7 — Mutabakat: R-7'deki her çelişki türü yüklenir, işaret ve kimlik taşır; çelişkisiz durum ve boş depo işaret taşımaz; 0010 R-6'daki
   "emir dolu, defter reddetti" durumu yüklenebilir ve işaretlidir; işaretli durum kaydedilir, sonuç işareti korur (R-7, R-8).
-- [ ] AC-8 — Geçmiş: R-8'deki her yasak yazım için ayrı örnek reddedilir, depo değişmez; bilinmeyen emrin dolu ya da reddedilmiş olması ve
+- [x] AC-8 — Geçmiş: R-8'deki her yasak yazım için ayrı örnek reddedilir, depo değişmez; bilinmeyen emrin dolu ya da reddedilmiş olması ve
   yeni kayıt eklemek kabul edilir; iki açık bağlantıdan geride kalanın kaydı "eski yazım"; `resume` sonucu durdurma kapanışı kabul, zirve ya da son
   gözlem uymayan kapanış "geçmiş değiştirilemez" (R-8).
-- [ ] AC-9 — Mod: `paper` depo `live` ile, `live` depo `paper` ile yüklenince "mod uyuşmuyor", durum dönmez (R-9).
-- [ ] AC-10 — Hatalar: erişilemeyen yol, başka süreçte tutulan depo ("depo meşgul", ≤ 5 s) ve R-6'yı geçmeyen durumu kaydetme adlandırılmış sonuç
+- [x] AC-9 — Mod: `paper` depo `live` ile, `live` depo `paper` ile yüklenince "mod uyuşmuyor", durum dönmez (R-9).
+- [x] AC-10 — Hatalar: erişilemeyen yol, başka süreçte tutulan depo ("depo meşgul", ≤ 5 s) ve R-6'yı geçmeyen durumu kaydetme adlandırılmış sonuç
   verir, istisna yok, depo değişmez; mesajda sır ya da sınırsız girdi yok (R-10).
-- [ ] AC-11 — Property: rastgele alım, kapanış, ret, bilinmeyen, gözlem ve durdurma dizilerinde her kayıt-yükleme sonrası durum bağımsız modelle
+- [x] AC-11 — Property: rastgele alım, kapanış, ret, bilinmeyen, gözlem ve durdurma dizilerinde her kayıt-yükleme sonrası durum bağımsız modelle
   birebir aynıdır, geçmiş kaybolmaz, çelişkisiz dizide işaret yoktur (R-3, R-5, R-8).
-- [ ] AC-12 — Hacim: 10.000 kayıtlı depoda yükleme ve kayıt < 1 s (`slow` test) (R-11).
-- [ ] AC-13 — Backlog: B-10 ve B-13 vakaları R-13'teki sonucu verir, eksik kasa mesajı aynen kalır, `specs/backlog.md` satırları silinir; `risk` ve `execution`'ın shipped
+- [x] AC-12 — Hacim: 10.000 kayıtlı depoda yükleme ve kayıt < 1 s (`slow` test) (R-11).
+- [x] AC-13 — Backlog: B-10 ve B-13 vakaları R-13'teki sonucu verir, eksik kasa mesajı aynen kalır, `specs/backlog.md` satırları silinir; `risk` ve `execution`'ın shipped
   testleri geçer (R-13).
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 onay sonrası; plan Risk 2 `test_module_layout` 13 → 14 için spec cümlesinin kapsamını kaydetti |
+| Fix rounds | 2 (fix-1 review r1, fix-2 review r2); r3 ve VERIFY fix turu açmadı |
+| Review findings: real / noise / deferred | 9 / 7 / 8 (r1: F-1…F-5, I-2, I-3 real, I-1, I-4 noise, F-6 defer B-22 · r2: N-1, N-2 real · r3: L-1, L-2 defer B-22, B-23, I-1…I-3 noise · VERIFY: Q-1…Q-5 defer B-24…B-28, Q-6, Q-7 noise) |
+| Regressions introduced | 1 dar: fix-2 elle kurulmuş `base`'de `AttributeError` getirdi (L-1, B-22), depo değişmez. Testte: build'de `test_clean_tree_passes` beklentisi (A-1); fix-1'in property testinde yanlış kırmızı beklenti (N-2, fix-2) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
