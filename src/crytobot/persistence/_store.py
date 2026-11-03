@@ -27,6 +27,7 @@ from crytobot.persistence._codec import (
     encode_risk,
     encode_summary,
     order_resolution_allowed,
+    require_summary,
 )
 from crytobot.persistence._reconcile import conflicts
 from crytobot.portfolio import EMPTY_LEDGER, Ledger, ledger_problems
@@ -170,6 +171,8 @@ def _header(meta: dict[str, str], mode: str) -> StoreResult | int:
     if version != FORMAT_VERSION:
         return _UNKNOWN_VERSION
     if stored_mode not in MODES or not (revision.isascii() and revision.isdigit()):
+        return _UNREADABLE
+    if "ledger" not in meta:
         return _UNREADABLE
     return _MODE_MISMATCH if stored_mode != mode else int(revision)
 
@@ -353,6 +356,7 @@ def _save(
         return header
     if header != base.revision:
         return _STALE
+    require_summary(meta["ledger"])  # overwritten below, and R-6 repairs nothing
     stored_entries, stored_orders = _rows(database, "entries"), _rows(database, "orders")
     if not _history_allows(
         stored_entries, stored_orders, decode_risk(meta["risk"]), image, state.risk

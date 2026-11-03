@@ -196,6 +196,14 @@ def decode_ledger(rows: Iterable[object], summary: object) -> Ledger:
         raise CodecError from error
 
 
+def require_summary(text: object) -> None:
+    """Özet okunabilir mi; kayıt başına ucuz, satırlar çözülmez (plan 0011 Risk 8)."""
+    try:
+        _balance, _realized, _open_ids, _closed_ids = _loads(text)
+    except (TypeError, ValueError) as error:
+        raise CodecError from error
+
+
 def _pick[T](known: Mapping[str, T], ids: list[str]) -> dict[str, T]:
     return {_text(i): known[i] for i in ids}
 
