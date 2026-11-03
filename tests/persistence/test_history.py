@@ -43,6 +43,15 @@ def order_changed(world: World, cid: str, **changes: Any) -> World:
     return orders_edited(world, {**world.execution.orders, cid: order})
 
 
+def order_renamed(world: World, cid: str, intent_id: str) -> World:
+    """Yalnız `execution` değişir: defter eski kimliği taşımaya devam eder."""
+    order: Any = world.execution.orders[cid]
+    new_id = f"cb-{intent_id}"
+    return orders_edited(
+        world, {new_id: replace(order, client_order_id=new_id, intent_id=intent_id)}
+    )
+
+
 def quote_changed(world: World, cid: str, fill: str, fee: str) -> World:
     quotes = {**world.execution.quotes, cid: (Decimal(fill), Decimal(fee))}
     return replace(world, execution=replace(world.execution, quotes=MappingProxyType(quotes)))
@@ -82,7 +91,7 @@ FORBIDDEN: dict[str, tuple[World, World]] = {
         TWO_BUYS,
         orders_edited(TWO_BUYS, dict(reversed(list(TWO_BUYS.execution.orders.items())))),
     ),
-    "order_id_changed": (BASE, bought(opened(), "z")),
+    "order_id_changed": (BASE, order_renamed(BASE, "cb-a", "z")),
     "order_content_changed": (BASE, order_changed(BASE, "cb-a", stop=Decimal("90"))),
     "order_time_changed": (BASE, order_changed(BASE, "cb-a", created_at=T2)),
     "filled_order_rejected": (

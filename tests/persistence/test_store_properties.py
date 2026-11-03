@@ -27,6 +27,7 @@ from tests.persistence.chain import (
     created,
     opened,
     placed,
+    recorded,
     save,
     seen,
     snapshot,
@@ -62,6 +63,7 @@ class Model:
     closed_ids: list[str] = field(default_factory=list)
     orders: dict[str, OrderStatus] = field(default_factory=dict)
     costs: dict[str, Fraction] = field(default_factory=dict)
+    quoted: dict[str, tuple[str, str]] = field(default_factory=dict)
     entries: int = 1
     peak: Fraction | None = None
     day_start: Fraction | None = None
@@ -147,6 +149,14 @@ def assert_refused(path: Path, state: StoredState, writes: dict[str, World]) -> 
         ("observe", "0.5", "100.10"),
     ]
 )
+# the unknown -> filled -> ledger path, which random lists rarely reach
+@example(
+    steps=[
+        ("unknown", "1.10", "99.5"),
+        ("fill", "0.5", "1.000"),
+        ("close", "0.5", "1.000"),
+    ]
+)
 @settings(max_examples=EXAMPLES, deadline=None)
 def test_every_save_and_load_matches_the_model(steps: list[Step]) -> None:
     with tempfile.TemporaryDirectory(prefix="crytobot-store-") as folder:
@@ -189,6 +199,16 @@ def test_every_save_and_load_matches_the_model(steps: list[Step]) -> None:
                     world, str(index), amount=amount, price=price, status=OrderStatus.UNKNOWN, at=at
                 )
                 model.orders[cid] = OrderStatus.UNKNOWN
+                model.quoted[cid] = (amount, price)
+            elif kind == "fill" and world.execution.unknown:
+                pending = world.execution.unknown[0]
+                exchange = PaperExchange(
+                    resolutions=MappingProxyType({pending: OrderStatus.FILLED})
+                )
+                outcome = query_order(world.execution, pending, exchange, at)
+                world = recorded(replace(world, execution=outcome.state), pending)
+                model.orders[pending] = OrderStatus.FILLED
+                apply_buy(model, pending, *model.quoted[pending])
             elif kind == "refuse" and world.execution.unknown:
                 pending = world.execution.unknown[0]
                 exchange = PaperExchange(
