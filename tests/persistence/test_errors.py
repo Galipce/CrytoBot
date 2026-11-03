@@ -1,9 +1,11 @@
 """Spec 0011 AC-10 (R-10): hatalar adıyla döner, istisna yok, depo değişmez, mesaj kısa, sırsız."""
 
+import gc
 import sqlite3
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import replace
 from decimal import Decimal
@@ -12,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from crytobot.persistence import StoreOutcome, load_store, save_store
+from crytobot.persistence import StoreOutcome, _store, create_store, load_store, save_store
 from tests.persistence.chain import (
     T1,
     bought,
@@ -69,6 +71,89 @@ def test_store_held_by_another_process_is_busy_within_the_limit(tmp_path: Path) 
     assert saving.outcome is StoreOutcome.BUSY and saving.state is None
     assert loading_took <= BUSY_LIMIT_S and saving_took <= BUSY_LIMIT_S
     assert loaded(path).revision == state.revision
+
+
+@pytest.fixture
+def connections(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[sqlite3.Connection]]:
+    """Depoda açılan bağlantılar; döngüsel GC kapalı: kapatmayan kodu çöp toplayıcı kurtarmasın."""
+    made: list[sqlite3.Connection] = []
+    real = sqlite3.connect
+
+    def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+        made.append(real(*args, **kwargs))
+        return made[-1]
+
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    gc.disable()
+    try:
+        yield made
+    finally:
+        gc.enable()
+
+
+def assert_all_closed(made: list[sqlite3.Connection]) -> None:
+    assert made
+    for connection in made:
+        with pytest.raises(sqlite3.ProgrammingError):
+            connection.execute("SELECT 1")
+
+
+def test_busy_store_keeps_no_connection_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, connections: list[sqlite3.Connection]
+) -> None:
+    path = tmp_path / "depo.sqlite"
+    state = stored(path, opened())
+    monkeypatch.setattr(_store, "BUSY_WAIT_S", 0.2)
+    process = holder(path)
+    try:
+        connections.clear()
+        loading = load_store(path, "paper")
+        saving = save(path, state, bought(opened()))
+    finally:
+        process.communicate(timeout=30)
+
+    assert loading.outcome is StoreOutcome.BUSY and saving.outcome is StoreOutcome.BUSY
+    assert_all_closed(connections)
+    path.unlink()  # Windows refuses this while a handle is open
+    assert not path.exists()
+
+
+def test_file_that_is_no_store_keeps_no_connection_open(
+    tmp_path: Path, connections: list[sqlite3.Connection]
+) -> None:
+    path = tmp_path / "notlar.txt"
+    path.write_bytes(b"notlarim" * 200)
+
+    result = load_store(path, "paper")
+
+    assert result.outcome is StoreOutcome.UNREADABLE
+    assert_all_closed(connections)
+    path.unlink()
+    assert not path.exists()
+
+
+def test_create_failing_on_its_first_pragma_leaves_no_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, connections: list[sqlite3.Connection]
+) -> None:
+    class FailingPragma(sqlite3.Connection):
+        def execute(self, sql: str, *args: Any) -> sqlite3.Cursor:
+            if sql.startswith("PRAGMA"):
+                raise sqlite3.OperationalError("database is locked")
+            return super().execute(sql, *args)
+
+    tracked = sqlite3.connect
+
+    def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+        return tracked(*args, factory=FailingPragma, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    path = tmp_path / "depo.sqlite"
+
+    result = create_store(path, "paper")
+
+    assert result.outcome is StoreOutcome.WRITE_FAILED
+    assert_all_closed(connections)
+    assert not path.exists()
 
 
 def test_unreachable_path_is_named(tmp_path: Path) -> None:

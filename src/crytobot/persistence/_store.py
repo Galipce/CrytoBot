@@ -119,7 +119,11 @@ def _connect(target: Path) -> sqlite3.Connection:
     """`mode=rw` var olan dosyayı açar, yoksa oluşturmaz (R-2)."""
     uri = target.resolve().as_uri() + "?mode=rw"
     connection = sqlite3.connect(uri, uri=True, timeout=0, isolation_level=None)
-    connection.execute("PRAGMA synchronous=FULL")  # R-5: the commit survives a power cut
+    try:
+        connection.execute("PRAGMA synchronous=FULL")  # R-5: the commit survives a power cut
+    except sqlite3.Error:  # locked or not a database; the caller's closing() has not begun yet
+        connection.close()
+        raise
     return connection
 
 

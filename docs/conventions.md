@@ -79,6 +79,8 @@
   bakiyeye bağlı kalan ret `app`'te BR-11 sayılır — from spec 0009, review round 4 F-1; spec 0010
 - SQLite'ın `timeout`'u gerçek süre değildir: nominal uykuları toplar, Windows'ta `timeout=4` 6 saniye sürdü. Süre sözü varsa
   `timeout=0` ve monotonik saatle bekleme döngüsü — from spec 0011, build (`tests/persistence/test_errors.py`)
+- `sqlite3.connect` sonrası ilk PRAGMA da kilit ya da bozuk dosya hatası verir; `closing` onu kapsamalı, yoksa bağlantı GC'ye
+  kadar açık kalır ve Windows'ta dosya kilitlenir — from spec 0011, review round 1 F-2
 - `mode=ro` ile açılan SQLite deposu, öldürülmüş sürecin sıcak günlüğünü geri alamaz; salt okuma da `mode=rw` açar — from spec
   0011, plan Risk 3
 - `Decimal("1.10") == Decimal("1.1")`: birebirlik (geçmiş, geri yükleme) değerle değil metinle karşılaştırılır — from spec 0011
