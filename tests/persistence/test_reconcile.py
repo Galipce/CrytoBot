@@ -190,7 +190,7 @@ def test_many_conflicts_stay_short_in_the_message(tmp_path: Path) -> None:
     assert "47 kimlik daha" in result.message
 
 
-def test_ledger_only_state_with_empty_ledger_is_loaded(tmp_path: Path) -> None:
+def test_order_missing_from_an_opened_ledger_is_loaded(tmp_path: Path) -> None:
     path = tmp_path / "depo.sqlite"
     state = stored(path, replace(placed(opened()), ledger=opened().ledger))
 
