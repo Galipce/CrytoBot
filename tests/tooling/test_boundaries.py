@@ -36,7 +36,7 @@ def test_clean_tree_passes(project: Project) -> None:
     result = project.run_step("boundaries")
 
     assert result.returncode == 0, result.stdout
-    assert "4 kept, 0 broken" in result.stdout
+    assert "5 kept, 0 broken" in result.stdout
 
 
 def test_module_importing_its_own_submodule_passes(project: Project) -> None:
