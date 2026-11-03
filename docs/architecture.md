@@ -25,6 +25,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | `backtest` | Geçmiş veri üzerinde strateji+risk+simüle execution koşturmak | Backtest sonuçları |
 | `control` | CLI ve Telegram komutları, yetkilendirme (chat ID, TOTP, teyit), audit log | Audit log, mod/aşama durumu |
 | `reporting` | Günlük rapor, metrikler (günlük hedef dahil), bildirim gönderimi | Rapor kayıtları |
+| `persistence` | Defter, emirler ve risk durumunu tek SQLite deposunda korumak; okunamayan depoda durumu reddetmek | Depo dosyası, biçim sürümü, depo modu |
 | `app` | Bileşim kökü (composition root): modülleri bağlar, zamanlayıcı/döngü | — |
 
 ## Communication rules
@@ -39,7 +40,8 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 - `ccxt` yalnızca `execution` ve `market_data` tarafından import edilir.
 - `anthropic` SDK yalnızca `llm` tarafından import edilir; `news`/`research` LLM'e yalnızca `llm` üzerinden erişir.
 - `strategy`, `analysis`, `news`, `research`, `llm` hiçbir zaman `execution`'ı import etmez.
-- `execution`'ı yalnızca `risk` ve `app` (ve `backtest`) import eder.
+- `execution`'ı yalnızca `risk`, `app`, `backtest` ve `persistence` import eder.
+- `persistence`'ı yalnızca `app` import eder; `persistence` diğer modüllerin yalnız public arayüzünü kullanır (ADR 0001).
 - `analysis` hiçbir proje modülünü ve hiçbir I/O kütüphanesini import etmez (saf hesap).
 - Hiçbir modül başka bir modülün iç alt modülünü (`<module>._*` / `<module>.internal`) import etmez.
 - Telegram kütüphanesi yalnızca `control` ve `reporting` tarafından import edilir.

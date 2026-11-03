@@ -10,6 +10,7 @@ from types import MappingProxyType
 
 from crytobot.execution._numbers import (
     BOUNDED,
+    CALC_DIGITS,
     DIGITS,
     SCALE,
     _brief,
@@ -19,7 +20,7 @@ from crytobot.execution._numbers import (
     _significant,
 )
 from crytobot.execution._paper import OrderStatus, PaperExchange
-from crytobot.risk import PairRules, TradeApproval, TradeIntent
+from crytobot.risk import CLOSE_REASONS, PairRules, TradeApproval, TradeIntent
 
 PAPER = "paper"
 BUY = "buy"
@@ -429,6 +430,106 @@ def place_order(
     )
 
 
+def _valid_number(value: object, *, zero: bool = False, digits: int | None = None) -> bool:
+    """Spec 0011 R-6: emrin taşıyabileceği sayı; `int` geçmez, emir hep `Decimal` üretir."""
+    if not (isinstance(value, Decimal) and value.is_finite()):
+        return False
+    if value < 0 or (value == 0 and not zero) or not _in_scale(value):
+        return False
+    if digits is None or len(str(value)) <= digits:  # the text holds every digit; cheap (R-11)
+        return True
+    return _significant(value) <= digits
+
+
+def _valid_fill(fill: object, fee: object) -> bool:
+    return _valid_number(fill, digits=CALC_DIGITS) and _valid_number(
+        fee, zero=True, digits=CALC_DIGITS
+    )
+
+
+def _buy_problem(order: Order) -> str | None:
+    if not (type(order.intent_id) is str and _INTENT_ID.fullmatch(order.intent_id)):
+        return "öneri kimliği geçersiz"
+    if order.client_order_id != CLIENT_ID_PREFIX + order.intent_id:
+        return "kimlik öneri kimliğinden türemiyor"
+    if order.side != BUY:
+        return "alım emrinin yönü alım değil"
+    if not _valid_number(order.entry):
+        return "giriş geçersiz"
+    if not (
+        _valid_number(order.stop, digits=DIGITS) and _valid_number(order.target, digits=DIGITS)
+    ):
+        return "stop ya da hedef geçersiz"
+    return None
+
+
+def _close_problem(order: CloseOrder) -> str | None:
+    position_id = order.position_id
+    if not (type(position_id) is str and position_id.startswith(CLIENT_ID_PREFIX)):
+        return "pozisyon kimliği geçersiz"
+    if not _INTENT_ID.fullmatch(position_id.removeprefix(CLIENT_ID_PREFIX)):
+        return "pozisyon kimliği geçersiz"
+    if order.client_order_id != "cx-" + position_id.removeprefix(CLIENT_ID_PREFIX):
+        return "kimlik pozisyon kimliğinden türemiyor"
+    if order.side != "sell":
+        return "kapanış emrinin yönü satış değil"
+    if order.reason not in CLOSE_REASONS:
+        return "kapanış nedeni geçersiz"
+    return None
+
+
+def _order_problem(key: object, order: object) -> str | None:
+    """Tek emrin sorunu; yalnız sabit metin, ham girdi mesaja girmez (spec 0011 R-10)."""
+    if isinstance(order, Order):
+        problem = _buy_problem(order)
+    elif isinstance(order, CloseOrder):
+        problem = _close_problem(order)
+    else:
+        return "emir kaydı değil"
+    if problem is not None:
+        return problem
+    if key != order.client_order_id:
+        return "anahtar emrin kimliği değil"
+    if type(order.pair) is not str:
+        return "çift metin değil"
+    if not _valid_number(order.amount, digits=DIGITS):
+        return "miktar geçersiz"
+    if not isinstance(order.status, OrderStatus):
+        return "durum geçersiz"
+    if order.status is OrderStatus.FILLED:
+        if not _valid_fill(order.fill_price, order.fee):
+            return "dolu emrin dolum fiyatı ya da komisyonu geçersiz"
+    elif order.fill_price is not None or order.fee is not None:
+        return "dolmamış emirde dolum var"
+    created = order.created_at
+    if not (isinstance(created, datetime) and created.utcoffset() is not None):
+        return "oluşturma zamanı zaman dilimi taşımalı"
+    return None
+
+
+def execution_problems(state: object) -> list[str]:
+    """Spec 0011 R-6: `place_order`, `place_close_order` ve `query_order`'ın üretemeyeceği durumun
+    sorunları; ilk sorunda durur."""
+    if not isinstance(state, ExecutionState):
+        return ["emir durumu değil"]
+    orders, quotes = state.orders, state.quotes
+    if not (isinstance(orders, Mapping) and isinstance(quotes, Mapping)):
+        return ["emirler ya da dolum tahminleri eşleme değil"]
+    expected: set[str] = set()
+    for index, (key, order) in enumerate(orders.items()):
+        problem = _order_problem(key, order)
+        if problem is not None:
+            return [f"emir {index}: {problem}"]
+        if order.status is OrderStatus.UNKNOWN:
+            expected.add(order.client_order_id)
+    if set(quotes) != expected:
+        return ["dolum tahminleri durumu bilinmeyen emirlerle aynı değil"]
+    for quote in quotes.values():
+        if not (isinstance(quote, tuple) and len(quote) == 2 and _valid_fill(*quote)):
+            return ["dolum tahmini geçersiz"]
+    return []
+
+
 def _notify(
     kind: NotificationKind, order: Order | CloseOrder, now: datetime, what: str
 ) -> Notification:
@@ -465,6 +566,14 @@ def query_order(
             order,
             f"{order.pair}: {order.client_order_id} zaten {order.status.value}",
         )
+    quote = state.quotes.get(order.client_order_id)
+    if quote is None:  # only a hand-built or tampered state lacks it (spec 0011 R-13, B-13)
+        return QueryResult(
+            state,
+            QueryOutcome.INVALID_INPUT,
+            None,
+            f"geçersiz girdi: {order.client_order_id} için dolum tahmini yok",
+        )
     status = exchange.query(order.client_order_id)
     if status is OrderStatus.UNKNOWN:
         return QueryResult(
@@ -473,7 +582,7 @@ def query_order(
             order,
             f"{order.pair}: {order.client_order_id} durumu hâlâ bilinmiyor",
         )
-    fill, fee = state.quotes[order.client_order_id]
+    fill, fee = quote
     filled = status is OrderStatus.FILLED
     resolved = replace(
         order, status=status, fill_price=fill if filled else None, fee=fee if filled else None

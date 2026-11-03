@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 UV_PREFIX = "uv run --locked "
 STEP_LINE = re.compile(r"^(?P<name>[^#:]+?)(?:\s*\[fast\])?\s*:\s*(?P<cmd>.+)$")
 TIMEOUT_S = 180
-SENSITIVE_MODULES = ("risk", "execution", "portfolio")
+SENSITIVE_MODULES = ("risk", "execution", "portfolio", "persistence")
 
 
 def check_step(name: str) -> str:
@@ -80,6 +80,9 @@ def project(tmp_path: Path) -> Project:
     """
     shutil.copy2(ROOT / "pyproject.toml", tmp_path / "pyproject.toml")
     ignore = shutil.ignore_patterns("__pycache__")
+    # The copy's only slow tests are the ones a tooling test writes: "no slow test" stays reachable,
+    # and no self-test depends on a time measurement.
+    ignore_slow = shutil.ignore_patterns("__pycache__", "test_volume.py")
     shutil.copytree(ROOT / "src", tmp_path / "src", ignore=ignore)
     shutil.copytree(ROOT / "tools", tmp_path / "tools", ignore=ignore)
     (tmp_path / "tests").mkdir()
@@ -87,7 +90,9 @@ def project(tmp_path: Path) -> Project:
         shutil.copy2(ROOT / "tests" / name, tmp_path / "tests" / name)
     for module in SENSITIVE_MODULES:
         if (ROOT / "tests" / module).is_dir():
-            shutil.copytree(ROOT / "tests" / module, tmp_path / "tests" / module, ignore=ignore)
+            shutil.copytree(
+                ROOT / "tests" / module, tmp_path / "tests" / module, ignore=ignore_slow
+            )
     copy = Project(tmp_path)
     copy.write("tests/test_ok.py", "def test_ok() -> None:\n    assert True\n")
     return copy

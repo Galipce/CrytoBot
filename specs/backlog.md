@@ -50,16 +50,6 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   `src/crytobot/risk/_approval.py:144`) — Severity: Low — Recommendation: UTC'ye çevrilemeyen zaman R-6/R-7
   kapsamında adlandırılmış ret; iki örnek test — Deferred by: Galip Badem, 2026-10-31, zaman sistem saatinden
   geliyor; zamanı dış kaynaktan alan ilk spec'te kapanır.
-- **B-10** — `_state_problems`'taki `e.is_finite()` koşulunu hiçbir test sınamıyor (koşul kaldırılınca 0 test
-  kırılıyor; elle kurulmuş `NaN` zirveli durum o zaman `_reached`'te yakalanmayan `InvalidOperation`, `Infinity`
-  zirve `DRAWDOWN_HALT` verir); ayrıca "gün başı, zirve ya da son kasa eksik" mesajı `NaN`/`Infinity`/`int` kasa
-  için de dönüyor — bunlar eksik değil geçersiz. Bugünkü kod doğru (`INVALID_INPUT`); yalnız `observe`'un
-  üretemeyeceği elle kurulmuş durumlar — Source: spec 0004, review round 4 N-1, N-2
-  (`src/crytobot/risk/_approval.py:137`) — Severity: Low — Recommendation: HAND_BUILT'e `nan_peak` (ve `inf_peak`)
-  vakası, beklenen mesaj "eksik ya da geçersiz"; mesaj metni buna göre — Deferred by: Galip Badem, 2026-10-31, fix
-  turu kalmadı (R-06 orantısız); `RiskState`'i kalıcı depoya yazan/okuyan ilk spec'te kapanır. Not (spec 0005,
-  review round 2 F-2): elle kurulmuş `day=10**4300` durumu `_approval.py:168`'deki mesajda `ValueError`
-  fırlatır — aynı sınıf, aynı yerde kapanır.
 - **B-11** — `risk` tarafı: ölçek sınırı içindeki uç girdiler sınırlı ama yavaş — `_size` ~2,4 s ve ~1 MB'lık onay
   mesajı (giriş `1E+999999`, adım `1E-999999`); ~1M basamaklı `int` girdinin `Decimal`'e çevrilmesi ~27 s. Execution
   tarafı spec 0006 ile kapandı (emir miktarı ve fiyat ≤ 28 anlamlı basamak, 28 basamaklı sınırlı hesap, kısa mesaj)
@@ -73,11 +63,6 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   Recommendation: survivor'ları check'in başlattığı süreç ağacına (ebeveyn PID) göre süz; ağaç dışındakileri ayrı,
   bilgi satırı olarak yaz — Deferred by: Galip Badem, 2026-11-01, spec'i bloklamıyor; araç değişikliği kendi
   bug/change akışında.
-- **B-13** — `query_order`, durumu `bilinmiyor` olup `quotes` girdisi olmayan elle kurulmuş bir `ExecutionState`'te
-  `KeyError` fırlatır (`src/crytobot/execution/_orders.py:436`); bugün durum yalnız `place_order`'dan geldiği için
-  ulaşılamaz — Source: spec 0006, review round 1 F-6 — Severity: Info — Recommendation: kalıcılık spec'inde quote
-  `Order` üzerinde taşınsın ya da emirle birlikte yazılsın; ya da `.get` + "geçersiz girdi" — Deferred by: Galip
-  Badem, 2026-11-01, bu spec'te ulaşılamaz; davranışı kalıcılık spec'i tanımlar.
 - **B-14** — `_judged_differently`'deki "çift/yön metin değil" guard'ını (`src/crytobot/execution/_orders.py:269-270`)
   hiçbir test korumuyor: `None` çiftli vaka guard olmadan da reddediliyor. Guard silinirse elle kurulmuş bir onayda
   `__eq__`'i istisna fırlatan çift `TypeError` (R-12), hep True dönen çift emir oluşturur (R-2) — Source: spec 0006,
@@ -126,3 +111,28 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   (`src/crytobot/execution/_close.py`, `_orders.py`) — Severity: Low, backlog-only — Recommendation: `BOUND`'a gelirin sığıp
   komisyonun sığmadığı bir vaka — Deferred by: Galip Badem, 2026-11-03, kod doğru reddediyor; ayırt eden değer 61 basamaklı
   bir komisyon oranı.
+- **B-22** — `save_store` tamsayı olmayan `base.revision`'da istisna fırlatıyor: `base.revision + 1` `try` dışında; `revision=None` ya da
+  `"1"` → `TypeError` (R-10 "istisna fırlatmaz" sözünün dar ihlali). Depo değişmez — Source: spec 0011, review round 1 F-6
+  (`src/crytobot/persistence/_store.py`) — Severity: Low, backlog-only — Recommendation: `type(base.revision) is int` denetimi ve
+  `INVALID_INPUT` — Deferred by: Galip Badem, 2026-11-03, `base` yalnız `create_store`, `load_store`, `save_store` sonucundan gelir;
+  bu değeri ancak kasıtlı elle kurulmuş bir `StoredState` üretir. Not (spec 0011, review round 3 L-1): `base.ledger` da aynı sınıfta;
+  `replace(state, ledger=None)` → `AttributeError` (`_store.py`, `encode_summary(base.ledger)`). Aynı düzeltmeye `isinstance(base.ledger, Ledger)` denetimi ve
+  `INVALID_INPUT` eklenir.
+- **B-23** — `meta["risk"]` kayıtta sessizce onarılıyor: depo dışından değiştirilen risk satırı (`halted` metin, zirveye rakam eklenmiş, alanların tamamı boş)
+  `SAVED` oluyor ve geçerli değere dönüyor; özet için N-1'in kapattığı yolun kardeşi (R-6) — Source: spec 0011, review round 3 L-2
+  (`src/crytobot/persistence/_store.py`) — Severity: Low — Recommendation: `meta["risk"] != encode_risk(base.risk)` ise `UNREADABLE`, üç vakayla; `risk_lost` vakası korunur —
+  Deferred by: Galip Badem, 2026-11-03, kurcalama spec kapsamı dışında, yazılan değer geçerli `base`'in üstüne kurulu; para kaybı ve yanlış kayıt görülmedi.
+- **B-24** — `tests/persistence/test_unreadable.py`'de gerçek tahminsiz emir satırı sınanmıyor: `unknown_without_quote` ve `unknown_without_quote_fee` tek alanı boşalttığı için
+  kural yerine çözücüde reddediliyor; `quote_on_a_filled_order` da tek alan yazıyor — Source: spec 0011, VERIFY Q-1 — Severity: Low — Recommendation: iki alanı birden boşaltan vaka — Deferred by: Galip Badem, 2026-11-03, gerilemeyi `execution` ve `test_errors.py` testleri yakalıyor.
+- **B-25** — `test_other_process_restores_exactly`'nin dünyalarında bilinmeyen emir yok; dolum tahmini ayrı süreçte sınanmıyor (VERIFY'da gözlemle doğrulandı) — Source: spec 0011,
+  VERIFY Q-2 — Severity: Low — Recommendation: parametreye `full_world` — Deferred by: Galip Badem, 2026-11-03, aynı süreçteki test tahmini sınıyor.
+- **B-26** — `test_day_start_and_peak_are_not_reset_on_the_same_day` zirve son kasaya eşitken kaydediyor, zirve sıfırlamasını görmüyor — Source: spec 0011, VERIFY Q-3 — Severity: Low —
+  Recommendation: senaryo 11000, 10500 olarak kaydedilsin, sonra yeniden başlatılsın — Deferred by: Galip Badem, 2026-11-03, gerilemeyi `test_history.py -k halt_starts` ve property testi yakalıyor.
+- **B-27** — `test_atomic_write.py`'nin kill testleri üretim `_save` işlemini kanıtlamıyor: biri `_write`'ı kendi `BEGIN`'iyle çağırıyor, diğerinde öldürme anı şansa bağlı. Kill yarısı
+  işlemsizliğe kör, bu yarı testsiz kalıyor — Source: spec 0011, VERIFY Q-4 — Severity: Low — Recommendation: öldürmeyi üretim `_save` işleminin içinde belirli bir ana bağlamak — Deferred by: Galip Badem, 2026-11-03, işlemsiz yazımı enjekte hata testleri yakalıyor.
+- **B-28** — R-8 listesinde olmayan iki yazım `SAVED` oluyor: `day_start_equity` değiştirilmiş durdurma kapanışı ve durdurma yokken düşürülmüş zirve. `resume` ve `observe` bunları üretemez,
+  drawdown hesabını etkiler; yalnız hatalı çağıranla oluşur ve testi yok — Source: spec 0011, VERIFY Q-5 (`src/crytobot/persistence/_store.py`, `_risk_allows`) — Severity: Low —
+  Recommendation: **`app` spec'inden önce karar verilecek**: R-8 genişletilsin mi (spec değişikliği, BR-6) — Deferred by: Galip Badem, 2026-11-03, spec metnini ihlal etmiyor, `persistence`'ı kullanan `app` henüz yok.
+- **B-29** — AC-12'nin süre testi duvar saatine bağlı ve bu makinede sınır çevresinde kalabiliyor: yükleme bazı koşullarda 0,95-1,12 s (aynı kod başka zaman 0,62-0,68 s; pilde çalışma olası neden, sınanmadı);
+  yerelde 6 koşunun 2'si kırmızı, flaky riski (R-03) — Source: spec 0011, ship PR #24 (`tests/persistence/test_volume.py`) — Severity: Low — Recommendation: yükleme yolunu hızlandırmak ya da R-11'in sınırını
+  `app` spec'inden önce yeniden değerlendirmek; sınır burada gevşetilmez — Deferred by: Galip Badem, 2026-11-03, kapı CI koşusu; regresyon yok (`d27d3d2` ile aynı). Not (review round 4 L-2): gerçek süre ölçen testte R-03 yerine getirilemez, rampa R-12; sınır değişirse R-08; karar `app` spec'inden önce, botun çalışacağı makine adlandırılarak.

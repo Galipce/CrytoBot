@@ -29,4 +29,7 @@ htmlcov/
 *.sqlite
 *.sqlite3
 *.db
+*.sqlite-journal
+*.sqlite3-journal
+*.db-journal
 data/

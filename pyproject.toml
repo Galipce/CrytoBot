@@ -47,7 +47,7 @@ forbidden_modules = ["crytobot.execution"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "R-3b: only risk, app and backtest import execution"
+name = "R-3b: only risk, app, backtest and persistence import execution"
 type = "forbidden"
 source_modules = [
     "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.analysis",
@@ -63,8 +63,19 @@ source_modules = ["crytobot.analysis"]
 forbidden_modules = [
     "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.strategy",
     "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest", "crytobot.control",
-    "crytobot.reporting", "crytobot.app",
+    "crytobot.reporting", "crytobot.app", "crytobot.persistence",
 ]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "R-3e: only app imports persistence"
+type = "forbidden"
+source_modules = [
+    "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.analysis",
+    "crytobot.strategy", "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest",
+    "crytobot.control", "crytobot.reporting",
+]
+forbidden_modules = ["crytobot.persistence"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
@@ -76,7 +87,7 @@ root_package = "crytobot"
 # `coverage` step in scripts/check.conf (fail_under below).
 [tool.coverage.run]
 branch = true
-source_pkgs = ["crytobot.risk", "crytobot.execution", "crytobot.portfolio"]
+source_pkgs = ["crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.persistence"]
 # test-slow (tooling tests in subprocesses) appends to test-unit's data without importing these packages
 disable_warnings = ["module-not-imported", "no-data-collected"]
 

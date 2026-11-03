@@ -34,6 +34,7 @@ from crytobot.execution._orders import (
     OrderResult,
     QueryOutcome,
     QueryResult,
+    execution_problems,
     place_order,
     query_order,
 )
@@ -59,6 +60,7 @@ __all__: list[str] = [
     "PaperExchange",
     "QueryOutcome",
     "QueryResult",
+    "execution_problems",
     "place_close_order",
     "place_order",
     "query_order",

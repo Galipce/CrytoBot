@@ -45,6 +45,45 @@ class StateUpdate:
         return self.reason is None
 
 
+def risk_state_problems(state: object) -> list[str]:
+    """Spec 0011 R-6: `observe` ve `resume`'un üretemeyeceği durumun sorunları; ham değer yok."""
+    if not isinstance(state, RiskState):
+        return ["risk durumu değil"]
+    fields = (
+        state.day,
+        state.day_start_equity,
+        state.peak_equity,
+        state.last_time,
+        state.last_equity,
+    )
+    if type(state.halted) is not bool:
+        return ["durdurma işareti doğru ya da yanlış olmalı"]
+    if all(field is None for field in fields):
+        return ["gözlem yokken durdurma olmaz"] if state.halted else []
+    if any(field is None for field in fields):
+        return ["alanlar kısmen boş"]
+    equities = (state.day_start_equity, state.peak_equity, state.last_equity)
+    for equity in equities:
+        if not (isinstance(equity, Decimal) and equity.is_finite() and equity > 0):
+            return ["gün başı, zirve ya da son kasa sıfırdan büyük bir sayı değil"]
+        if not _in_scale(equity):
+            return [f"kasa ölçeği varsayılan üs aralığı (±{SCALE}) dışında"]
+    at, day = state.last_time, state.day
+    if not (isinstance(at, datetime) and at.utcoffset() is not None):
+        return ["son gözlem zamanı zaman dilimi taşımalı"]
+    if not isinstance(day, date) or isinstance(day, datetime):
+        return ["gün tarih olmalı"]
+    try:
+        if at.astimezone(UTC).date() != day:
+            return ["gün son gözlem zamanının UTC günü değil"]
+    except OverflowError:  # an extreme date cannot be converted (B-9)
+        return ["son gözlem zamanı UTC'ye çevrilemiyor"]
+    assert state.peak_equity is not None and state.last_equity is not None  # checked above
+    if state.peak_equity < state.last_equity:
+        return ["zirve son kasanın altında"]
+    return []
+
+
 def observe(state: RiskState, at: object, equity: object, limits: RiskLimits) -> StateUpdate:
     """BR-5, BR-6: gözlemle gün başı ve zirve kasayı günceller; drawdown limitinde durdurur."""
 
