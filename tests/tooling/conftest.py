@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 UV_PREFIX = "uv run --locked "
 STEP_LINE = re.compile(r"^(?P<name>[^#:]+?)(?:\s*\[fast\])?\s*:\s*(?P<cmd>.+)$")
 TIMEOUT_S = 180
-SENSITIVE_MODULES = ("risk", "execution", "portfolio")
+SENSITIVE_MODULES = ("risk", "execution", "portfolio", "persistence")
 
 
 def check_step(name: str) -> str:

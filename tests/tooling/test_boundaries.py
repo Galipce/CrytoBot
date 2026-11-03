@@ -10,6 +10,7 @@ VIOLATIONS = {
     "R-3a": {"src/crytobot/strategy/_probe.py": "import crytobot.execution\n"},
     "R-3b": {"src/crytobot/portfolio/_probe.py": "import crytobot.execution\n"},
     "R-3c": {"src/crytobot/analysis/_probe.py": "import crytobot.portfolio\n"},
+    "R-3e": {"src/crytobot/portfolio/_probe.py": "import crytobot.persistence\n"},
     "R-3d": {
         "src/crytobot/risk/limits.py": '"""Risk modülünün iç alt modülü."""\n',
         "src/crytobot/reporting/_probe.py": "from crytobot.risk import limits\n",
