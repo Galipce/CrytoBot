@@ -21,7 +21,7 @@
 - **Veri izolasyonu:** her test kendi geçici SQLite dosyasını (`tmp_path`) kullanır; koşular arası durum taşınmaz.
 - **Araç öz-testleri** (`tests/tooling/`, hepsi `slow`): projeyi `tmp_path`'e kopyalar, bir kuralı bilerek bozar ve
   adım komutunu `scripts/check.conf`'tan okuyarak çalıştırır — her kapının gerçekten kırmızıya döndüğünün kanıtı.
-  Kopya hassas modüllerin (`risk`, `execution`, `portfolio`, `persistence`) gerçek testlerini de alır; gerçek kod kopyada da kapıyı geçer.
+  Kopya hassas modüllerin (`risk`, `execution`, `portfolio`, `persistence`) gerçek testlerini de alır (`test_volume.py` hariç); gerçek kod kopyada da kapıyı geçer.
 - **Coverage verisi:** `test-unit` `.coverage`'ı sıfırdan yazar, `test-slow` ekler, full-only `coverage` adımı eşiği **her modüle ayrı** uygular (toplam değil).
 
 ## What must be tested

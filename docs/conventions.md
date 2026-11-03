@@ -81,6 +81,8 @@
   `timeout=0` ve monotonik saatle bekleme döngüsü — from spec 0011, build (`tests/persistence/test_errors.py`)
 - `sqlite3.connect` sonrası ilk PRAGMA da kilit ya da bozuk dosya hatası verir; `closing` onu kapsamalı, yoksa bağlantı GC'ye
   kadar açık kalır ve Windows'ta dosya kilitlenir — from spec 0011, review round 1 F-2
+- Hassas modül klasörüne eklenen `slow` test araç testlerinin proje kopyasına da girer: `test_check_profiles.py`'deki "1 deselected" düşer, "slow test yok" durumu kaybolur.
+  `tests/tooling/conftest.py` dışlama listesine eklenir; süre ölçen test `--cov` altında ürün dışı süre de ölçer, ayrı süreçte koşar — from spec 0011, ship PR #24, review round 4 I-3
 - `mode=ro` ile açılan SQLite deposu, öldürülmüş sürecin sıcak günlüğünü geri alamaz; salt okuma da `mode=rw` açar — from spec
   0011, plan Risk 3
 - `Decimal("1.10") == Decimal("1.1")`: birebirlik (geçmiş, geri yükleme) değerle değil metinle karşılaştırılır — from spec 0011
