@@ -77,12 +77,19 @@
 - İki modülün aynı basamak sınırı aynı hesabı sınamaz: `execution` emri doldururken defterin sonraki hesabı (gelir, maliyet,
   bakiye) sığmayabilir; 8 ondalıklı olağan değerlerde 28 basamak yetmedi. `execution` çıktısı defterin kapısından geçmeli,
   bakiyeye bağlı kalan ret `app`'te BR-11 sayılır — from spec 0009, review round 4 F-1; spec 0010
+- SQLite'ın `timeout`'u gerçek süre değildir: nominal uykuları toplar, Windows'ta `timeout=4` 6 saniye sürdü. Süre sözü varsa
+  `timeout=0` ve monotonik saatle bekleme döngüsü — from spec 0011, build (`tests/persistence/test_errors.py`)
+- `mode=ro` ile açılan SQLite deposu, öldürülmüş sürecin sıcak günlüğünü geri alamaz; salt okuma da `mode=rw` açar — from spec
+  0011, plan Risk 3
+- `Decimal("1.10") == Decimal("1.1")`: birebirlik (geçmiş, geri yükleme) değerle değil metinle karşılaştırılır — from spec 0011
+- `portfolio/_replay.py`, `record_fill` ve `close_position`'ın hesabının kopyasıdır: motoru tekrar çalıştırmak O(n²); hesap
+  değişirse ikisi birlikte değişir, `tests/portfolio/test_replay.py` farkı yakalar — from spec 0011, ADR 0001
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
 - `mypy --strict` — tip kontrolü (tüm `src/`).
 - `import-linter` — `docs/architecture.md` "Forbidden dependencies" (`pyproject.toml` `[tool.importlinter]`;
   yalnızca doğrudan importlar). "İç alt modül" kuralı özel sözleşme tipiyle: `tools/import_contracts.py`.
-- `pytest --cov` + `coverage report` — `risk`, `execution`, `portfolio`: her biri için ayrı %90 branch coverage eşiği
+- `pytest --cov` + `coverage report` — `risk`, `execution`, `portfolio`, `persistence`: her biri için ayrı %90 branch coverage eşiği
   (full-only `coverage` adımı, modül başına `coverage report --include`; `pyproject.toml` `[tool.coverage.*]`).
 - Türkçe metin: ruff `allowed-confusables = ["ı"]` — docstring/yorumlarda noktasız ı serbest.

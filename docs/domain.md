@@ -57,3 +57,4 @@
 - **Paper ↔ live mod anahtarı** — yanlış mod = sanal sanılan gerçek işlem.
 - **Telegram komut yetkilendirmesi** (chat ID, TOTP, teyit) — yetkisiz kontrol.
 - **Portföy / defter** (`portfolio`) — yanlış bakiye/kâr-zarar = yanlış risk hesabı.
+- **Kalıcı durum** (`persistence`) — kaybolan ya da bozuk okunan durum = silinmiş durdurma, yanlış bakiye.

@@ -50,16 +50,6 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   `src/crytobot/risk/_approval.py:144`) — Severity: Low — Recommendation: UTC'ye çevrilemeyen zaman R-6/R-7
   kapsamında adlandırılmış ret; iki örnek test — Deferred by: Galip Badem, 2026-10-31, zaman sistem saatinden
   geliyor; zamanı dış kaynaktan alan ilk spec'te kapanır.
-- **B-10** — `_state_problems`'taki `e.is_finite()` koşulunu hiçbir test sınamıyor (koşul kaldırılınca 0 test
-  kırılıyor; elle kurulmuş `NaN` zirveli durum o zaman `_reached`'te yakalanmayan `InvalidOperation`, `Infinity`
-  zirve `DRAWDOWN_HALT` verir); ayrıca "gün başı, zirve ya da son kasa eksik" mesajı `NaN`/`Infinity`/`int` kasa
-  için de dönüyor — bunlar eksik değil geçersiz. Bugünkü kod doğru (`INVALID_INPUT`); yalnız `observe`'un
-  üretemeyeceği elle kurulmuş durumlar — Source: spec 0004, review round 4 N-1, N-2
-  (`src/crytobot/risk/_approval.py:137`) — Severity: Low — Recommendation: HAND_BUILT'e `nan_peak` (ve `inf_peak`)
-  vakası, beklenen mesaj "eksik ya da geçersiz"; mesaj metni buna göre — Deferred by: Galip Badem, 2026-10-31, fix
-  turu kalmadı (R-06 orantısız); `RiskState`'i kalıcı depoya yazan/okuyan ilk spec'te kapanır. Not (spec 0005,
-  review round 2 F-2): elle kurulmuş `day=10**4300` durumu `_approval.py:168`'deki mesajda `ValueError`
-  fırlatır — aynı sınıf, aynı yerde kapanır.
 - **B-11** — `risk` tarafı: ölçek sınırı içindeki uç girdiler sınırlı ama yavaş — `_size` ~2,4 s ve ~1 MB'lık onay
   mesajı (giriş `1E+999999`, adım `1E-999999`); ~1M basamaklı `int` girdinin `Decimal`'e çevrilmesi ~27 s. Execution
   tarafı spec 0006 ile kapandı (emir miktarı ve fiyat ≤ 28 anlamlı basamak, 28 basamaklı sınırlı hesap, kısa mesaj)
@@ -73,11 +63,6 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   Recommendation: survivor'ları check'in başlattığı süreç ağacına (ebeveyn PID) göre süz; ağaç dışındakileri ayrı,
   bilgi satırı olarak yaz — Deferred by: Galip Badem, 2026-11-01, spec'i bloklamıyor; araç değişikliği kendi
   bug/change akışında.
-- **B-13** — `query_order`, durumu `bilinmiyor` olup `quotes` girdisi olmayan elle kurulmuş bir `ExecutionState`'te
-  `KeyError` fırlatır (`src/crytobot/execution/_orders.py:436`); bugün durum yalnız `place_order`'dan geldiği için
-  ulaşılamaz — Source: spec 0006, review round 1 F-6 — Severity: Info — Recommendation: kalıcılık spec'inde quote
-  `Order` üzerinde taşınsın ya da emirle birlikte yazılsın; ya da `.get` + "geçersiz girdi" — Deferred by: Galip
-  Badem, 2026-11-01, bu spec'te ulaşılamaz; davranışı kalıcılık spec'i tanımlar.
 - **B-14** — `_judged_differently`'deki "çift/yön metin değil" guard'ını (`src/crytobot/execution/_orders.py:269-270`)
   hiçbir test korumuyor: `None` çiftli vaka guard olmadan da reddediliyor. Guard silinirse elle kurulmuş bir onayda
   `__eq__`'i istisna fırlatan çift `TypeError` (R-12), hep True dönen çift emir oluşturur (R-2) — Source: spec 0006,
