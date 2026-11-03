@@ -126,7 +126,7 @@ def forbidden_writes(world: World, earlier_ledger: Ledger) -> dict[str, World]:
     if risk.last_time is not None:
         earlier = risk.last_time - timedelta(seconds=1)
         writes["observation_moved_back"] = replace(world, risk=replace(risk, last_time=earlier))
-    if risk.halted:
+    if risk.halted and str(risk.peak_equity) != str(risk.last_equity):
         writes["halt_closed_unlike_resume"] = replace(world, risk=replace(risk, halted=False))
     return writes
 
@@ -147,6 +147,16 @@ def assert_refused(path: Path, state: StoredState, writes: dict[str, World]) -> 
         ("observe", "0.5", "100.10"),
         ("buy", "0.5", "100.10"),
         ("observe", "0.5", "100.10"),
+    ]
+)
+# equity back at the peak during a halt: closing it now has resume's exact form, so it is allowed
+@example(
+    steps=[
+        ("observe", "0.5", "1.000"),
+        ("rejected", "0.5", "1.000"),
+        ("observe", "0.5", "1.000"),
+        ("rejected", "0.5", "1.000"),
+        ("observe", "0.5", "1.000"),
     ]
 )
 # the unknown -> filled -> ledger path, which random lists rarely reach
