@@ -436,7 +436,9 @@ def _valid_number(value: object, *, zero: bool = False, digits: int | None = Non
         return False
     if value < 0 or (value == 0 and not zero) or not _in_scale(value):
         return False
-    return digits is None or _significant(value) <= digits
+    if digits is None or len(str(value)) <= digits:  # the text holds every digit; cheap (R-11)
+        return True
+    return _significant(value) <= digits
 
 
 def _valid_fill(fill: object, fee: object) -> bool:

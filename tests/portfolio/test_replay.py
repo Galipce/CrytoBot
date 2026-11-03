@@ -20,6 +20,7 @@ from crytobot.portfolio import (
     Fill,
     Ledger,
     LedgerOutcome,
+    Position,
     close_position,
     ledger_problems,
     open_ledger,
@@ -118,10 +119,14 @@ def _fill_entry(**changes: Any) -> Ledger:
     return replace(ledger, entries=(ledger.entries[0], replace(entry, **changes)))
 
 
+def _opened_position() -> Position:
+    position = filled().entries[1].position
+    assert position is not None
+    return position
+
+
 def _position(**changes: Any) -> Ledger:
-    entry = filled().entries[1]
-    assert entry.position is not None
-    return _fill_entry(position=replace(entry.position, **changes))
+    return _fill_entry(position=replace(_opened_position(), **changes))
 
 
 def _close_entry(**changes: Any) -> Ledger:
@@ -224,6 +229,10 @@ BROKEN: dict[str, Any] = {
     "closure_time_differs": _closure(closed_at=LATER + timedelta(seconds=1)),
     "closure_before_position": _closure(closed_at=LATER - timedelta(seconds=1)),
     "closure_position_differs": _closure(position=opened().entries[0]),
+    "close_without_position": _close_entry(position=None),
+    "close_position_differs": _close_entry(
+        position=hand_built(filled().entries[1].position, stop=Decimal("96"))
+    ),
     "proceeds_differ": _closure(proceeds=Decimal("1")),
     "realized_field_differs": _closure(realized=Decimal("1")),
     "close_amount_differs_entry": _close_entry(usdt=Decimal("1")),
@@ -241,13 +250,48 @@ def test_ledger_that_does_not_derive_is_named(case: str) -> None:
 
 
 def test_fee_larger_than_sale_is_named() -> None:
-    entry = closed().entries[2]
-    assert entry.closure is not None
-    assert ledger_problems(_closure(fee=Decimal("1000"))) != []
+    assert ledger_problems(_closure(fee=Decimal("1000"))) == [
+        "cx-a: komisyon satış tutarından büyük"
+    ]
 
 
 def test_cost_above_balance_is_named() -> None:
-    assert ledger_problems(_position(amount=Decimal("1000"))) != []
+    """Kayıt tutarı doğru hesaplanmış olsa da bakiye negatife düşemez."""
+    position = replace(_opened_position(), amount=Decimal("1000"))
+    cost = position.amount * position.cost_price + position.fee
+
+    ledger = _fill_entry(position=position, usdt=cost)
+
+    assert ledger_problems(ledger) == ["cb-a: bakiye negatife düşüyor"]
+
+
+def test_fill_before_the_opening_is_named() -> None:
+    early = T0 - timedelta(days=1)
+
+    ledger = _fill_entry(position=replace(_opened_position(), opened_at=early), at=early)
+
+    assert ledger_problems(ledger) == ["dolum açılıştan önce"]
+
+
+def test_close_before_the_position_opened_is_named() -> None:
+    early = LATER - timedelta(seconds=1)
+    entry = closed().entries[2]
+    assert entry.closure is not None
+
+    ledger = _close_entry(closure=replace(entry.closure, closed_at=early), at=early)
+
+    assert ledger_problems(ledger) == ["cx-a: kapanış pozisyonun açılışından önce"]
+
+
+def test_close_of_a_position_that_is_not_open_is_named() -> None:
+    entry = closed().entries[2]
+    assert entry.closure is not None
+    ledger = closed()
+    again = replace(entry, closure=replace(entry.closure, client_order_id="cx-b"))
+
+    assert ledger_problems(replace(ledger, entries=(*ledger.entries, again))) == [
+        "cx-b: kapatılan pozisyon açık değil"
+    ]
 
 
 def test_calculation_past_60_digits_is_named() -> None:

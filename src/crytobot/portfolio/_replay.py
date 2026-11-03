@@ -33,7 +33,10 @@ def _number(value: object, *, zero: bool = False, digits: int = DIGITS) -> bool:
         return False
     if value < 0 or (value == 0 and not zero):
         return False
-    return _in_scale(value) and _significant(value) <= digits
+    if not _in_scale(value):
+        return False
+    # the text holds every digit, and is much cheaper than `as_tuple` at 10.000 entries (R-11)
+    return len(str(value)) <= digits or _significant(value) <= digits
 
 
 def _aware(value: object) -> bool:
@@ -43,6 +46,10 @@ def _aware(value: object) -> bool:
 def _exact(left: object, right: object) -> bool:
     """Basamağına kadar aynı: `Decimal("1.10") == Decimal("1.1")` burada yetmez (spec 0011 R-3)."""
     return left is right or repr(left) == repr(right)
+
+
+def _same_number(left: object, right: Decimal) -> bool:
+    return isinstance(left, Decimal) and str(left) == str(right)
 
 
 def _check_position(position: object) -> Position:
@@ -126,7 +133,7 @@ def _fill(state: _Replay, entry: Entry) -> None:
         raise _Broken("dolum açılıştan önce")
     with localcontext(BOUNDED):
         cost = position.amount * position.cost_price + position.fee
-    if not _exact(entry.usdt, cost):
+    if not _same_number(entry.usdt, cost):
         raise _Broken(f"{client_order_id}: kayıt tutarı maliyet değil")
     if cost > balance:
         raise _Broken(f"{client_order_id}: bakiye negatife düşüyor")
@@ -140,13 +147,16 @@ def _close(state: _Replay, entry: Entry) -> None:
     balance = state.balance
     assert balance is not None  # the caller checked the opening
     closure = _check_closure(entry.closure)
-    position = _check_position(entry.position)
+    position = entry.position
+    if not (isinstance(position, Position) and type(position.client_order_id) is str):
+        raise _Broken("pozisyon kaydı yok")
     client_order_id, position_id = closure.client_order_id, position.client_order_id
     if client_order_id in state.bought or client_order_id in state.closures:
         raise _Broken(f"kimlik {client_order_id} iki kez kayıtlı")
     open_position = state.positions.get(position_id)
     if open_position is None:
         raise _Broken(f"{client_order_id}: kapatılan pozisyon açık değil")
+    # the open position passed _check_position at its fill: being the same is enough (R-11)
     if not (_exact(position, open_position) and _exact(closure.position, open_position)):
         raise _Broken(f"{client_order_id}: pozisyon alım kaydıyla aynı değil")
     if closure.amount != position.amount:
@@ -164,9 +174,9 @@ def _close(state: _Replay, entry: Entry) -> None:
         total = state.realized + realized
     if proceeds < 0:
         raise _Broken(f"{client_order_id}: komisyon satış tutarından büyük")
-    if not (_exact(closure.proceeds, proceeds) and _exact(closure.realized, realized)):
+    if not (_same_number(closure.proceeds, proceeds) and _same_number(closure.realized, realized)):
         raise _Broken(f"{client_order_id}: gelir ya da kâr/zarar türetilenle aynı değil")
-    if not _exact(entry.usdt, proceeds):
+    if not _same_number(entry.usdt, proceeds):
         raise _Broken(f"{client_order_id}: kayıt tutarı gelir değil")
     state.balance, state.realized = after, total
     del state.positions[position_id]
