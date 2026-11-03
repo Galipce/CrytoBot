@@ -133,3 +133,6 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
 - **B-28** — R-8 listesinde olmayan iki yazım `SAVED` oluyor: `day_start_equity` değiştirilmiş durdurma kapanışı ve durdurma yokken düşürülmüş zirve. `resume` ve `observe` bunları üretemez,
   drawdown hesabını etkiler; yalnız hatalı çağıranla oluşur ve testi yok — Source: spec 0011, VERIFY Q-5 (`src/crytobot/persistence/_store.py`, `_risk_allows`) — Severity: Low —
   Recommendation: **`app` spec'inden önce karar verilecek**: R-8 genişletilsin mi (spec değişikliği, BR-6) — Deferred by: Galip Badem, 2026-11-03, spec metnini ihlal etmiyor, `persistence`'ı kullanan `app` henüz yok.
+- **B-29** — AC-12'nin süre testi duvar saatine bağlı ve bu makinede sınır çevresinde kalabiliyor: yükleme bazı koşullarda 0,95-1,12 s (aynı kod başka zaman 0,62-0,68 s; pilde çalışma olası neden, sınanmadı);
+  yerelde 6 koşunun 2'si kırmızı, flaky riski (R-03) — Source: spec 0011, ship PR #24 (`tests/persistence/test_volume.py`) — Severity: Low — Recommendation: yükleme yolunu hızlandırmak ya da R-11'in sınırını
+  `app` spec'inden önce yeniden değerlendirmek; sınır burada gevşetilmez — Deferred by: Galip Badem, 2026-11-03, kapı CI koşusu; regresyon yok (`d27d3d2` ile aynı).
