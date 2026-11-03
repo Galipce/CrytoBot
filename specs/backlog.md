@@ -111,3 +111,8 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   (`src/crytobot/execution/_close.py`, `_orders.py`) — Severity: Low, backlog-only — Recommendation: `BOUND`'a gelirin sığıp
   komisyonun sığmadığı bir vaka — Deferred by: Galip Badem, 2026-11-03, kod doğru reddediyor; ayırt eden değer 61 basamaklı
   bir komisyon oranı.
+- **B-22** — `save_store` tamsayı olmayan `base.revision`'da istisna fırlatıyor: `base.revision + 1` `try` dışında; `revision=None` ya da
+  `"1"` → `TypeError` (R-10 "istisna fırlatmaz" sözünün dar ihlali). Depo değişmez — Source: spec 0011, review round 1 F-6
+  (`src/crytobot/persistence/_store.py`) — Severity: Low, backlog-only — Recommendation: `type(base.revision) is int` denetimi ve
+  `INVALID_INPUT` — Deferred by: Galip Badem, 2026-11-03, `base` yalnız `create_store`, `load_store`, `save_store` sonucundan gelir;
+  bu değeri ancak kasıtlı elle kurulmuş bir `StoredState` üretir.
