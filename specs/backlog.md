@@ -115,4 +115,10 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   `"1"` → `TypeError` (R-10 "istisna fırlatmaz" sözünün dar ihlali). Depo değişmez — Source: spec 0011, review round 1 F-6
   (`src/crytobot/persistence/_store.py`) — Severity: Low, backlog-only — Recommendation: `type(base.revision) is int` denetimi ve
   `INVALID_INPUT` — Deferred by: Galip Badem, 2026-11-03, `base` yalnız `create_store`, `load_store`, `save_store` sonucundan gelir;
-  bu değeri ancak kasıtlı elle kurulmuş bir `StoredState` üretir.
+  bu değeri ancak kasıtlı elle kurulmuş bir `StoredState` üretir. Not (spec 0011, review round 3 L-1): `base.ledger` da aynı sınıfta;
+  `replace(state, ledger=None)` → `AttributeError` (`_store.py`, `encode_summary(base.ledger)`). Aynı düzeltmeye `isinstance(base.ledger, Ledger)` denetimi ve
+  `INVALID_INPUT` eklenir.
+- **B-23** — `meta["risk"]` kayıtta sessizce onarılıyor: depo dışından değiştirilen risk satırı (`halted` metin, zirveye rakam eklenmiş, alanların tamamı boş)
+  `SAVED` oluyor ve geçerli değere dönüyor; özet için N-1'in kapattığı yolun kardeşi (R-6) — Source: spec 0011, review round 3 L-2
+  (`src/crytobot/persistence/_store.py`) — Severity: Low — Recommendation: `meta["risk"] != encode_risk(base.risk)` ise `UNREADABLE`, üç vakayla; `risk_lost` vakası korunur —
+  Deferred by: Galip Badem, 2026-11-03, kurcalama spec kapsamı dışında, yazılan değer geçerli `base`'in üstüne kurulu; para kaybı ve yanlış kayıt görülmedi.
