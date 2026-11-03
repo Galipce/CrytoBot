@@ -1,5 +1,13 @@
-"""Spec 0011 AC-12 (R-11): 10.000 defter kayıtlı depoda yükleme ve kayıt 1 saniyenin altında."""
+"""Spec 0011 AC-12 (R-11): 10.000 defter kayıtlı depoda yükleme ve kayıt 1 saniyenin altında.
 
+Süre ayrı süreçte ölçülür: `test-slow` `--cov` ile koşar ve coverage izlemesi ürüne ait olmayan
+süre ekler (bu makinede yükleme 0,6 s yerine 1,75 s). Sınır aynıdır, ölçülen ürünün kendisidir.
+"""
+
+import json
+import os
+import subprocess
+import sys
 import time
 from dataclasses import replace
 from datetime import timedelta
@@ -31,6 +39,14 @@ pytestmark = pytest.mark.slow
 
 ROUNDS = 5000
 LIMIT_S = 1.0
+ROOT = Path(__file__).resolve().parents[2]
+CHILD = """
+import json, sys
+from pathlib import Path
+from tests.persistence.test_volume import measure
+assert "coverage" not in sys.modules
+print(json.dumps(measure(Path(sys.argv[1]))))
+"""
 
 
 def big_world() -> World:
@@ -103,8 +119,8 @@ def big_world() -> World:
     return seen(World(ledger, execution, EMPTY_STATE), "100000000", T0)
 
 
-def test_load_and_save_of_ten_thousand_entries_stay_under_a_second(tmp_path: Path) -> None:
-    path = tmp_path / "depo.sqlite"
+def measure(path: Path) -> dict[str, float]:
+    """Kayıt, yükleme, sonraki kayıt: saniye."""
     world = big_world()
     assert len(world.ledger.entries) >= 10_000
     state = created(path)
@@ -125,7 +141,22 @@ def test_load_and_save_of_ten_thousand_entries_stay_under_a_second(tmp_path: Pat
     second = save(path, result.state, grown)
     second_took = time.perf_counter() - start
     assert second.outcome is StoreOutcome.SAVED, second.message
+    return {"load": load_took, "first": first_took, "second": second_took}
 
-    assert load_took < LIMIT_S, f"yükleme {load_took:.3f} s"
-    assert first_took < LIMIT_S, f"ilk kayıt {first_took:.3f} s"
-    assert second_took < LIMIT_S, f"sonraki kayıt {second_took:.3f} s"
+
+def test_load_and_save_of_ten_thousand_entries_stay_under_a_second(tmp_path: Path) -> None:
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("COV_", "COVERAGE_"))}
+    child = subprocess.run(
+        [sys.executable, "-c", CHILD, str(tmp_path / "depo.sqlite")],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert child.returncode == 0, child.stderr
+    took = json.loads(child.stdout)
+
+    assert took["load"] < LIMIT_S, f"yükleme {took['load']:.3f} s"
+    assert took["first"] < LIMIT_S, f"ilk kayıt {took['first']:.3f} s"
+    assert took["second"] < LIMIT_S, f"sonraki kayıt {took['second']:.3f} s"
