@@ -3,6 +3,7 @@
 from collections.abc import Callable, Mapping
 from datetime import datetime
 
+from crytobot.app._buys import buy_pairs
 from crytobot.app._closes import close_positions, resolve_unknown
 from crytobot.app._inputs import TurnSettings, aware, read_market, settings_problem
 from crytobot.app._notices import NoticeKind, Notices, TurnMemory, TurnNotice
@@ -34,6 +35,7 @@ def _trade(run: TurnRun) -> TurnResult:
     run.observe_equity()
     close_positions(run)
     run.observe_equity()
+    buy_pairs(run)
     run.notices.settle()
     return run.result(TurnOutcome.COMPLETED, "tur tamamlandı")
 
