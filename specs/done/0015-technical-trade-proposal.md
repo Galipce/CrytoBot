@@ -1,6 +1,6 @@
 # Spec 0015 — Teknik işlem önerisi
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0015-plan.md`
 - Self-critique: done
@@ -62,29 +62,31 @@ none — no user interface
   - Backtest ve parametre seçimi (BR-10).
 
 ## Acceptance criteria
-- [ ] AC-1 — Öneri: yukarı kesişim ve eşik altı RSI olan elle hesaplanmış seride sonuç alım önerisidir; çift, giriş, stop ve hedef Fiyat kurallarıyla elle hesaplanan değerlere eşittir.
-- [ ] AC-2 — Kesişim sınırları: önceki mumda EMA'lar eşitken son mumda hızlı üstteyse öneri çıkar. Son mumda eşitlik, hızlının zaten üstte olması ve aşağı kesişim `NO_CROSSOVER` verir. Aynı kesişimden sonraki mumda öneri tekrar çıkmaz.
-- [ ] AC-3 — RSI sınırları: eşiğin altındaki RSI öneri verir; eşiğe eşit ve üstü `RSI_TOO_HIGH`, "değer yok" `RSI_MISSING` verir.
-- [ ] AC-4 — Yetersiz geçmiş: boş seri ve kesişim için gereken uzunluğun bir eksiği `INSUFFICIENT_HISTORY` verir; gereken uzunlukla bu neden dönmez. ATR yoksa `ATR_MISSING` döner.
-- [ ] AC-5 — Açık pozisyon: öneri koşulları sağlansa da o çiftte açık pozisyon varsa `POSITION_OPEN` döner. Birden çok neden birlikteyken Requirements'taki sıradaki ilki döner.
-- [ ] AC-6 — Fiyat geçerliliği: stop'u sıfır ya da altına düşüren büyük `k × ATR` ve tick nedeniyle bozulan sıra `INVALID_PRICES` verir; kısmi öneri dönmez. Her öneride `0 < stop < giriş < hedef` sağlanır (property).
-- [ ] AC-7 — Yuvarlama: üç fiyat da `Decimal` ve tick'in tam katıdır; giriş yukarı, stop ve hedef aşağı yuvarlanır. Zaten tick katı olan değer değişmez; `float` kapanış `0.1`, tick `0.1` ile giriş `0.1` kalır. Bu örnek yuvarlama biriminde ve public yolda `1.1` ile kanıtlanır: `0.1`/`0.1` ile `propose` `INVALID_PRICES` döner, çünkü `0.1`'in altında tick'in pozitif katı yoktur ve stop sıfıra iner.
-- [ ] AC-8 — Geçersiz girdi: sıfır, negatif ya da tam sayı olmayan periyot (mantıksal değer dahil), `hızlı ≥ yavaş`, eşiğin 0–100 aralığı dışında olması (`0 < eşik ≤ 100`), pozitif ve sonlu olmayan `k` ya da `r`, `float` ya da mantıksal değer olan `k`, `r`, eşik ya da tick, pozitif olmayan tick, boş ya da metin olmayan çift, mantıksal değer olmayan açık pozisyon bilgisi ve geçersiz mum adı konmuş hatayla reddedilir; ayar hatası mum hatasının önüne geçer.
-- [ ] AC-9 — `risk` uyumu: gerçekçi fiyat aralığında üretilen öneri `approve_trade`'e, onaya uygun hesap ve limitlerle verildiğinde biçim nedeniyle reddedilmez (`NOT_BUY`, `INVALID_ENTRY`, `INVALID_STOP`, `INVALID_TARGET`, `INVALID_INPUT` dönmez); her öneri alımdır ve stop taşır (BR-3).
-- [ ] AC-10 — Saflık: aynı girdi aynı sonucu verir, girdi değişmez; son mumdan sonraki mumlar kararı etkilemez (seri o mumda kesilince sonuç aynıdır); kâr hedefi ya da kâr-zarar girdisi yoktur (BR-1); import sınırları `scripts/check`'te korunur.
+- [x] AC-1 — Öneri: yukarı kesişim ve eşik altı RSI olan elle hesaplanmış seride sonuç alım önerisidir; çift, giriş, stop ve hedef Fiyat kurallarıyla elle hesaplanan değerlere eşittir.
+- [x] AC-2 — Kesişim sınırları: önceki mumda EMA'lar eşitken son mumda hızlı üstteyse öneri çıkar. Son mumda eşitlik, hızlının zaten üstte olması ve aşağı kesişim `NO_CROSSOVER` verir. Aynı kesişimden sonraki mumda öneri tekrar çıkmaz.
+- [x] AC-3 — RSI sınırları: eşiğin altındaki RSI öneri verir; eşiğe eşit ve üstü `RSI_TOO_HIGH`, "değer yok" `RSI_MISSING` verir.
+- [x] AC-4 — Yetersiz geçmiş: boş seri ve kesişim için gereken uzunluğun bir eksiği `INSUFFICIENT_HISTORY` verir; gereken uzunlukla bu neden dönmez. ATR yoksa `ATR_MISSING` döner.
+- [x] AC-5 — Açık pozisyon: öneri koşulları sağlansa da o çiftte açık pozisyon varsa `POSITION_OPEN` döner. Birden çok neden birlikteyken Requirements'taki sıradaki ilki döner.
+- [x] AC-6 — Fiyat geçerliliği: stop'u sıfır ya da altına düşüren büyük `k × ATR` ve tick nedeniyle bozulan sıra `INVALID_PRICES` verir; kısmi öneri dönmez. Her öneride `0 < stop < giriş < hedef` sağlanır (property).
+- [x] AC-7 — Yuvarlama: üç fiyat da `Decimal` ve tick'in tam katıdır; giriş yukarı, stop ve hedef aşağı yuvarlanır. Zaten tick katı olan değer değişmez; `float` kapanış `0.1`, tick `0.1` ile giriş `0.1` kalır. Bu örnek yuvarlama biriminde ve public yolda `1.1` ile kanıtlanır: `0.1`/`0.1` ile `propose` `INVALID_PRICES` döner, çünkü `0.1`'in altında tick'in pozitif katı yoktur ve stop sıfıra iner.
+- [x] AC-8 — Geçersiz girdi: sıfır, negatif ya da tam sayı olmayan periyot (mantıksal değer dahil), `hızlı ≥ yavaş`, eşiğin 0–100 aralığı dışında olması (`0 < eşik ≤ 100`), pozitif ve sonlu olmayan `k` ya da `r`, `float` ya da mantıksal değer olan `k`, `r`, eşik ya da tick, pozitif olmayan tick, boş ya da metin olmayan çift, mantıksal değer olmayan açık pozisyon bilgisi ve geçersiz mum adı konmuş hatayla reddedilir; ayar hatası mum hatasının önüne geçer.
+- [x] AC-9 — `risk` uyumu: gerçekçi fiyat aralığında üretilen öneri `approve_trade`'e, onaya uygun hesap ve limitlerle verildiğinde biçim nedeniyle reddedilmez (`NOT_BUY`, `INVALID_ENTRY`, `INVALID_STOP`, `INVALID_TARGET`, `INVALID_INPUT` dönmez); her öneri alımdır ve stop taşır (BR-3).
+- [x] AC-10 — Saflık: aynı girdi aynı sonucu verir, girdi değişmez; son mumdan sonraki mumlar kararı etkilemez (seri o mumda kesilince sonuç aynıdır); kâr hedefi ya da kâr-zarar girdisi yoktur (BR-1); import sınırları `scripts/check`'te korunur.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 1 onay sonrası (AC-7 açıklaması, A-3); plan: A-1, A-2, A-3 |
+| Fix rounds | 1 (fix-1 review r1; Low-only, re-review yok, VERIFY diff'i okudu) |
+| Review findings: real / noise / deferred | 3 / 1 / 0 (r1: F-1, F-2, F-3 real, F-4 noise; VERIFY bulgusu yok) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın full koşusudur, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10).
