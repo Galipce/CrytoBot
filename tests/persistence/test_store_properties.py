@@ -166,6 +166,7 @@ def risk_writes(risk: RiskState) -> dict[str, RiskState]:
         "day_start_same_value_other_text": replace(
             risk, day_start_equity=risk.day_start_equity.normalize()
         ),
+        "day_start_changed_as_last_changes": replace(observed, day_start_equity=other_start),
         # applies at peak == last too: the last equity moves down with the peak
         "peak_lowered_as_last_changes": replace(observed, peak_equity=below_peak),
         "peak_lowered_on_new_utc_day": replace(next_day, peak_equity=below_peak),
