@@ -11,7 +11,7 @@ from decimal import ROUND_UP, Context, Decimal, Inexact, Overflow, Rounded, loca
 from pathlib import Path
 
 import pytest
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 from crytobot import strategy
@@ -69,12 +69,19 @@ def decide(candles: list[Candle]) -> object:
     )
 
 
+def test_purity_example_is_a_proposal() -> None:
+    """Aşağıdaki iki testin sabit örneği öneri yolundan geçer; üreteç o yola ulaşmaz."""
+    assert isinstance(decide(from_closes(CROSS)), TradeIntent)
+
+
 @given(candles=candle_series())
+@example(candles=from_closes(CROSS))
 def test_same_input_same_result(candles: list[Candle]) -> None:
     assert decide(candles) == decide(candles)
 
 
 @given(candles=candle_series())
+@example(candles=from_closes(CROSS))
 def test_input_is_not_changed(candles: list[Candle]) -> None:
     before = list(candles)
     decide(candles)
