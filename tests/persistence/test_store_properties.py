@@ -211,7 +211,8 @@ def assert_refused(path: Path, state: StoredState, writes: dict[str, World]) -> 
         ("observe", "0.5", "100.10"),
     ]
 )
-# equity back at the peak during a halt: closing it now has resume's exact form, so it is allowed
+# equity back at the peak during a halt: the halt stays on and no save here closes it; a close in
+# this state would have resume's exact form, so forbidden_writes does not offer it as forbidden
 @example(
     steps=[
         ("observe", "0.5", "1.000"),
