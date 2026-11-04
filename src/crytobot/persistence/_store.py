@@ -360,6 +360,9 @@ def _save(
     # nothing; comparing text decodes no row (plan 0011 Risk 8).
     if meta["ledger"] != encode_summary(base.ledger):
         return _UNREADABLE
+    # Spec 0012 CB-3: the same for the risk row. From here on the row is valid base.risk's text.
+    if meta["risk"] != encode_risk(base.risk):
+        return _UNREADABLE
     stored_entries, stored_orders = _rows(database, "entries"), _rows(database, "orders")
     if not _history_allows(
         stored_entries, stored_orders, decode_risk(meta["risk"]), image, state.risk
@@ -378,13 +381,19 @@ def _save_to(target: Path, base: StoredState, image: _Image, state: StoredState)
 def save_store(
     path: object, base: object, ledger: object, execution: object, risk: object
 ) -> StoreResult:
-    """R-5, R-8, R-10: üç durumu tek işlemde yazar ya da depoyu değiştirmeden adlandırır."""
+    """R-5, R-8, R-10: üç durumu tek işlemde yazar ya da depoyu değiştirmeden adlandırır.
+
+    Spec 0012 sonuç sırası: geçersiz girdi (burada, G/Ç yok) → eski yazım → depo okunamıyor → geçmiş
+    değiştirilemez (`_save`, tek işlemde)."""
     target = _target(path)
     if target is None or not isinstance(base, StoredState):
         return _INVALID
     problems = _problems(ledger, execution, risk)
     if problems:
         return _refusal(StoreOutcome.INVALID_INPUT, f"geçersiz girdi: {problems[0]}")
+    base_problems = risk_state_problems(base.risk)
+    if base_problems:  # the prefix: what needs fixing is the base, not the new state
+        return _refusal(StoreOutcome.INVALID_INPUT, f"geçersiz girdi: base: {base_problems[0]}")
     assert isinstance(ledger, Ledger)  # checked by _problems
     assert isinstance(execution, ExecutionState) and isinstance(risk, RiskState)
     image = _Image(
