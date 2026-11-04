@@ -27,6 +27,11 @@ _PROBE_PAIR = "PROBE/USDT"
 _PROBE_EQUITY = Decimal(10000)
 _PROBE_INTENT = TradeIntent(_PROBE_PAIR, "buy", Decimal(100), Decimal(90), Decimal(1000))
 _PROBE_RULES = PairRules(Decimal(1), Decimal(0), Decimal(0))
+# A filled close whose ledger entry does not fit leaves a lasting flag (R-7), so such a price stops
+# at the gate. Measured with 5e9 units: refused from 1E31 and from the 41st decimal. No real spot
+# price nears these limits, which leave room for far larger amounts (review round 2 F-3)
+_MAX_PRICE_SCALE = 15
+_MIN_PRICE_PLACE = -28
 
 
 @dataclass(frozen=True)
@@ -137,7 +142,10 @@ def _price_value_valid(price: object) -> bool:
     if isinstance(price, bool) or not isinstance(price, Decimal | int):
         return False
     number = Decimal(price)
-    return number.is_finite() and number > 0
+    if not (number.is_finite() and number > 0):
+        return False
+    lowest_place = number.adjusted() - len(number.as_tuple().digits) + 1
+    return number.adjusted() <= _MAX_PRICE_SCALE and lowest_place >= _MIN_PRICE_PLACE
 
 
 def price_issue(data: object, settings: TurnSettings, now: datetime) -> DataIssue | None:

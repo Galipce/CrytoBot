@@ -11,10 +11,28 @@ import pytest
 from crytobot.analysis import Candle
 from crytobot.app import BuyHalt, NoticeKind
 from crytobot.risk import PairRules
-from tests.app.helpers import BTC, ETH, NOW, Bot, make_settings, opened_store, pair_market, series
+from tests.app.helpers import (
+    BTC,
+    CROSS,
+    DEPOSIT,
+    ETH,
+    LATER,
+    NOW,
+    RULES,
+    TICK,
+    Bot,
+    bot_with_position,
+    make_settings,
+    opened_store,
+    pair_market,
+    series,
+)
 
 SOL = "SOL/USDT"
 SECOND = timedelta(seconds=1)
+NO_MINIMUM = PairRules(RULES.amount_step, RULES.min_amount, Decimal(0))
+MICRO = Decimal("0.000001")
+MICRO_STEP = Decimal("0.00000001")
 
 
 def _naive_candles() -> list[Candle]:
@@ -36,6 +54,9 @@ INVALID: dict[str, Any] = {
     "zero_price": lambda: pair_market(price=Decimal(0)),
     "nan_price": lambda: pair_market(price=Decimal("NaN")),
     "float_price": lambda: pair_market(price=10.0),
+    "price_over_scale": lambda: pair_market(price=Decimal("1E16")),
+    "price_past_lowest_place": lambda: pair_market(price=Decimal("1E-29")),
+    "long_price_past_lowest_place": lambda: pair_market(price=Decimal("9.11E-27")),
     "missing_rules": lambda: pair_market(rules=None),
     "bad_rules": lambda: pair_market(rules=PairRules(Decimal(-1), Decimal(0), Decimal(0))),
     "missing_spread": lambda: pair_market(spread=None),
@@ -60,6 +81,49 @@ def test_invalid_data_halts_buying(tmp_path: Path, case: str) -> None:
     assert result.buys == () and result.pairs == ()
     assert BuyHalt.INVALID_DATA in result.halts
     assert [(n.kind, n.subject) for n in bot.notices] == [(NoticeKind.INVALID_DATA, ETH)]
+
+
+@pytest.mark.parametrize("price", [Decimal("1E16"), Decimal("1E-29")])
+def test_price_out_of_scale_places_no_close(tmp_path: Path, price: Decimal) -> None:
+    """Review round 2 F-3: emir oluşsaydı defter reddeder, işaret kalıcı olurdu."""
+    bot = bot_with_position(tmp_path / "s.db")
+    orders = len(bot.stored().execution.orders)
+
+    result = bot.turn({BTC: pair_market(price=price, price_at=LATER, rules=NO_MINIMUM)}, now=LATER)
+
+    assert result.closes == () and BuyHalt.INVALID_DATA in result.halts
+    assert (NoticeKind.INVALID_DATA, BTC) in [(n.kind, n.subject) for n in bot.notices]
+    stored = bot.stored()
+    assert len(stored.execution.orders) == orders and len(stored.ledger.positions) == 1
+    assert bot.conflicts() == ()
+
+
+@pytest.mark.parametrize(
+    "price", [Decimal("9.1111111E15"), Decimal("1E-28"), Decimal("9.1111111E-21")]
+)
+@pytest.mark.parametrize(
+    ("scale", "deposit", "step"),
+    [(Decimal(1), DEPOSIT, Decimal("0.001")), (MICRO, Decimal(10) ** 12, MICRO_STEP)],
+    ids=["ordinary_amount", "huge_amount"],
+)
+def test_price_at_the_limits_closes_into_the_ledger(
+    tmp_path: Path, price: Decimal, scale: Decimal, deposit: Decimal, step: Decimal
+) -> None:
+    """Review round 2 F-3: sınırdaki fiyat ve ~5e15 birimlik pozisyon defterden geçer."""
+    closes = tuple(float(Decimal(str(close)) * scale) for close in CROSS)
+    rules = PairRules(step, step, Decimal(0))
+    bot = Bot(opened_store(tmp_path / "s.db", deposit=deposit))
+    tick = step if scale == MICRO else TICK
+    bought = bot.turn({BTC: pair_market(closes, price=Decimal(10) * scale, rules=rules, tick=tick)})
+    assert len(bought.buys) == 1, bought
+
+    result = bot.turn(
+        {BTC: pair_market(closes, price=price, price_at=LATER, rules=rules, tick=tick)},
+        now=LATER,
+    )
+
+    assert len(result.closes) == 1, result
+    assert bot.stored().ledger.positions == {} and bot.conflicts() == ()
 
 
 def test_bad_third_pair_stops_first_pair_buy(tmp_path: Path) -> None:
