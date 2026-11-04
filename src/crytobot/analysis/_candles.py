@@ -43,7 +43,10 @@ class ParameterProblem(Enum):
 
 
 class InvalidCandleError(AnalysisError):
-    """Mum serisi geçersiz: `problem` nedeni, `position` ilk geçersiz mumun konumu."""
+    """Mum serisi geçersiz: `problem` nedeni, `position` ilk geçersiz mumun konumu.
+
+    `NOT_A_SERIES`'te mum yoktur; `position` anlamsızdır, 0 taşır.
+    """
 
     def __init__(self, problem: CandleProblem, position: int) -> None:
         super().__init__(f"geçersiz mum, konum {position}: {problem.value}")
