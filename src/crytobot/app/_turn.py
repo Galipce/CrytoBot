@@ -3,6 +3,7 @@
 from collections.abc import Callable, Mapping
 from datetime import datetime
 
+from crytobot.app._closes import close_positions, resolve_unknown
 from crytobot.app._inputs import TurnSettings, aware, read_market, settings_problem
 from crytobot.app._notices import NoticeKind, Notices, TurnMemory, TurnNotice
 from crytobot.app._result import BuyHalt, TurnOutcome, TurnResult
@@ -25,11 +26,13 @@ def _unexpected(error: Exception, notices: Notices) -> str:
 
 def _trade(run: TurnRun) -> TurnResult:
     """R-1: sorgu → gözlem → kapanış → gözlem → alım. Her adım durumu kendisi kaydeder."""
+    resolve_unknown(run)
     pairs = dict.fromkeys(
         (*run.settings.whitelist, *(p.pair for p in run.state.ledger.positions.values()))
     )
     run.apply_report(read_market(run.market, tuple(pairs), run.settings, run.now))
     run.observe_equity()
+    close_positions(run)
     run.observe_equity()
     run.notices.settle()
     return run.result(TurnOutcome.COMPLETED, "tur tamamlandı")
