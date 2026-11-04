@@ -48,6 +48,7 @@ def partial_test(module: str) -> str:
     # all gated modules are imported (as tests/test_module_layout.py does), so the gate fails on
     # the missing branch, not on "No data to report" for a module no test touched
     return (
+        "import crytobot.app\n"
         "import crytobot.execution\n"
         "import crytobot.persistence\n"
         "import crytobot.portfolio\n"
@@ -105,7 +106,8 @@ def test_well_tested_module_does_not_hide_untested_one(project: Project) -> None
 def test_clean_skeleton_passes_gate(project: Project) -> None:
     project.write(
         "tests/test_imports.py",
-        "import crytobot.risk, crytobot.execution, crytobot.portfolio, crytobot.persistence\n",
+        "import crytobot.risk, crytobot.execution, crytobot.portfolio, crytobot.persistence\n"
+        "import crytobot.app\n",
     )
 
     tests = project.run_step("test-unit")

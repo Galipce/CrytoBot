@@ -96,12 +96,15 @@
 - Fiyatı tick'e yuvarlamak için `quantize` yetmez: tick `0.5` ya da `3` olabilir, 10'un kuvveti değildir; `(değer // tick) * tick` kullanılır, `//` sıfıra doğru
   keser, negatif değer yuvarlamaya sokulmaz. `float`'tan gelen değer `Decimal(repr(x))` ile çevrilir. Hesap `BOUNDED` ile sınırlanamaz: Wilder ATR düz seride `3e-323`'e
   kadar söner, gerçek bir değerdir; tam bağlam kullanılır, boyutu `k`, `r` ve tick'in ölçek kapısı sınırlar — from spec 0015, plan Risk 3
+- `risk` girişle boyutlar, `execution` güncel fiyat ve slippage'la doldurur: bakiyeyle sınırlı onay slippage'la defterden döner (dolu emir + kalıcı mutabakat), fiyat girişten uzaksa gerçek risk sabit üst sınırı aşar (ölçüm: %5.93). `app` emirden önce iki kapıyla keser; kayıp formülü `risk._size`'ın kopyasıdır, biri değişirse ikisi değişir — from spec 0016, plan Risk 1, 2
+- Defter, `now`'ı pozisyonun açılışından eski dolumu reddeder ama `execution` emri önce doldurur: geri giden saatte dolu emir + kalıcı çelişki kalır, aynı kimlik yeniden denenemez. Emirden önce `now` karşılaştırılır — from spec 0016, plan Risk 3
+- `tests/tooling` kopya projesi yalnız hassas modül testlerini taşır: `tests/app`, `tests/analysis` ya da `tests/strategy`'den import edemez, yoksa kapı testleri toplama hatasıyla kırmızı olur — from spec 0016, plan Risk 16
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
 - `mypy --strict` — tip kontrolü (tüm `src/`).
 - `import-linter` — `docs/architecture.md` "Forbidden dependencies" (`pyproject.toml` `[tool.importlinter]`;
   yalnızca doğrudan importlar). "İç alt modül" kuralı özel sözleşme tipiyle: `tools/import_contracts.py`.
-- `pytest --cov` + `coverage report` — `risk`, `execution`, `portfolio`, `persistence`: her biri için ayrı %90 branch coverage eşiği
+- `pytest --cov` + `coverage report` — `risk`, `execution`, `portfolio`, `persistence`, `app`: her biri için ayrı %90 branch coverage eşiği
   (full-only `coverage` adımı, modül başına `coverage report --include`; `pyproject.toml` `[tool.coverage.*]`).
 - Türkçe metin: ruff `allowed-confusables = ["ı"]` — docstring/yorumlarda noktasız ı serbest.
