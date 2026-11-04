@@ -1,0 +1,116 @@
+"""`run_turn`: tek paper turu, sırası ve en dış hata ağı (spec 0016 R-1, R-11, R-13)."""
+
+from collections.abc import Callable, Mapping
+from datetime import datetime
+
+from crytobot.app._inputs import TurnSettings, aware, read_market, settings_problem
+from crytobot.app._notices import NoticeKind, Notices, TurnMemory, TurnNotice
+from crytobot.app._result import BuyHalt, TurnOutcome, TurnResult
+from crytobot.app._session import SaveRefusedError, TurnRun
+from crytobot.execution import PAPER, PaperExchange
+from crytobot.persistence import load_store
+
+
+def _refusal(outcome: TurnOutcome, message: str, notices: Notices | None = None) -> TurnResult:
+    errors = () if notices is None else tuple(notices.errors)
+    return TurnResult(outcome, (), (), (), (), errors, message)
+
+
+def _unexpected(error: Exception, notices: Notices) -> str:
+    """Plan Risk 13: yalnız tip adı; istisna metni sır taşıyabilir."""
+    message = f"beklenmeyen hata: {type(error).__name__}"
+    notices.enter(NoticeKind.UNEXPECTED_ERROR, "", message)
+    return message
+
+
+def _trade(run: TurnRun) -> TurnResult:
+    """R-1: sorgu → gözlem → kapanış → gözlem → alım. Her adım durumu kendisi kaydeder."""
+    pairs = dict.fromkeys(
+        (*run.settings.whitelist, *(p.pair for p in run.state.ledger.positions.values()))
+    )
+    run.apply_report(read_market(run.market, tuple(pairs), run.settings, run.now))
+    run.observe_equity()
+    run.observe_equity()
+    run.notices.settle()
+    return run.result(TurnOutcome.COMPLETED, "tur tamamlandı")
+
+
+def _begin(
+    *,
+    market: Mapping[str, object],
+    settings: TurnSettings,
+    store_path: object,
+    now: datetime,
+    exchange: PaperExchange,
+    notices: Notices,
+    memory: TurnMemory,
+) -> TurnResult:
+    if not aware(now):
+        notices.enter(NoticeKind.INVALID_TIME, "", "turun zamanı zaman dilimi taşımalı")
+        return _refusal(TurnOutcome.INVALID_TIME, "geçersiz zaman", notices)
+    notices.clear(NoticeKind.INVALID_TIME)
+    problem = settings_problem(settings, now)
+    if problem is not None:
+        return _refusal(TurnOutcome.INVALID_SETTINGS, f"geçersiz ayar: {problem}", notices)
+    loaded = load_store(store_path, PAPER)  # R-13: always paper; a live store is refused
+    if loaded.state is None:
+        notices.enter(NoticeKind.STORE_UNAVAILABLE, "", loaded.message)
+        return _refusal(TurnOutcome.STORE_UNAVAILABLE, loaded.message, notices)
+    notices.clear(NoticeKind.STORE_UNAVAILABLE)
+    if loaded.state.ledger.balance is None:
+        message = "defter açılmamış"
+        notices.enter(NoticeKind.LEDGER_NOT_OPENED, "", message)
+        return _refusal(TurnOutcome.LEDGER_NOT_OPENED, message, notices)
+    notices.clear(NoticeKind.LEDGER_NOT_OPENED)
+    plain = dict(market) if isinstance(market, Mapping) else {}  # not a mapping: all data missing
+    run = TurnRun(store_path, settings, plain, now, exchange, notices, memory, loaded.state)
+    run.note_drawdown()
+    run.sync_safe_mode()
+    if loaded.conflicts:
+        run.flag_reconciliation(loaded.message)
+    if memory.history_halted:
+        run.halt(BuyHalt.HISTORY_IMMUTABLE)
+        notices.enter(NoticeKind.HISTORY_IMMUTABLE, "", "geçmiş değiştirilemez")
+    try:
+        return _trade(run)
+    except SaveRefusedError as refused:
+        return run.result(TurnOutcome.SAVE_REFUSED, str(refused))
+    except Exception as error:  # R-11: what was saved so far stays in the result
+        return run.result(TurnOutcome.UNEXPECTED_ERROR, _unexpected(error, notices))
+
+
+def run_turn(
+    *,
+    market: Mapping[str, object],
+    settings: TurnSettings,
+    store_path: object,
+    now: datetime,
+    exchange: PaperExchange,
+    sink: Callable[[TurnNotice], None],
+    memory: TurnMemory,
+) -> TurnResult:
+    """Tek geçiş: açık pozisyonları kapatır, risk onaylı alım yapar, her adımı kaydeder.
+
+    İstisna fırlatmaz (R-11). Mod girdisi yoktur (R-13). Kâr hedefi ve kâr-zarar girdi değildir
+    (R-14). `memory` süreç belleğidir: aynı süreçte aynı nesne verilir (plan Risk 5).
+    """
+    for name, valid in (
+        ("memory", isinstance(memory, TurnMemory)),
+        ("exchange", isinstance(exchange, PaperExchange)),
+        ("sink", callable(sink)),
+    ):
+        if not valid:
+            return _refusal(TurnOutcome.INVALID_SETTINGS, f"geçersiz ayar: {name}")
+    notices = Notices(memory, sink, now)
+    try:
+        return _begin(
+            market=market,
+            settings=settings,
+            store_path=store_path,
+            now=now,
+            exchange=exchange,
+            notices=notices,
+            memory=memory,
+        )
+    except Exception as error:  # R-11; every completed step is already saved (plan Risk 13)
+        return _refusal(TurnOutcome.UNEXPECTED_ERROR, _unexpected(error, notices), notices)
