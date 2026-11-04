@@ -158,3 +158,11 @@ def test_invalid_parameter_wins_over_invalid_candle(indicator: str, name: str, v
     with pytest.raises(InvalidParameterError) as caught:
         call.function([invalid_candle], **{**call.valid, name: value})
     assert caught.value.name == name
+
+
+def test_macd_order_rule_wins_over_invalid_candle() -> None:
+    """Plan 0014, Risk 6: `fast >= slow` da parametre kuralıdır, veri denetiminden önce gelir."""
+    invalid_candle = candle(0, 10.0, 8.0, 9.0, 8.5)
+    with pytest.raises(InvalidParameterError) as caught:
+        macd([invalid_candle], fast=3, slow=3, signal=2)
+    assert caught.value.problem is ParameterProblem.FAST_NOT_BELOW_SLOW
