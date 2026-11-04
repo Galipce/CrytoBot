@@ -112,8 +112,8 @@ class TurnRun:
         snapshot = account_state(ledger, dict(self.report.prices))
         if snapshot.outcome is SnapshotOutcome.MISSING_PRICE:
             self.notices.keep(NoticeKind.OBSERVATION_REJECTED)  # not evaluated: it still lasts
-            self.halt(BuyHalt.INVALID_DATA)
             if not self.report.issues:  # a price only the ledger refuses, e.g. too many digits
+                self.halt(BuyHalt.INVALID_DATA)
                 self.notices.enter(NoticeKind.INVALID_DATA, "", snapshot.message)
             return
         if snapshot.snapshot is None:

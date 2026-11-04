@@ -61,7 +61,7 @@ def test_stale_position_skips_observation(tmp_path: Path) -> None:
 
     result = bot.turn({BTC: pair_market(price_at=LATER - MAX_PRICE_AGE - MINUTE)}, now=LATER)
 
-    assert BuyHalt.STALE_DATA in result.halts
+    assert result.halts == (BuyHalt.STALE_DATA,)
     assert bot.stored().risk == before
 
 
