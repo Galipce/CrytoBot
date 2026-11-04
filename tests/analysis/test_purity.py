@@ -70,7 +70,7 @@ def forbidden_state(source: str) -> list[str]:
 
 
 def analysis_sources() -> list[Path]:
-    sources = sorted(ANALYSIS_DIR.glob("*.py"))
+    sources = sorted(ANALYSIS_DIR.rglob("*.py"))
     assert {path.name for path in sources} >= {"__init__.py", "_candles.py", "_indicators.py"}
     return sources
 
