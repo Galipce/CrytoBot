@@ -13,8 +13,9 @@
 
 ## Language & framework versions
 - Python 3.12; ortam ve bağımlılıklar `uv` ile, sürümler `uv.lock` ile sabit.
-- Ana kütüphaneler (sürümleri ilk iskelet spec'inde sabitlenir): `ccxt`, `pandas`, `anthropic`,
+- Ana kütüphaneler (sürümleri ilk iskelet spec'inde sabitlenir): `ccxt`, `anthropic`,
   `python-telegram-bot` (veya eşdeğeri), `pydantic`, `pytest`, `hypothesis`, `ruff`, `mypy`, `import-linter`.
+  `pandas` yok: `analysis` yalnız standart kütüphaneyle hesaplar (spec 0014, plan Risk 1).
 
 ## Naming
 - Paket düzeni: `src/crytobot/<module>/` — modül adları `docs/architecture.md` tablosundaki gibi.
@@ -31,7 +32,7 @@
 
 ## Data rules
 - Para, fiyat, miktar, oran (emir/risk/defter tarafı): **`decimal.Decimal`**, asla `float`.
-  `float` yalnızca `analysis` içinde (pandas/indikatör) kullanılır; `strategy → risk` sınırında
+  `float` yalnızca `analysis` içinde (indikatör hesabı) kullanılır; `strategy → risk` sınırında
   `Decimal`'e çevrilir ve borsanın adım/tick hassasiyetine yuvarlanır.
 - Yüzdeler oran olarak saklanır (`Decimal("0.01")` = %1).
 - Zaman damgaları **UTC, timezone-aware** (`datetime` + `tzinfo=UTC`); mumlar açılış zamanına (ms) göre anahtarlanır. "Gün" = UTC günü.
@@ -86,6 +87,10 @@
 - `mode=ro` ile açılan SQLite deposu, öldürülmüş sürecin sıcak günlüğünü geri alamaz; salt okuma da `mode=rw` açar — from spec
   0011, plan Risk 3
 - `Decimal("1.10") == Decimal("1.1")`: birebirlik (geçmiş, geri yükleme) değerle değil metinle karşılaştırılır — from spec 0011
+- Hazır indikatör kütüphaneleri spec'in tanımlarını vermez: TA-Lib düz piyasada RSI 0 verir, MACD'de hızlı EMA'yı yavaşa
+  hizalar, ATR'de ilk mumu atlar; pandas `ewm` varsayılanı SMA ile başlamaz. Referans olarak ChartSchool ve InvestExcel
+  tabloları kullanılır (`tests/analysis/references.py`), tablodaki girdiler tam basamaklarıyla yazılır (`44.34` değil `44.3389`) —
+  from spec 0014, plan Risk 1, 2
 - `portfolio/_replay.py`, `record_fill` ve `close_position`'ın hesabının kopyasıdır: motoru tekrar çalıştırmak O(n²); hesap
   değişirse ikisi birlikte değişir, `tests/portfolio/test_replay.py` farkı yakalar — from spec 0011, ADR 0001
 
