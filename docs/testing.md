@@ -15,7 +15,7 @@
   ve `FakeExchange`; LLM → stub `llm` adaptörü; Telegram → stub. `pytest-socket` ile ağ erişimi testte kapalı.
 - **Determinizm:** saat `Clock` arayüzüyle sabitlenir (`FixedClock`), `hypothesis` ve rastgelelik seed'li,
   zaman dilimi UTC, veri fixture'ları repoda sabit. UI/animasyon yok (CLI + Telegram).
-- **Hypothesis profili** (`tests/conftest.py`): `derandomize=True`, `database=None`; hypothesis'in ev dizini her
+- **Hypothesis profili** (`tests/conftest.py`): `derandomize=True`, `database=None`, `deadline=None` (duvar saati sınırı yükte flake üretir, R-03); hypothesis'in ev dizini her
   koşuda yeni bir geçici dizin, çıkışta silinir — `.hypothesis/` önbelleği ağaçta kalmaz. `st.text` yerine sabit
   örnekler (her koşuda unicode tablosu kurulmasın). Strateji değerleri sınırlara (üst sınır çevresi) odaklanır.
 - **Veri izolasyonu:** her test kendi geçici SQLite dosyasını (`tmp_path`) kullanır; koşular arası durum taşınmaz.

@@ -9,7 +9,7 @@ from hypothesis.configuration import set_hypothesis_home_dir
 
 # derandomize: same examples every run (docs/testing.md, Determinism);
 # database=None: no example database carried between runs (Resource hygiene rule 5)
-settings.register_profile("crytobot", derandomize=True, database=None)
+settings.register_profile("crytobot", derandomize=True, database=None, deadline=None)
 settings.load_profile("crytobot")
 
 # Hypothesis still caches unicode tables and collected constants in its home directory; a fresh
