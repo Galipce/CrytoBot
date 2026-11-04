@@ -213,6 +213,7 @@ NOT_SERIES: dict[str, Callable[[list[Candle]], Any]] = {
     "empty_text": lambda _: "",
     "text": lambda _: "abc",
     "empty_bytes": lambda _: b"",
+    "empty_bytearray": lambda _: bytearray(),
 }
 
 
@@ -234,3 +235,12 @@ def test_rejected_generator_is_not_consumed(indicator: Indicator) -> None:
     with pytest.raises(InvalidCandleError):
         indicator.compute(generator)
     assert next(generator) is candles[0]
+
+
+@pytest.mark.parametrize("indicator", INDICATORS, ids=INDICATOR_IDS)
+def test_tuple_series_gives_the_list_result(indicator: Indicator) -> None:
+    """Dizi kapısı yalnız `list`'e daralmaz: public imza `Sequence[Candle]`."""
+    candles = from_closes(range(1, 10))
+    result = indicator.compute(tuple(candles))
+    assert result == indicator.compute(candles)
+    assert any(value is not None for series in result for value in series)
