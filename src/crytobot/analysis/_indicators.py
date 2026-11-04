@@ -137,8 +137,9 @@ def rsi(candles: Sequence[Candle], *, period: int) -> Series:
 
     Hiç hareket yoksa "değer yok", yalnız kazanç varsa 100, yalnız kayıp varsa 0. Bu kural konuma
     göre işler: düz başlangıç penceresi `None` verir, ilk hareketle sayı başlar. Yani `None`
-    `period` konumundan sonra da görünebilir; hareketten sonraki düz dönemde ortalamalar sıfıra
-    inmez, değer sürer (plan 0014, Risk 9).
+    `period` konumundan sonra da görünebilir. `period >= 2` iken hareketten sonraki düz dönemde
+    ortalamalar sıfıra inmez, değer sürer; `period=1` iken ortalama son değişimin kendisidir, her
+    düz konum `None` olur (plan 0014, Risk 9; A-1).
     """
     check_period(period, "period")
     closes = checked_prices(candles).closes

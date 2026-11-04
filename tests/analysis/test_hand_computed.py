@@ -49,6 +49,12 @@ def test_rsi_flat_start_gets_a_value_with_the_first_move_and_keeps_it() -> None:
     assert result == (None, None, None, None, 100.0, 100.0, 100.0)
 
 
+def test_rsi_period_one_has_no_value_on_flat_positions() -> None:
+    """A-1: `period=1`'de ortalama son değişimdir, düz konumda iki ortalama da sıfırdır."""
+    result = rsi(from_closes([5, 6, 6, 7, 7]), period=1)
+    assert result == (None, 100.0, None, 100.0, None)
+
+
 def test_rsi_only_gains_is_100() -> None:
     assert rsi(from_closes([1, 2, 3, 4, 5, 6]), period=3)[3:] == (100.0, 100.0, 100.0)
 
