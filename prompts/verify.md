@@ -25,6 +25,8 @@ this exact commit (the plan's ## Build evidence, or a CI run whose SHA equals HE
 re-run (rule 6) —
 or for an earlier commit when the diff since touches only specs/ and doctor --strict judged the
 ship (rule 6, the ship commit).
+Project rule (docs/testing.md, Two speeds, rule 10): the fast-line sentence above does not apply here; VERIFY's
+evidence is the named test, --fast and the deliberate break.
 
 For each test, check it would FAIL if the behavior broke — a test that can't fail is not
 evidence. Reading the assert is enough by default. Break the code on purpose — in a temporary

@@ -30,6 +30,8 @@ as amended (its Amendments); if scripts/check.conf changed in this work, ./scrip
 the human; RESIDUE FOUND → name the leaking step and propose the fix.
 The full green may be CI's run of the pushed commit (SHA = HEAD): hand off with its link while
 it runs — REVIEW may start; TRIAGE waits for it to be green, and a red run returns to BUILD.
+Project rule (docs/testing.md, Two speeds, rule 10): no full run is going at this handoff, so TRIAGE does not
+wait; the handoff shows --fast green and says full runs on the ship pull request. A red run there returns to BUILD.
 Return: changed files + check output. Do not self-review; that comes next, independently.
 Show check output in the conversation and reference it; never save it to a file. Record the
 verdict lines in the plan's ## Build evidence — one pointer line each with its SHA (CHECK GREEN
