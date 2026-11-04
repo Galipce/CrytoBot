@@ -33,6 +33,7 @@ OBSERVED = seen(opened(), "10000", T1)
 CHANGED_ROWS = {
     "halted_as_text": """json_set(value, '$[5]', 'evet')""",
     "peak_digit_added": """json_set(value, '$[2]', '100009')""",
+    "same_value_other_text": """json_set(value, '$[2]', '10000.0')""",
     "every_field_empty": """'[null,null,null,null,null,false]'""",
 }
 
