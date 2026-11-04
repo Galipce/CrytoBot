@@ -146,3 +146,8 @@ def test_bollinger_lower_band_may_be_negative() -> None:
     lower = result.lower[2]
     assert lower is not None
     assert lower < 0
+
+
+def test_sma_does_not_keep_a_running_sum() -> None:
+    """Plan 0014, Risk 7: kayan toplamda `1e300 + 1 - 1e300 = 0` olur, küçük değerler kaybolur."""
+    assert sma(from_closes([1e300, 1.0, 1.0, 1.0]), period=2) == (None, 5e299, 1.0, 1.0)

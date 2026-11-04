@@ -3,6 +3,7 @@
 import inspect
 from collections.abc import Callable
 from dataclasses import astuple, dataclass
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -18,7 +19,7 @@ from crytobot.analysis import (
     rsi,
     sma,
 )
-from tests.analysis.helpers import from_closes
+from tests.analysis.helpers import candle, from_closes
 
 
 @dataclass(frozen=True)
@@ -112,6 +113,7 @@ def test_macd_fast_must_be_below_slow(fast: int, slow: int) -> None:
         pytest.param(10**5000, ParameterProblem.NON_FINITE, id="huge"),
         (True, ParameterProblem.NON_NUMERIC),
         ("2", ParameterProblem.NON_NUMERIC),
+        (Decimal("2"), ParameterProblem.NON_NUMERIC),
         (None, ParameterProblem.NON_NUMERIC),
     ],
 )
@@ -143,3 +145,16 @@ def test_huge_valid_macd_periods_are_all_missing() -> None:
     signal = macd(candles, fast=2, slow=3, signal=10**5000)
     assert signal.macd[2] is not None
     assert signal.signal == signal.histogram == (None,) * 8
+
+
+@pytest.mark.parametrize(
+    ("indicator", "name", "value"),
+    [*((indicator, period, 0) for indicator, period in PERIODS), ("bollinger", "k", 0)],
+)
+def test_invalid_parameter_wins_over_invalid_candle(indicator: str, name: str, value: int) -> None:
+    """Plan 0014, Risk 6: önce parametre, sonra veri; boş seri bu sırayı ayırt etmez."""
+    call = CALLS[indicator]
+    invalid_candle = candle(0, 10.0, 8.0, 9.0, 8.5)
+    with pytest.raises(InvalidParameterError) as caught:
+        call.function([invalid_candle], **{**call.valid, name: value})
+    assert caught.value.name == name
