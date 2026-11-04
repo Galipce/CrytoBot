@@ -93,6 +93,9 @@
   from spec 0014, plan Risk 1, 2
 - `portfolio/_replay.py`, `record_fill` ve `close_position`'ın hesabının kopyasıdır: motoru tekrar çalıştırmak O(n²); hesap
   değişirse ikisi birlikte değişir, `tests/portfolio/test_replay.py` farkı yakalar — from spec 0011, ADR 0001
+- Fiyatı tick'e yuvarlamak için `quantize` yetmez: tick `0.5` ya da `3` olabilir, 10'un kuvveti değildir; `(değer // tick) * tick` kullanılır, `//` sıfıra doğru
+  keser, negatif değer yuvarlamaya sokulmaz. `float`'tan gelen değer `Decimal(repr(x))` ile çevrilir. Hesap `BOUNDED` ile sınırlanamaz: Wilder ATR düz seride `3e-323`'e
+  kadar söner, gerçek bir değerdir; tam bağlam kullanılır, boyutu `k`, `r` ve tick'in ölçek kapısı sınırlar — from spec 0015, plan Risk 3
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
