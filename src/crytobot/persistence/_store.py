@@ -283,11 +283,16 @@ def _text_of(moment: datetime | None) -> str | None:
 
 
 def _risk_allows(stored: RiskState, risk: RiskState) -> bool:
-    """R-8: gözlem zamanı geri alınmaz; durdurma yalnız `resume`'un ürettiği biçimde kapanır (depo
-    CLI yetkisini doğrulayamaz, bu kural hatalı yazımı yakalar)."""
-    if stored.last_time is not None and (
-        risk.last_time is None or risk.last_time < stored.last_time
-    ):
+    """R-8, spec 0012 CB-1, CB-2: gözlem zamanı geri alınmaz; aynı UTC gününde gün başı kasa metni
+    değişmez; durdurma yalnız `resume`'un ürettiği biçimde kapanır; zirve başka yerde düşmez (depo
+    CLI yetkisini doğrulayamaz, bu kural hatalı yazımı yakalar). Zirve sayısal karşılaştırılır
+    (`1.10` → `1.1` düşüş değil); `Decimal` karşılaştırması tamdır, bağlam hassasiyetine bağlı
+    değildir."""
+    if stored.last_time is None:
+        return True  # no observation yet: the first one sets every field
+    if risk.last_time is None or risk.last_time < stored.last_time:
+        return False
+    if risk.day == stored.day and str(risk.day_start_equity) != str(stored.day_start_equity):
         return False
     if stored.halted and not risk.halted:
         return (
@@ -295,7 +300,8 @@ def _risk_allows(stored: RiskState, risk: RiskState) -> bool:
             and str(risk.last_equity) == str(stored.last_equity)
             and _text_of(risk.last_time) == _text_of(stored.last_time)
         )
-    return True
+    assert risk.peak_equity is not None and stored.peak_equity is not None  # R-6: all or none
+    return risk.peak_equity >= stored.peak_equity
 
 
 def _history_allows(
@@ -360,6 +366,9 @@ def _save(
     # nothing; comparing text decodes no row (plan 0011 Risk 8).
     if meta["ledger"] != encode_summary(base.ledger):
         return _UNREADABLE
+    # Spec 0012 CB-3: the same for the risk row. From here on the row is valid base.risk's text.
+    if meta["risk"] != encode_risk(base.risk):
+        return _UNREADABLE
     stored_entries, stored_orders = _rows(database, "entries"), _rows(database, "orders")
     if not _history_allows(
         stored_entries, stored_orders, decode_risk(meta["risk"]), image, state.risk
@@ -378,13 +387,19 @@ def _save_to(target: Path, base: StoredState, image: _Image, state: StoredState)
 def save_store(
     path: object, base: object, ledger: object, execution: object, risk: object
 ) -> StoreResult:
-    """R-5, R-8, R-10: üç durumu tek işlemde yazar ya da depoyu değiştirmeden adlandırır."""
+    """R-5, R-8, R-10: üç durumu tek işlemde yazar ya da depoyu değiştirmeden adlandırır.
+
+    Spec 0012 sonuç sırası: geçersiz girdi (burada, G/Ç yok) → eski yazım → depo okunamıyor → geçmiş
+    değiştirilemez (`_save`, tek işlemde)."""
     target = _target(path)
     if target is None or not isinstance(base, StoredState):
         return _INVALID
     problems = _problems(ledger, execution, risk)
     if problems:
         return _refusal(StoreOutcome.INVALID_INPUT, f"geçersiz girdi: {problems[0]}")
+    base_problems = risk_state_problems(base.risk)
+    if base_problems:  # the prefix: what needs fixing is the base, not the new state
+        return _refusal(StoreOutcome.INVALID_INPUT, f"geçersiz girdi: base: {base_problems[0]}")
     assert isinstance(ledger, Ledger)  # checked by _problems
     assert isinstance(execution, ExecutionState) and isinstance(risk, RiskState)
     image = _Image(
