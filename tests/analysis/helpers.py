@@ -11,7 +11,7 @@ from typing import Any
 
 from hypothesis import strategies as st
 
-from crytobot.analysis import Candle, atr, ema, rsi, sma
+from crytobot.analysis import Candle, atr, bollinger, ema, macd, rsi, sma
 
 Series = tuple[float | None, ...]
 T0 = datetime(2024, 1, 1, tzinfo=UTC)
@@ -47,11 +47,23 @@ class Indicator:
     needs: int  # tablodaki parametrelerle ilk değeri üreten en kısa seri
 
 
+def _macd(candles: Sequence[Candle]) -> tuple[Series, ...]:
+    result = macd(candles, fast=2, slow=4, signal=3)
+    return (result.macd, result.signal, result.histogram)
+
+
+def _bollinger(candles: Sequence[Candle]) -> tuple[Series, ...]:
+    result = bollinger(candles, period=3, k=2.0)
+    return (result.middle, result.upper, result.lower)
+
+
 INDICATORS = [
     Indicator("sma", lambda c: (sma(c, period=3),), 3),
     Indicator("ema", lambda c: (ema(c, period=3),), 3),
     Indicator("rsi", lambda c: (rsi(c, period=3),), 4),
     Indicator("atr", lambda c: (atr(c, period=3),), 3),
+    Indicator("macd", _macd, 4),
+    Indicator("bollinger", _bollinger, 3),
 ]
 INDICATOR_IDS = [indicator.name for indicator in INDICATORS]
 

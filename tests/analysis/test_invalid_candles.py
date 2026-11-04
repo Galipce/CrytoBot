@@ -14,7 +14,9 @@ from crytobot.analysis import (
     InvalidCandleError,
     NonFiniteResultError,
     atr,
+    bollinger,
     ema,
+    macd,
     rsi,
     sma,
 )
@@ -162,3 +164,33 @@ def test_rsi_seed_overflow_is_rejected() -> None:
         rsi(from_closes(closes), period=3)
     assert caught.value.indicator == "rsi"
     assert caught.value.position == 3
+
+
+def test_non_finite_macd_is_rejected() -> None:
+    with pytest.raises(NonFiniteResultError) as caught:
+        macd(from_closes([1.7e308] * 6), fast=2, slow=3, signal=2)
+    assert caught.value.indicator == "macd"
+
+
+def test_non_finite_macd_signal_is_rejected() -> None:
+    """Fiyat ortalamaları sığsa da çizgi aşırı büyür, sinyal ortalaması taşar: konum sinyalindir."""
+    closes = [1.0] * 8 + [1.7e308] * 2
+    with pytest.raises(NonFiniteResultError) as caught:
+        macd(from_closes(closes), fast=1, slow=9, signal=2)
+    assert caught.value.indicator == "macd"
+    assert caught.value.position == 9
+
+
+def test_non_finite_bollinger_mean_is_rejected() -> None:
+    with pytest.raises(NonFiniteResultError) as caught:
+        bollinger(from_closes([1.7e308] * 3), period=3, k=2)
+    assert caught.value.indicator == "bollinger"
+    assert caught.value.position == 2
+
+
+def test_non_finite_bollinger_band_is_rejected() -> None:
+    """Orta bant sığar, `k * sigma` taşar: sonuç kısmi dönmez."""
+    with pytest.raises(NonFiniteResultError) as caught:
+        bollinger(from_closes([1, 2, 30, 40]), period=3, k=1.7e308)
+    assert caught.value.indicator == "bollinger"
+    assert caught.value.position == 2

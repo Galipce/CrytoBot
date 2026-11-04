@@ -9,16 +9,39 @@ ile toplanır (plan 0014, Risk 7). Bedel O(n * periyot); çevrimdışı hesap i�
 
 import math
 from collections.abc import Sequence
+from dataclasses import dataclass
 from itertools import pairwise
+from statistics import pstdev
 
 from crytobot.analysis._candles import (
     Candle,
+    InvalidParameterError,
     NonFiniteResultError,
+    ParameterProblem,
+    check_multiplier,
     check_period,
     checked_prices,
 )
 
 Series = tuple[float | None, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MacdSeries:
+    """MACD üçlüsü; her alan girdiyle aynı uzunlukta."""
+
+    macd: Series
+    signal: Series
+    histogram: Series
+
+
+@dataclass(frozen=True, slots=True)
+class BollingerSeries:
+    """Bollinger bantları; her alan girdiyle aynı uzunlukta."""
+
+    middle: Series
+    upper: Series
+    lower: Series
 
 
 def _finite(value: float, indicator: str, position: int) -> float:
@@ -144,3 +167,61 @@ def atr(candles: Sequence[Candle], *, period: int) -> Series:
         for index, (high, low) in enumerate(zip(prices.highs, prices.lows, strict=True))
     ]
     return _padded(_wilder_values(ranges, period, "atr", 0), len(ranges))
+
+
+def macd(candles: Sequence[Candle], *, fast: int, slow: int, signal: int) -> MacdSeries:
+    """Çizgi `slow-1`, sinyal ve histogram `slow+signal-2` konumunda başlar.
+
+    Histogram = çizgi - sinyal. Hızlı ve yavaş EMA ayrı ayrı EMA tanımıyla hesaplanır (hızlı, yavaşa
+    hizalanmaz). Sinyal, çizginin ilk `signal` değerinin ortalamasıyla başlayan EMA'sıdır.
+    """
+    check_period(fast, "fast")
+    check_period(slow, "slow")
+    check_period(signal, "signal")
+    if fast >= slow:
+        raise InvalidParameterError(ParameterProblem.FAST_NOT_BELOW_SLOW, "fast")
+    closes = checked_prices(candles).closes
+    length = len(closes)
+
+    slow_values = _ema_values(closes, slow, "macd")
+    fast_values = _ema_values(closes, fast, "macd")[slow - fast :]
+    line = [
+        _finite(quick - slower, "macd", slow - 1 + index)
+        for index, (quick, slower) in enumerate(zip(fast_values, slow_values, strict=True))
+    ]
+    signal_values = _ema_values(line, signal, "macd", offset=slow - 1)
+    histogram = [
+        _finite(value - smooth, "macd", slow + signal - 2 + index)
+        for index, (value, smooth) in enumerate(zip(line[signal - 1 :], signal_values, strict=True))
+    ]
+    return MacdSeries(
+        macd=_padded(line, length),
+        signal=_padded(signal_values, length),
+        histogram=_padded(histogram, length),
+    )
+
+
+def bollinger(candles: Sequence[Candle], *, period: int, k: float) -> BollingerSeries:
+    """Orta bant `period` kapanışın SMA'sı; bantlar `orta ± k * sigma`, sigma popülasyon sapması.
+
+    `pstdev` tam aritmetik yapar: değişmeyen kapanışta sigma tam 0'dır, üç bant eşitlenir. Alt bant
+    negatif olabilir, hata değildir: yalnız girdi fiyatları pozitif olmak zorundadır.
+    """
+    check_period(period, "period")
+    width = check_multiplier(k, "k")
+    closes = checked_prices(candles).closes
+    length = len(closes)
+
+    middle = _sma_values(closes, period, "bollinger")
+    upper: list[float] = []
+    lower: list[float] = []
+    for index, center in enumerate(middle):
+        end = period + index
+        spread = _finite(width * pstdev(closes[end - period : end]), "bollinger", end - 1)
+        upper.append(_finite(center + spread, "bollinger", end - 1))
+        lower.append(_finite(center - spread, "bollinger", end - 1))
+    return BollingerSeries(
+        middle=_padded(middle, length),
+        upper=_padded(upper, length),
+        lower=_padded(lower, length),
+    )

@@ -1,11 +1,13 @@
 """Spec 0014 AC-1…AC-6: küçük serilerde elle hesaplanmış değerlere `1e-9` toleransla eşitlik."""
 
+import math
 from collections.abc import Sequence
 
+import pytest
 from hypothesis import given
 from pytest import approx
 
-from crytobot.analysis import Candle, atr, ema, rsi, sma
+from crytobot.analysis import Candle, atr, bollinger, ema, macd, rsi, sma
 from tests.analysis.helpers import candle_series, from_closes, from_hlc
 
 
@@ -76,3 +78,71 @@ def test_atr_never_negative(candles: list[Candle]) -> None:
     for period in (1, 2, 5):
         for value in atr(candles, period=period):
             assert value is None or value >= 0.0
+
+
+def test_macd_hand_computed() -> None:
+    # Hızlı 2 (çarpan 2/3), yavaş 3 (çarpan 1/2), sinyal 2 (çarpan 2/3).
+    # Hızlı EMA: 3/2, 19/6, 103/18, 499/54, 2227/162; yavaş EMA: 7/3, 14/3, 47/6, 143/12
+    # Çizgi: 5/6, 19/18, 38/27, 593/324; sinyal: (5/6 + 19/18)/2 = 17/18, 203/162, 398/243
+    result = macd(from_closes([1, 2, 4, 7, 11, 16]), fast=2, slow=3, signal=2)
+    assert_close(result.macd, [None, None, 5 / 6, 19 / 18, 38 / 27, 593 / 324])
+    assert_close(result.signal, [None, None, None, 17 / 18, 203 / 162, 398 / 243])
+    assert_close(result.histogram, [None, None, None, 1 / 9, 25 / 162, 187 / 972])
+
+
+@pytest.mark.parametrize(
+    ("fast", "slow", "signal"), [(12, 26, 9), (2, 3, 2), (1, 2, 1), (3, 10, 4)]
+)
+def test_macd_start_positions(fast: int, slow: int, signal: int) -> None:
+    closes = [100.0 + (i % 7) for i in range(slow + signal + 5)]
+    result = macd(from_closes(closes), fast=fast, slow=slow, signal=signal)
+    assert result.macd[slow - 2] is None
+    assert result.macd[slow - 1] is not None
+    assert result.signal[slow + signal - 3] is None
+    assert result.signal[slow + signal - 2] is not None
+    assert result.histogram[slow + signal - 3] is None
+    assert result.histogram[slow + signal - 2] is not None
+
+
+@given(candles=candle_series(max_size=40))
+def test_macd_histogram_is_line_minus_signal(candles: list[Candle]) -> None:
+    result = macd(candles, fast=2, slow=4, signal=3)
+    for line, signal, histogram in zip(result.macd, result.signal, result.histogram, strict=True):
+        if signal is None:
+            assert histogram is None
+        else:
+            assert line is not None
+            assert histogram == line - signal
+
+
+def test_macd_signal_period_longer_than_the_line_has_no_signal() -> None:
+    result = macd(from_closes([1, 2, 3, 4, 5]), fast=2, slow=3, signal=10)
+    assert result.macd[2:] != (None, None, None)
+    assert result.signal == (None,) * 5
+    assert result.histogram == (None,) * 5
+
+
+def test_bollinger_hand_computed() -> None:
+    # Pencere 2, 4, 6: orta 4, varyans 8/3 (popülasyon; örneklem olsaydı 4).
+    # Pencere 4, 6, 3: orta 13/3, varyans 14/9.
+    result = bollinger(from_closes([2, 4, 6, 3]), period=3, k=2)
+    first = math.sqrt(8 / 3)
+    second = math.sqrt(14 / 9)
+    assert_close(result.middle, [None, None, 4, 13 / 3])
+    assert_close(result.upper, [None, None, 4 + 2 * first, 13 / 3 + 2 * second])
+    assert_close(result.lower, [None, None, 4 - 2 * first, 13 / 3 - 2 * second])
+
+
+@pytest.mark.parametrize("close", [0.1, 1.0, 44.3389, 1e-300])
+def test_bollinger_flat_closes_collapse_bands(close: float) -> None:
+    result = bollinger(from_closes([close] * 5), period=3, k=2.5)
+    assert result.upper == result.middle
+    assert result.lower == result.middle
+    assert result.middle[2:] != (None, None, None)
+
+
+def test_bollinger_lower_band_may_be_negative() -> None:
+    result = bollinger(from_closes([1, 1000, 1]), period=3, k=3)
+    lower = result.lower[2]
+    assert lower is not None
+    assert lower < 0

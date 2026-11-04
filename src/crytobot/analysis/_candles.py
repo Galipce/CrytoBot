@@ -147,3 +147,18 @@ def check_period(value: object, name: str) -> None:
         raise InvalidParameterError(ParameterProblem.NOT_INTEGER, name)
     if value <= 0:
         raise InvalidParameterError(ParameterProblem.NOT_POSITIVE, name)
+
+
+def check_multiplier(value: object, name: str) -> float:
+    """Pozitif ve sonlu sayı; `bool` sayı sayılmaz, `float`'a sığmayan `int` sonlu değildir."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise InvalidParameterError(ParameterProblem.NON_NUMERIC, name)
+    try:
+        number = float(value)
+    except OverflowError:
+        raise InvalidParameterError(ParameterProblem.NON_FINITE, name) from None
+    if not math.isfinite(number):
+        raise InvalidParameterError(ParameterProblem.NON_FINITE, name)
+    if number <= 0:
+        raise InvalidParameterError(ParameterProblem.NOT_POSITIVE, name)
+    return number

@@ -16,18 +16,31 @@ from crytobot.analysis._candles import (
     NonFiniteResultError,
     ParameterProblem,
 )
-from crytobot.analysis._indicators import atr, ema, rsi, sma
+from crytobot.analysis._indicators import (
+    BollingerSeries,
+    MacdSeries,
+    atr,
+    bollinger,
+    ema,
+    macd,
+    rsi,
+    sma,
+)
 
 __all__ = [
     "AnalysisError",
+    "BollingerSeries",
     "Candle",
     "CandleProblem",
     "InvalidCandleError",
     "InvalidParameterError",
+    "MacdSeries",
     "NonFiniteResultError",
     "ParameterProblem",
     "atr",
+    "bollinger",
     "ema",
+    "macd",
     "rsi",
     "sma",
 ]

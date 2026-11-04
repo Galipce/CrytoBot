@@ -6,7 +6,7 @@ eşitlik (spec'in tanımı); tüm kaynaklarda saklı hücreye `1e-9` toleransla 
 
 from collections.abc import Sequence
 
-from crytobot.analysis import atr, ema, rsi, sma
+from crytobot.analysis import atr, bollinger, ema, macd, rsi, sma
 from tests.analysis import references as ref
 from tests.analysis.helpers import from_closes, from_hlc
 
@@ -53,3 +53,22 @@ def test_atr_matches_published_series() -> None:
     result = atr(from_hlc(ref.ATR_HIGHS, ref.ATR_LOWS, ref.ATR_CLOSES), period=14)
     assert_matches(result, ref.ATR_14, places=2)
     assert first_value(result) == 13
+
+
+def test_macd_matches_published_series() -> None:
+    """Tablo `General` biçiminde, basamağı belli değil: kanıt `1e-9` eşitliğidir (Risk 4)."""
+    result = macd(from_closes(ref.MACD_CLOSES), fast=12, slow=26, signal=9)
+    assert_matches(result.macd, ref.MACD_LINE)
+    assert_matches(result.signal, ref.MACD_SIGNAL)
+    assert_matches(result.histogram, ref.MACD_HISTOGRAM)
+    assert first_value(result.macd) == 25
+    assert first_value(result.signal) == 33
+    assert first_value(result.histogram) == 33
+
+
+def test_bollinger_matches_published_series() -> None:
+    result = bollinger(from_closes(ref.BOLLINGER_CLOSES), period=20, k=2)
+    assert_matches(result.middle, ref.BOLLINGER_MIDDLE, places=2)
+    assert_matches(result.upper, ref.BOLLINGER_UPPER, places=2)
+    assert_matches(result.lower, ref.BOLLINGER_LOWER, places=2)
+    assert first_value(result.middle) == 19
