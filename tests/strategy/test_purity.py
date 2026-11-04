@@ -89,16 +89,18 @@ def test_input_is_not_changed(candles: list[Candle]) -> None:
     assert all(after is original for after, original in zip(candles, before, strict=True))
 
 
-@given(later=st.lists(PRICES, min_size=1, max_size=8), other=st.lists(PRICES, max_size=8))
-def test_later_candles_do_not_change_the_decision(later: list[float], other: list[float]) -> None:
-    """Son mumdan sonraki mumlar kararı etkilemez: seri o mumda kesilince sonuç aynıdır."""
+@given(later=st.lists(PRICES, min_size=1, max_size=8))
+def test_longer_series_call_leaves_no_state(later: list[float]) -> None:
+    """Durum tutulmaz: uzun seriyi görmüş çağrı, sonraki kısa serinin kararını değiştirmez.
+
+    İndikatörlerin gelecek mumdan etkilenmediğini `tests/analysis/test_no_look_ahead.py` sınar.
+    """
     first = from_closes((*CROSS, *later))
-    second = from_closes((*CROSS, *other))
     expected = decide(from_closes(CROSS))
     assert isinstance(expected, TradeIntent)
-    decide(first)  # tam seriyi görmek sonraki kararı değiştirmez: durum tutulmaz
+    decide(first)
     assert decide(first[: len(CROSS)]) == expected
-    assert decide(second[: len(CROSS)]) == expected
+    assert decide(from_closes(CROSS)) == expected
 
 
 def test_result_ignores_caller_decimal_context() -> None:
