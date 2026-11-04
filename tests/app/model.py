@@ -56,7 +56,7 @@ class Model:
         loss = amount * (fill - STOP) + commission + amount * STOP * self.fee
         if cost > self.balance or loss > self.balance * HARD_CAP:
             return
-        if fill <= STOP or fill >= TARGET:
+        if price <= STOP or fill >= TARGET:
             return
         self.balance -= cost
         self.position = ModelPosition(amount)

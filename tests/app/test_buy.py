@@ -146,6 +146,32 @@ def test_fill_exactly_at_stop_or_target_places_no_order(tmp_path: Path, price: D
     assert result.buys == ()
 
 
+@pytest.mark.parametrize("price", [Decimal(8), Decimal("7.995"), Decimal("7.9921")])
+def test_price_at_or_below_stop_with_fill_above_it_places_no_order(
+    tmp_path: Path, price: Decimal
+) -> None:
+    """Plan A-3: slippage dolumu stop'un üstüne çıkarsa da kapanış fiyata bakar, alım zarardır."""
+    bot = Bot(opened_store(tmp_path / "s.db"))
+
+    result = bot.turn({BTC: pair_market(price=price)})
+
+    assert [p.reason for p in result.pairs] == [PairNote.FILL_OUTSIDE_STOP_TARGET]
+    assert result.buys == () and result.halts == () and bot.notices == []
+    assert bot.stored().execution.orders == {} and bot.conflicts() == ()
+
+
+def test_price_just_above_stop_with_slippage_still_buys_and_stays_open(tmp_path: Path) -> None:
+    """Plan A-3: stop'un hemen üstündeki fiyat alınır ve aynı fiyatta kapanmaz."""
+    bot = Bot(opened_store(tmp_path / "s.db"))
+    market = {BTC: pair_market(price=Decimal("8.01"))}
+
+    bought = bot.turn(market)
+    second = bot.turn(market)
+
+    assert len(bought.buys) == 1
+    assert second.closes == () and len(bot.stored().ledger.positions) == 1
+
+
 def test_fill_just_inside_stop_and_target_still_buys(tmp_path: Path) -> None:
     """Plan A-1: kapı yalnız sınırdakini ve dışındakini keser."""
     settings = make_settings(strategy=replace(STRATEGY, r=Decimal(1)), slippage=Decimal(0))

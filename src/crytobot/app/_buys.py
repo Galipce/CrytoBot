@@ -52,8 +52,9 @@ def _fill_gate(
     """Plan Risk 1, 2, A-1: `risk` girişe göre boyutlar, dolum güncel fiyat ve slippage'la olur.
 
     Birincisi defterin kalıcı reddini (R-7), ikincisi sabit üst sınırın aşılmasını, üçüncüsü
-    sonraki turda kesin zararla kapanan alımı önler. Kayıp formülü `risk._size`'ın kopyasıdır:
-    orada değişirse burada da değişir (Known traps).
+    sonraki turda kesin zararla kapanan alımı önler: kapanış güncel fiyatla karşılaştırır, stop
+    tarafı bu yüzden dolumla değil fiyatla denetlenir (A-3). Kayıp formülü `risk._size`'ın
+    kopyasıdır: orada değişirse burada da değişir (Known traps).
     """
     fee, slippage = Decimal(run.settings.fee), Decimal(run.settings.slippage)
     try:
@@ -70,7 +71,7 @@ def _fill_gate(
         return PairNote.FILL_EXCEEDS_BALANCE
     if loss > cap:
         return PairNote.RISK_CAP_AT_FILL
-    return PairNote.FILL_OUTSIDE_STOP_TARGET if fill <= stop or fill >= target else None
+    return PairNote.FILL_OUTSIDE_STOP_TARGET if price <= stop or fill >= target else None
 
 
 def _note(run: TurnRun, pair: str, note: PairNote, message: str) -> None:

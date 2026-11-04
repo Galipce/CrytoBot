@@ -87,6 +87,9 @@
 - `mode=ro` ile açılan SQLite deposu, öldürülmüş sürecin sıcak günlüğünü geri alamaz; salt okuma da `mode=rw` açar — from spec
   0011, plan Risk 3
 - `Decimal("1.10") == Decimal("1.1")`: birebirlik (geçmiş, geri yükleme) değerle değil metinle karşılaştırılır — from spec 0011
+- Alımı kesen kapı ile kapanış aynı değere bakmalı: kapanış stop'u güncel fiyatla, dolum kapısı slippage'lı dolumla
+  karşılaştırırsa `fiyat <= stop < dolum` bandındaki alım sonraki turda kesin zararla kapanır — stop tarafı fiyatla
+  denetlenir — from spec 0016, review round 2 F-1
 - Hazır indikatör kütüphaneleri spec'in tanımlarını vermez: TA-Lib düz piyasada RSI 0 verir, MACD'de hızlı EMA'yı yavaşa
   hizalar, ATR'de ilk mumu atlar; pandas `ewm` varsayılanı SMA ile başlamaz. Referans olarak ChartSchool ve InvestExcel
   tabloları kullanılır (`tests/analysis/references.py`), tablodaki girdiler tam basamaklarıyla yazılır (`44.34` değil `44.3389`) —
