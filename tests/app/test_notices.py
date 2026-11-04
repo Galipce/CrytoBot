@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from crytobot.app import NoticeKind, TurnOutcome, _turn
+from crytobot.execution import OrderStatus
 from crytobot.risk import PairRules
 from tests.app.helpers import (
     BTC,
@@ -18,6 +19,8 @@ from tests.app.helpers import (
     NOW,
     RULES,
     Bot,
+    Exchange,
+    bot_with_position,
     make_settings,
     opened_store,
     pair_market,
@@ -115,6 +118,48 @@ def test_early_end_gives_no_false_exit(tmp_path: Path) -> None:
         (NoticeKind.STORE_UNAVAILABLE, True),
         (NoticeKind.STORE_UNAVAILABLE, False),
     ]
+
+
+def test_stale_price_gives_no_false_exit_for_refused_close(tmp_path: Path) -> None:
+    """AC-11, R-10: fiyat bayatken kapanış değerlendirilmedi; takılı kapanış "düzeldi" sayılmaz."""
+    bot = bot_with_position(tmp_path / "s.db")
+    low = Decimal(7)
+    bot.turn(
+        {BTC: pair_market(price=low, price_at=LATER)},
+        now=LATER,
+        exchange=Exchange(place={"cx-": OrderStatus.REJECTED}),
+    )
+    stale_turn = LATER + MAX_PRICE_AGE + 2 * MINUTE
+    bot.turn({BTC: pair_market(price=low, price_at=LATER)}, now=stale_turn)
+    fresh_turn = stale_turn + MINUTE
+    bot.turn({BTC: pair_market(price=low, price_at=fresh_turn)}, now=fresh_turn)
+
+    assert [(n.kind, n.entering) for n in bot.notices] == [
+        (NoticeKind.CLOSE_REFUSED, True),
+        (NoticeKind.STALE_DATA, True),
+        (NoticeKind.STALE_DATA, False),
+    ]
+    assert len(bot.stored().ledger.positions) == 1
+
+
+def test_stale_price_gives_no_false_exit_for_rejected_observation(tmp_path: Path) -> None:
+    """AC-11, R-10: gözlem yapılmayan turda saat hâlâ geride; çıkış ancak gözlem geçince gider."""
+    bot = bot_with_position(tmp_path / "s.db")
+    bot.turn({BTC: pair_market(price_at=LATER)}, now=LATER)
+    behind = NOW + MINUTE
+    bot.turn({BTC: pair_market(price_at=behind)}, now=behind)
+    bot.turn({BTC: pair_market(price_at=behind - MAX_PRICE_AGE - MINUTE)}, now=behind)
+
+    assert [(n.kind, n.entering) for n in bot.notices] == [
+        (NoticeKind.OBSERVATION_REJECTED, True),
+        (NoticeKind.STALE_DATA, True),
+    ]
+
+    after = LATER + MINUTE
+    bot.turn({BTC: pair_market(price_at=after)}, now=after)
+
+    assert bot.kinds(entering=False) == [NoticeKind.OBSERVATION_REJECTED, NoticeKind.STALE_DATA]
+    assert bot.kinds().count(NoticeKind.OBSERVATION_REJECTED) == 1
 
 
 def test_unexpected_error_is_named_without_its_text(

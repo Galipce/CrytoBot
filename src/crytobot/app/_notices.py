@@ -75,9 +75,15 @@ class Notices:
             self._memory.active.remove(key)
             self._send(key, False, f"{kind.value}: durum düzeldi")
 
+    def keep(self, kind: NoticeKind, subject: str = "") -> None:
+        """Durum bu tur değerlendirilmedi: varsa sürüyor sayılır, çıkış üretilmez (R-10)."""
+        key = (kind, subject)
+        if key in self._memory.active:
+            self._touched.add(key)
+
     def settle(self) -> None:
-        """Tamamlanan turda bu tur görülmeyen durumlar bitmiştir. Erken biten turda çağrılmaz:
-        değerlendirilmemiş durum için çıkış üretilmez (plan Risk 11)."""
+        """Tamamlanan turda bu tur görülmeyen durumlar bitmiştir. Erken biten turda çağrılmaz, tur
+        içinde atlanan durum `keep` ile işaretlenir: değerlendirilmeyene çıkış yok (Risk 11)."""
         for kind, subject in sorted(
             self._memory.active - self._touched, key=lambda key: (key[0].value, key[1])
         ):

@@ -5,6 +5,7 @@ Dolan emir ve defter kaydı tek kayıtta yazılır. Defter dolu emri reddederse 
 """
 
 from crytobot.app._inputs import PairMarket
+from crytobot.app._notices import NoticeKind
 from crytobot.app._session import TurnRun
 from crytobot.execution import (
     PAPER,
@@ -130,6 +131,10 @@ def _close_one(run: TurnRun, decision: Decision) -> None:
 
 def close_positions(run: TurnRun) -> None:
     """R-1, R-4, R-18: fiyatı taze pozisyonlardan stop ya da hedefe ulaşanlar kapanır."""
-    prices = dict(run.report.prices)
-    for decision in exit_decisions(run.state.ledger, prices).decisions:
+    ledger = run.state.ledger
+    decided = exit_decisions(ledger, dict(run.report.prices))
+    for subject, position in ledger.positions.items():
+        if position.pair in decided.missing:  # not evaluated: a refusal still lasts (R-10)
+            run.notices.keep(NoticeKind.CLOSE_REFUSED, subject)
+    for decision in decided.decisions:
         _close_one(run, decision)
