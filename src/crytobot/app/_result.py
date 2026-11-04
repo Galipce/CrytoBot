@@ -1,0 +1,63 @@
+"""Turun adı konmuş sonucu (spec 0016 R-11): tur istisna fırlatmaz, ne olduğunu burada söyler."""
+
+from dataclasses import dataclass
+from enum import Enum
+
+from crytobot.execution import CloseOrder, Order, OrderOutcome
+from crytobot.risk import ApprovalReason
+from crytobot.strategy import NoProposalReason
+
+
+class TurnOutcome(Enum):
+    """Tur nasıl bitti. `COMPLETED` dışındakilerde kalan adımlar yapılmamıştır."""
+
+    COMPLETED = "completed"
+    INVALID_SETTINGS = "invalid_settings"
+    INVALID_TIME = "invalid_time"
+    STORE_UNAVAILABLE = "store_unavailable"
+    LEDGER_NOT_OPENED = "ledger_not_opened"
+    SAVE_REFUSED = "save_refused"
+    UNEXPECTED_ERROR = "unexpected_error"
+
+
+class BuyHalt(Enum):
+    """O turda uygulanan durdurma. `DRAWDOWN` yalnız bilgidir: alımı `risk` reddeder (R-8)."""
+
+    STALE_DATA = "stale_data"
+    INVALID_DATA = "invalid_data"
+    UNKNOWN_ORDERS = "unknown_orders"
+    RECONCILIATION = "reconciliation"
+    SAVE_REFUSED = "save_refused"
+    HISTORY_IMMUTABLE = "history_immutable"
+    OBSERVATION_REJECTED = "observation_rejected"
+    DRAWDOWN = "drawdown"
+
+
+class PairNote(Enum):
+    """`app`'in çift başına nedenleri: tekrar koruması (R-3), dolum kapıları (plan Risk 1, 2)."""
+
+    ALREADY_ORDERED = "already_ordered"
+    FILL_EXCEEDS_BALANCE = "fill_exceeds_balance"
+    RISK_CAP_AT_FILL = "risk_cap_at_fill"
+
+
+@dataclass(frozen=True)
+class PairOutcome:
+    """Çiftin emir oluşmadan biten sonucu (R-9): "öneri yok", `risk` reddi, emir reddi ya da not."""
+
+    pair: str
+    reason: NoProposalReason | ApprovalReason | OrderOutcome | PairNote
+    message: str
+
+
+@dataclass(frozen=True)
+class TurnResult:
+    """`closes` ve `buys`: bu turda oluşan ya da durumu netleşen emirler; durumlarını taşırlar."""
+
+    outcome: TurnOutcome
+    closes: tuple[CloseOrder, ...]
+    buys: tuple[Order, ...]
+    pairs: tuple[PairOutcome, ...]
+    halts: tuple[BuyHalt, ...]
+    notice_errors: tuple[str, ...]
+    message: str
