@@ -1,0 +1,135 @@
+"""Spec 0014 AC-8: geçersiz veri adı konmuş hatayla reddedilir; kullanılmayan alan da denetlenir."""
+
+from dataclasses import replace
+from datetime import datetime
+from decimal import Decimal
+from typing import Any
+
+import pytest
+
+from crytobot.analysis import (
+    AnalysisError,
+    Candle,
+    CandleProblem,
+    InvalidCandleError,
+    NonFiniteResultError,
+    ema,
+    sma,
+)
+from tests.analysis.helpers import (
+    INDICATOR_IDS,
+    INDICATORS,
+    Indicator,
+    at,
+    candle,
+    from_closes,
+)
+
+FIELDS = ["open", "high", "low", "close"]
+POSITION = 5
+
+
+def base() -> list[Candle]:
+    """Tablodaki her indikatörü çalıştırmaya yeten geçerli seri."""
+    return [candle(i, 10.0, 12.0, 8.0, 11.0) for i in range(60)]
+
+
+def field_cases() -> list[tuple[str, dict[str, Any], CandleProblem]]:
+    cases: list[tuple[str, dict[str, Any], CandleProblem]] = []
+    bad_values: list[tuple[str, Any, CandleProblem]] = [
+        ("text", "10", CandleProblem.NON_NUMERIC),
+        ("none", None, CandleProblem.NON_NUMERIC),
+        ("bool", True, CandleProblem.NON_NUMERIC),
+        ("decimal", Decimal("10"), CandleProblem.NON_NUMERIC),
+        ("nan", float("nan"), CandleProblem.NON_FINITE),
+        ("inf", float("inf"), CandleProblem.NON_FINITE),
+        ("minus_inf", float("-inf"), CandleProblem.NON_FINITE),
+        ("huge_int", 10**400, CandleProblem.NON_FINITE),
+        ("zero", 0.0, CandleProblem.NOT_POSITIVE),
+        ("negative", -1.0, CandleProblem.NOT_POSITIVE),
+    ]
+    for field in FIELDS:
+        for label, value, problem in bad_values:
+            cases.append((f"{field}_{label}", {field: value}, problem))
+    return cases
+
+
+def shape_cases() -> list[tuple[str, dict[str, Any], CandleProblem]]:
+    return [
+        ("high_below_low", {"high": 7.0}, CandleProblem.HIGH_BELOW_LOW),
+        ("open_above_high", {"open": 13.0}, CandleProblem.OPEN_OUTSIDE_RANGE),
+        ("open_below_low", {"open": 7.0}, CandleProblem.OPEN_OUTSIDE_RANGE),
+        ("close_above_high", {"close": 13.0}, CandleProblem.CLOSE_OUTSIDE_RANGE),
+        ("close_below_low", {"close": 7.0}, CandleProblem.CLOSE_OUTSIDE_RANGE),
+        ("naive_time", {"open_time": datetime(2024, 1, 1)}, CandleProblem.INVALID_TIME),
+        ("text_time", {"open_time": "2024-01-01"}, CandleProblem.INVALID_TIME),
+        ("repeated_time", {"open_time": at(POSITION - 1)}, CandleProblem.TIME_NOT_INCREASING),
+        ("earlier_time", {"open_time": at(0)}, CandleProblem.TIME_NOT_INCREASING),
+    ]
+
+
+CASES = field_cases() + shape_cases()
+
+
+@pytest.mark.parametrize("indicator", INDICATORS, ids=INDICATOR_IDS)
+@pytest.mark.parametrize(("change", "problem"), [c[1:] for c in CASES], ids=[c[0] for c in CASES])
+def test_invalid_candle_is_rejected(
+    indicator: Indicator, change: dict[str, Any], problem: CandleProblem
+) -> None:
+    candles = base()
+    candles[POSITION] = replace(candles[POSITION], **change)
+    with pytest.raises(InvalidCandleError) as caught:
+        indicator.compute(candles)
+    assert caught.value.problem is problem
+    assert caught.value.position == POSITION
+    assert isinstance(caught.value, AnalysisError)
+
+
+@pytest.mark.parametrize("indicator", INDICATORS, ids=INDICATOR_IDS)
+def test_invalid_candle_beyond_the_warm_up_is_rejected_too(indicator: Indicator) -> None:
+    candles = base()
+    candles[-1] = replace(candles[-1], open=-1.0)
+    with pytest.raises(InvalidCandleError) as caught:
+        indicator.compute(candles)
+    assert caught.value.position == len(candles) - 1
+
+
+@pytest.mark.parametrize("indicator", INDICATORS, ids=INDICATOR_IDS)
+def test_invalid_candle_in_a_short_series_is_rejected(indicator: Indicator) -> None:
+    with pytest.raises(InvalidCandleError) as caught:
+        indicator.compute([candle(0, 10.0, 8.0, 9.0, 8.5)])
+    assert caught.value.problem is CandleProblem.HIGH_BELOW_LOW
+
+
+@pytest.mark.parametrize("indicator", INDICATORS, ids=INDICATOR_IDS)
+def test_element_that_is_not_a_candle_is_rejected(indicator: Indicator) -> None:
+    candles: list[Any] = [*base()[:2], object()]
+    with pytest.raises(InvalidCandleError) as caught:
+        indicator.compute(candles)
+    assert caught.value.problem is CandleProblem.NOT_A_CANDLE
+    assert caught.value.position == 2
+
+
+def test_integer_prices_are_accepted_and_results_are_float() -> None:
+    result = sma(from_closes([2, 4, 6]), period=3)
+    assert result == (None, None, 4.0)
+    assert isinstance(result[2], float)
+
+
+def test_message_does_not_print_the_raw_value() -> None:
+    candles = base()
+    candles[1] = replace(candles[1], close=10**5000)
+    with pytest.raises(InvalidCandleError) as caught:
+        sma(candles, period=3)
+    assert caught.value.problem is CandleProblem.NON_FINITE
+    assert "0000" not in str(caught.value)
+
+
+def test_non_finite_result_is_rejected() -> None:
+    """`fsum` taşması `OverflowError` olarak sızmaz, adlandırılmış hata olur; kısmi sonuç yok."""
+    huge = from_closes([1.7e308] * 4)
+    for compute, name in ((sma, "sma"), (ema, "ema")):
+        with pytest.raises(NonFiniteResultError) as caught:
+            compute(huge, period=3)
+        assert caught.value.indicator == name
+        assert caught.value.position == 2
