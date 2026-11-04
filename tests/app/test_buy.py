@@ -8,8 +8,9 @@ from typing import Any
 import pytest
 
 from crytobot.app import PairNote, TurnOutcome, _session
-from crytobot.execution import OrderStatus
+from crytobot.execution import OrderOutcome, OrderStatus
 from crytobot.persistence import save_store
+from crytobot.risk import PairRules
 from tests.app.helpers import (
     BTC,
     DEPOSIT,
@@ -17,6 +18,7 @@ from tests.app.helpers import (
     FEE,
     FIRST_AMOUNT,
     NOW,
+    RULES,
     SLIPPAGE,
     STRATEGY,
     Bot,
@@ -157,6 +159,18 @@ def test_fill_just_inside_stop_and_target_still_buys(tmp_path: Path) -> None:
     high = other.turn({BTC: pair_market(price=Decimal("11.99"))})
 
     assert [o.fill_price for o in high.buys] == [Decimal("11.99")]
+
+
+def test_order_refused_by_execution_appears_for_the_pair(tmp_path: Path) -> None:
+    """R-9, R-11: giriş 10'da asgari geçer, dolum 9.009'da geçmez: emir yok, çift nedeni taşır."""
+    minimum = PairRules(RULES.amount_step, RULES.min_amount, Decimal(490))
+    bot = Bot(opened_store(tmp_path / "s.db"))
+
+    result = bot.turn({BTC: pair_market(price=Decimal(9), rules=minimum)})
+
+    assert [p.reason for p in result.pairs] == [OrderOutcome.EXCHANGE_RULE]
+    assert result.buys == () and result.halts == () and bot.notices == []
+    assert bot.stored().execution.orders == {} and bot.conflicts() == ()
 
 
 def test_each_buy_is_observed_before_the_next(tmp_path: Path) -> None:

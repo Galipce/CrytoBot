@@ -4,10 +4,12 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from crytobot.app import BuyHalt, NoticeKind
+import pytest
+
+from crytobot.app import BuyHalt, NoticeKind, _closes
 from crytobot.execution import OrderStatus
 from crytobot.portfolio import CloseReason, EntryKind
-from crytobot.risk import PairRules
+from crytobot.risk import CloseApproval, CloseRefusal, PairRules
 from tests.app.helpers import (
     BTC,
     DEPOSIT,
@@ -106,6 +108,31 @@ def test_missing_rule_keeps_position_open(tmp_path: Path) -> None:
     assert len(bot.stored().ledger.positions) == 1
     assert NoticeKind.CLOSE_REFUSED in bot.kinds()
     assert BuyHalt.INVALID_DATA in result.halts
+
+
+def test_refused_close_approval_keeps_position_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R-18, plan Risk 15: onay reddi gerçek girdiyle üretilemez; koşul bitince yeniden denenir."""
+    bot = bot_with_position(tmp_path / "s.db")
+
+    def refuse(request: Any) -> CloseApproval:
+        return CloseApproval(CloseRefusal.INVALID_INPUT, "enjekte", request)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(_closes, "approve_close", refuse)
+        refused = bot.turn({BTC: later("7")}, now=LATER)
+
+    assert refused.closes == ()
+    assert len(bot.stored().ledger.positions) == 1
+    assert len(bot.stored().execution.orders) == 1  # only the buy: no close order was placed
+    assert bot.kinds() == [NoticeKind.CLOSE_REFUSED]
+
+    retried = bot.turn({BTC: later("7")}, now=LATER)
+
+    assert [o.pair for o in retried.closes] == [BTC]
+    assert bot.stored().ledger.positions == {}
+    assert bot.kinds(entering=False) == [NoticeKind.CLOSE_REFUSED]
 
 
 def test_off_whitelist_position_closes(tmp_path: Path) -> None:
