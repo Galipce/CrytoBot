@@ -1,6 +1,6 @@
 # Spec 0014 — Teknik indikatörler
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0014-plan.md`
 - Self-critique: done
@@ -47,30 +47,32 @@ none — no user interface
   saklama; hacim indikatörleri ve Ichimoku gibi daha karmaşık indikatörler; `strategy → risk` sınırındaki çevirme.
 
 ## Acceptance criteria
-- [ ] AC-1 — SMA: `n` periyotluk sonuç, yayımlanmış referans serisiyle aynıdır; ilk değer `n-1` konumundadır.
-- [ ] AC-2 — EMA: sonuç referans serisiyle aynıdır; ilk değer `n-1` konumunda ilk `n` kapanışın SMA'sıdır.
-- [ ] AC-3 — RSI: sonuç, Wilder yumuşatmasıyla referans serisiyle aynıdır; ilk değer `n` konumundadır ve her değer 0 ile 100 arasındadır; düz piyasa, yalnız kazanç ve yalnız kayıp durumları Formül uzlaşıları'ndaki gibidir.
-- [ ] AC-4 — MACD: MACD çizgisi, sinyal çizgisi ve histogram referans serisiyle aynıdır; çizgi `yavaş-1`, sinyal ve histogram `yavaş+sinyal-2` konumunda başlar; her konumda histogram = MACD − sinyal.
-- [ ] AC-5 — Bollinger: orta, üst ve alt bant referans serisiyle aynıdır; σ popülasyon standart sapmasıdır; değişmeyen kapanışlarda üç bant eşittir.
-- [ ] AC-6 — ATR: sonuç, Wilder yumuşatmasıyla referans serisiyle aynıdır; ilk değer `n-1` konumundadır; ilk mumun gerçek aralığı `high − low`, sonrakiler önceki kapanışı hesaba katar; hiçbir değer negatif değildir.
-- [ ] AC-7 — Yetersiz veri: sonuç her indikatörde girdiyle aynı uzunluktadır; hesaplanamayan konumlar "değer yok" taşır; periyottan kısa seri tümüyle "değer yok", boş seri boş sonuç verir ve ikisi de hata değildir.
-- [ ] AC-8 — Geçersiz veri: sıfır ya da negatif fiyat, sayı olmayan ya da sonsuz değer, `high < low`, `low`-`high` aralığı dışında açılış ya da kapanış ve kesin artmayan zaman damgası adı konmuş hatayla reddedilir; indikatörün kullanmadığı alanlar da denetlenir; sonlu olmayan sonuç da aynı biçimde reddedilir; hata nedeni ayırt edilebilir, kısmi sonuç dönmez.
-- [ ] AC-9 — Geçersiz parametre: sıfır, negatif ya da tam sayı olmayan periyot (mantıksal değer dahil) adı konmuş hatayla reddedilir; MACD'de hızlı periyot yavaştan küçük değilse ve Bollinger'da `k` pozitif ve sonlu değilse de reddedilir; periyotların ve `k`'nın varsayılanı yoktur, verilmeyen parametre hesap üretmez.
-- [ ] AC-10 — Look-ahead yok: her indikatörde `t` konumundaki değer, `t`'den sonraki mumlar değiştirilse, eklense ya da silinse aynı kalır (seri geçerli kaldığı sürece).
-- [ ] AC-11 — Saflık: aynı girdi her çağrıda aynı sonucu verir; girdi değişmez; `analysis`'in import sınırları `scripts/check`'te korunur.
+- [x] AC-1 — SMA: `n` periyotluk sonuç, yayımlanmış referans serisiyle aynıdır; ilk değer `n-1` konumundadır.
+- [x] AC-2 — EMA: sonuç referans serisiyle aynıdır; ilk değer `n-1` konumunda ilk `n` kapanışın SMA'sıdır.
+- [x] AC-3 — RSI: sonuç, Wilder yumuşatmasıyla referans serisiyle aynıdır; ilk değer `n` konumundadır ve her değer 0 ile 100 arasındadır; düz piyasa, yalnız kazanç ve yalnız kayıp durumları Formül uzlaşıları'ndaki gibidir.
+- [x] AC-4 — MACD: MACD çizgisi, sinyal çizgisi ve histogram referans serisiyle aynıdır; çizgi `yavaş-1`, sinyal ve histogram `yavaş+sinyal-2` konumunda başlar; her konumda histogram = MACD − sinyal.
+- [x] AC-5 — Bollinger: orta, üst ve alt bant referans serisiyle aynıdır; σ popülasyon standart sapmasıdır; değişmeyen kapanışlarda üç bant eşittir.
+- [x] AC-6 — ATR: sonuç, Wilder yumuşatmasıyla referans serisiyle aynıdır; ilk değer `n-1` konumundadır; ilk mumun gerçek aralığı `high − low`, sonrakiler önceki kapanışı hesaba katar; hiçbir değer negatif değildir.
+- [x] AC-7 — Yetersiz veri: sonuç her indikatörde girdiyle aynı uzunluktadır; hesaplanamayan konumlar "değer yok" taşır; periyottan kısa seri tümüyle "değer yok", boş seri boş sonuç verir ve ikisi de hata değildir.
+- [x] AC-8 — Geçersiz veri: sıfır ya da negatif fiyat, sayı olmayan ya da sonsuz değer, `high < low`, `low`-`high` aralığı dışında açılış ya da kapanış ve kesin artmayan zaman damgası adı konmuş hatayla reddedilir; indikatörün kullanmadığı alanlar da denetlenir; sonlu olmayan sonuç da aynı biçimde reddedilir; hata nedeni ayırt edilebilir, kısmi sonuç dönmez.
+- [x] AC-9 — Geçersiz parametre: sıfır, negatif ya da tam sayı olmayan periyot (mantıksal değer dahil) adı konmuş hatayla reddedilir; MACD'de hızlı periyot yavaştan küçük değilse ve Bollinger'da `k` pozitif ve sonlu değilse de reddedilir; periyotların ve `k`'nın varsayılanı yoktur, verilmeyen parametre hesap üretmez.
+- [x] AC-10 — Look-ahead yok: her indikatörde `t` konumundaki değer, `t`'den sonraki mumlar değiştirilse, eklense ya da silinse aynı kalır (seri geçerli kaldığı sürece).
+- [x] AC-11 — Saflık: aynı girdi her çağrıda aynı sonucu verir; girdi değişmez; `analysis`'in import sınırları `scripts/check`'te korunur.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 onay sonrası; plan: A-1, A-2, A-3 |
+| Fix rounds | 2 (fix-1 review r1; fix-2 review r2); review r2 Medium'suz, VERIFY r1 PASS |
+| Review findings: real / noise / deferred | 8 / 5 / 4 (r1: F-1…F-5 real, F-8, F-9 noise, F-6 B-35, F-7 B-36 · r2: F-10, F-11, F-13 real, F-12 B-37 · VERIFY r1: V-2, V-3, V-4 noise, V-1 B-38) |
+| Regressions introduced | 0 (fix-2'deki flake önceden vardı: 0010'un testi, A-3) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın full koşusudur, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). R-03 (A-3) de aynı koşuyla kapanır.
