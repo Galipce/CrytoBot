@@ -16,7 +16,7 @@ from crytobot.analysis._candles import (
     NonFiniteResultError,
     ParameterProblem,
 )
-from crytobot.analysis._indicators import ema, sma
+from crytobot.analysis._indicators import atr, ema, rsi, sma
 
 __all__ = [
     "AnalysisError",
@@ -26,6 +26,8 @@ __all__ = [
     "InvalidParameterError",
     "NonFiniteResultError",
     "ParameterProblem",
+    "atr",
     "ema",
+    "rsi",
     "sma",
 ]

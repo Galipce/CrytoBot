@@ -9,6 +9,7 @@ ile toplanır (plan 0014, Risk 7). Bedel O(n * periyot); çevrimdışı hesap i�
 
 import math
 from collections.abc import Sequence
+from itertools import pairwise
 
 from crytobot.analysis._candles import (
     Candle,
@@ -34,7 +35,7 @@ def _mean(values: Sequence[float], indicator: str, position: int) -> float:
     return _finite(total / len(values), indicator, position)
 
 
-def _padded(values: Sequence[float], length: int) -> Series:
+def _padded(values: Sequence[float | None], length: int) -> Series:
     """Serinin sonuna hizalar: baştaki konumlar "değer yok"."""
     return (*([None] * (length - len(values))), *values)
 
@@ -80,3 +81,66 @@ def ema(candles: Sequence[Candle], *, period: int) -> Series:
     check_period(period, "period")
     closes = checked_prices(candles).closes
     return _padded(_ema_values(closes, period, "ema"), len(closes))
+
+
+def _wilder_values(
+    values: Sequence[float], period: int, indicator: str, offset: int
+) -> list[float]:
+    """Wilder yumuşatması: ilk değer ilk `period` değerin ortalaması, sonra `(önceki*(n-1)+yeni)/n`.
+
+    Her adım denetlenir: RSI'da ortalama kazanç `inf` olup kayıp sonlu kalsa sonuç `100` çıkar,
+    yalnız son değere bakmak taşmayı gizler (plan 0014, Risk 7).
+    """
+    if len(values) < period:
+        return []
+    current = _mean(values[:period], indicator, offset + period - 1)
+    result = [current]
+    for index in range(period, len(values)):
+        current = _finite(
+            (current * (period - 1) + values[index]) / period, indicator, offset + index
+        )
+        result.append(current)
+    return result
+
+
+def _rsi_value(gain: float, loss: float) -> float | None:
+    """İki ortalamadan RSI. `gain / loss` sonsuza taşsa da sonuç doğru sınırdır: 100."""
+    if loss == 0:
+        return None if gain == 0 else 100.0
+    return 100 - 100 / (1 + gain / loss)
+
+
+def rsi(candles: Sequence[Candle], *, period: int) -> Series:
+    """Wilder RSI; ilk değer `period` konumunda, her değer 0 ile 100 arasında.
+
+    Hiç hareket yoksa "değer yok", yalnız kazanç varsa 100, yalnız kayıp varsa 0. Bu kural konuma
+    göre işler: düz başlangıç penceresi `None` verir, ilk hareketle sayı başlar. Yani `None`
+    `period` konumundan sonra da görünebilir; hareketten sonraki düz dönemde ortalamalar sıfıra
+    inmez, değer sürer (plan 0014, Risk 9).
+    """
+    check_period(period, "period")
+    closes = checked_prices(candles).closes
+    changes = [after - before for before, after in pairwise(closes)]
+    gains = _wilder_values([max(change, 0.0) for change in changes], period, "rsi", 1)
+    losses = _wilder_values([max(-change, 0.0) for change in changes], period, "rsi", 1)
+    values = [_rsi_value(gain, loss) for gain, loss in zip(gains, losses, strict=True)]
+    return _padded(values, len(closes))
+
+
+def _true_range(high: float, low: float, previous_close: float) -> float:
+    return max(high - low, abs(high - previous_close), abs(low - previous_close))
+
+
+def atr(candles: Sequence[Candle], *, period: int) -> Series:
+    """Wilder ATR; ilk değer `period-1` konumunda ilk `period` gerçek aralığın ortalaması.
+
+    İlk mumun gerçek aralığı `high - low` (Wilder'ın özgün tanımı); sonrakiler önceki kapanışı
+    hesaba katar.
+    """
+    check_period(period, "period")
+    prices = checked_prices(candles)
+    ranges = [
+        high - low if index == 0 else _true_range(high, low, prices.closes[index - 1])
+        for index, (high, low) in enumerate(zip(prices.highs, prices.lows, strict=True))
+    ]
+    return _padded(_wilder_values(ranges, period, "atr", 0), len(ranges))

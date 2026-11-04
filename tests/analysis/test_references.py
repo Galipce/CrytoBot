@@ -6,9 +6,9 @@ eşitlik (spec'in tanımı); tüm kaynaklarda saklı hücreye `1e-9` toleransla 
 
 from collections.abc import Sequence
 
-from crytobot.analysis import ema, sma
+from crytobot.analysis import atr, ema, rsi, sma
 from tests.analysis import references as ref
-from tests.analysis.helpers import from_closes
+from tests.analysis.helpers import from_closes, from_hlc
 
 TOLERANCE = 1e-9
 
@@ -41,3 +41,15 @@ def test_ema_matches_published_series() -> None:
     result = ema(from_closes(ref.MOVAVG_CLOSES), period=10)
     assert_matches(result, ref.EMA_10, places=2)
     assert first_value(result) == 9
+
+
+def test_rsi_matches_published_series() -> None:
+    result = rsi(from_closes(ref.RSI_CLOSES), period=14)
+    assert_matches(result, ref.RSI_14, places=2)
+    assert first_value(result) == 14
+
+
+def test_atr_matches_published_series() -> None:
+    result = atr(from_hlc(ref.ATR_HIGHS, ref.ATR_LOWS, ref.ATR_CLOSES), period=14)
+    assert_matches(result, ref.ATR_14, places=2)
+    assert first_value(result) == 13

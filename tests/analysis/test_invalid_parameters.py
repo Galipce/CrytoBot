@@ -11,7 +11,9 @@ from crytobot.analysis import (
     AnalysisError,
     InvalidParameterError,
     ParameterProblem,
+    atr,
     ema,
+    rsi,
     sma,
 )
 from tests.analysis.helpers import from_closes
@@ -29,6 +31,8 @@ class Call:
 CALLS = {
     "sma": Call(sma, {"period": 3}, ("period",)),
     "ema": Call(ema, {"period": 3}, ("period",)),
+    "rsi": Call(rsi, {"period": 3}, ("period",)),
+    "atr": Call(atr, {"period": 3}, ("period",)),
 }
 PERIODS = [(name, period) for name, call in CALLS.items() for period in call.periods]
 BAD_PERIODS: list[tuple[Any, ParameterProblem]] = [

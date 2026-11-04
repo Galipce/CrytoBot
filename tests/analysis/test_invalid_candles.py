@@ -13,7 +13,9 @@ from crytobot.analysis import (
     CandleProblem,
     InvalidCandleError,
     NonFiniteResultError,
+    atr,
     ema,
+    rsi,
     sma,
 )
 from tests.analysis.helpers import (
@@ -23,6 +25,7 @@ from tests.analysis.helpers import (
     at,
     candle,
     from_closes,
+    from_hlc,
 )
 
 FIELDS = ["open", "high", "low", "close"]
@@ -133,3 +136,29 @@ def test_non_finite_result_is_rejected() -> None:
             compute(huge, period=3)
         assert caught.value.indicator == name
         assert caught.value.position == 2
+
+
+def test_non_finite_atr_is_rejected() -> None:
+    candles = from_hlc([1.7e308, 1.7e308], [1.0, 1.0], [1.0, 1.0])
+    with pytest.raises(NonFiniteResultError) as caught:
+        atr(candles, period=2)
+    assert caught.value.indicator == "atr"
+    assert caught.value.position == 1
+
+
+def test_rsi_hides_no_infinite_average() -> None:
+    """Plan 0014, Risk 7: ortalama kazanç `inf` olup kayıp sonlu kalsa sonuç 100 çıkardı."""
+    candles = from_closes([1.0, 1.7e308, 1.0, 1.7e308])
+    assert rsi(candles[:3], period=2) == (None, None, 50.0)
+    with pytest.raises(NonFiniteResultError) as caught:
+        rsi(candles, period=2)
+    assert caught.value.indicator == "rsi"
+    assert caught.value.position == 3
+
+
+def test_rsi_seed_overflow_is_rejected() -> None:
+    closes = [1.0, 1.7e308, 0.85e308, 1.7e308]
+    with pytest.raises(NonFiniteResultError) as caught:
+        rsi(from_closes(closes), period=3)
+    assert caught.value.indicator == "rsi"
+    assert caught.value.position == 3

@@ -11,7 +11,7 @@ from typing import Any
 
 from hypothesis import strategies as st
 
-from crytobot.analysis import Candle, ema, sma
+from crytobot.analysis import Candle, atr, ema, rsi, sma
 
 Series = tuple[float | None, ...]
 T0 = datetime(2024, 1, 1, tzinfo=UTC)
@@ -50,6 +50,8 @@ class Indicator:
 INDICATORS = [
     Indicator("sma", lambda c: (sma(c, period=3),), 3),
     Indicator("ema", lambda c: (ema(c, period=3),), 3),
+    Indicator("rsi", lambda c: (rsi(c, period=3),), 4),
+    Indicator("atr", lambda c: (atr(c, period=3),), 3),
 ]
 INDICATOR_IDS = [indicator.name for indicator in INDICATORS]
 
