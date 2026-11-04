@@ -60,10 +60,13 @@ def test_turns_match_independent_model(prices: list[Decimal]) -> None:
 
 
 def test_property_is_not_vacuous(tmp_path: Path) -> None:
-    """Sabit dizi alım ve kapanışı gerçekten üretir; model de gerçek de aynı yolu izler."""
+    """Sabit dizi alım ve kapanışı gerçekten üretir; model de gerçek de aynı yolu izler.
+
+    7'de stop kapanışı olur, yeniden alım olmaz: dolum stop'un altında kalırdı (plan A-1).
+    """
     prices = [Decimal(p) for p in ("10", "7", "10", "14", "15")]
 
     bot, model = run_sequence(tmp_path / "s.db", prices)
 
     assert_same(bot, model)
-    assert model.history == ["buy", "close", "buy", "close"]
+    assert model.history == ["buy@10", "close@7", "buy@10", "close@14"]

@@ -42,12 +42,18 @@ def intent_id(pair: str, open_time: datetime) -> str:
 
 
 def _fill_gate(
-    run: TurnRun, amount: Decimal, price: Decimal, stop: Decimal, account: AccountSnapshot
+    run: TurnRun,
+    amount: Decimal,
+    price: Decimal,
+    stop: Decimal,
+    target: Decimal,
+    account: AccountSnapshot,
 ) -> PairNote | None:
-    """Plan Risk 1, 2: `risk` girişe göre boyutlar, dolum güncel fiyat ve slippage'la olur.
+    """Plan Risk 1, 2, A-1: `risk` girişe göre boyutlar, dolum güncel fiyat ve slippage'la olur.
 
-    Birincisi defterin kalıcı reddini (R-7), ikincisi sabit üst sınırın aşılmasını önler. Kayıp
-    formülü `risk._size`'ın kopyasıdır: orada değişirse burada da değişir (Known traps).
+    Birincisi defterin kalıcı reddini (R-7), ikincisi sabit üst sınırın aşılmasını, üçüncüsü
+    sonraki turda kesin zararla kapanan alımı önler. Kayıp formülü `risk._size`'ın kopyasıdır:
+    orada değişirse burada da değişir (Known traps).
     """
     fee, slippage = Decimal(run.settings.fee), Decimal(run.settings.slippage)
     try:
@@ -62,7 +68,9 @@ def _fill_gate(
         return PairNote.RISK_CAP_AT_FILL
     if cost > account.free_balance:
         return PairNote.FILL_EXCEEDS_BALANCE
-    return PairNote.RISK_CAP_AT_FILL if loss > cap else None
+    if loss > cap:
+        return PairNote.RISK_CAP_AT_FILL
+    return PairNote.FILL_OUTSIDE_STOP_TARGET if fill <= stop or fill >= target else None
 
 
 def _note(run: TurnRun, pair: str, note: PairNote, message: str) -> None:
@@ -149,8 +157,10 @@ def _buy_pair(run: TurnRun, pair: str) -> None:
         assert approval.reason is not None  # a refusal names its reason
         run.pairs.append(PairOutcome(pair, approval.reason, approval.message))
         return
-    assert data.price is not None and isinstance(proposal.stop, Decimal)  # checked above
-    note = _fill_gate(run, amount, Decimal(data.price), proposal.stop, account)
+    assert data.price is not None  # checked by the data gate
+    assert isinstance(proposal.stop, Decimal) and isinstance(proposal.target, Decimal)  # likewise
+    price = Decimal(data.price)
+    note = _fill_gate(run, amount, price, proposal.stop, proposal.target, account)
     if note is not None:
         _note(run, pair, note, "dolum fiyatıyla emir oluşmaz")
         return

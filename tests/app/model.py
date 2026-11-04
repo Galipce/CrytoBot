@@ -41,7 +41,7 @@ class Model:
         self.balance += self.position.amount * price * (1 - self.slippage) * (1 - self.fee)
         self.position = None
         self.closes += 1
-        self.history.append("close")
+        self.history.append(f"close@{price}")
 
     def _buy(self, price: Decimal) -> None:
         unit_loss = (ENTRY - STOP) + ENTRY * self.fee + STOP * self.fee
@@ -56,6 +56,8 @@ class Model:
         loss = amount * (fill - STOP) + commission + amount * STOP * self.fee
         if cost > self.balance or loss > self.balance * HARD_CAP:
             return
+        if fill <= STOP or fill >= TARGET:
+            return
         self.balance -= cost
         self.position = ModelPosition(amount)
-        self.history.append("buy")
+        self.history.append(f"buy@{price}")

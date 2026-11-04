@@ -109,6 +109,56 @@ def test_risk_under_hard_cap_at_fill_still_buys(tmp_path: Path) -> None:
     assert [o.amount for o in result.buys] == [FIRST_AMOUNT]
 
 
+def test_fill_below_stop_places_no_order(tmp_path: Path) -> None:
+    """Plan A-1: fiyat 7.9, dolum 7.9079, stop 8: alım sonraki turda kesin zararla kapanırdı."""
+    bot = Bot(opened_store(tmp_path / "s.db"))
+
+    result = bot.turn({BTC: pair_market(price=Decimal("7.9"))})
+
+    assert [p.reason for p in result.pairs] == [PairNote.FILL_OUTSIDE_STOP_TARGET]
+    assert result.buys == () and result.halts == () and bot.notices == []
+    assert bot.stored().execution.orders == {} and bot.conflicts() == ()
+
+
+def test_fill_above_target_places_no_order(tmp_path: Path) -> None:
+    """Plan A-1: `r=1`, hedef 12, fiyat 12, dolum 12.012: kayıp ~199.8 USDT, üst sınırın altında."""
+    settings = make_settings(strategy=replace(STRATEGY, r=Decimal(1)))
+    bot = Bot(opened_store(tmp_path / "s.db"), settings=settings)
+
+    result = bot.turn({BTC: pair_market(price=Decimal(12))})
+
+    assert [p.reason for p in result.pairs] == [PairNote.FILL_OUTSIDE_STOP_TARGET]
+    assert result.buys == () and result.halts == () and bot.notices == []
+    assert bot.stored().execution.orders == {} and bot.conflicts() == ()
+
+
+@pytest.mark.parametrize("price", [Decimal(8), Decimal(12)])
+def test_fill_exactly_at_stop_or_target_places_no_order(tmp_path: Path, price: Decimal) -> None:
+    """Plan A-1: slippage 0'da dolum fiyata eşittir; sınır değeri alım değildir."""
+    settings = make_settings(strategy=replace(STRATEGY, r=Decimal(1)), slippage=Decimal(0))
+    bot = Bot(opened_store(tmp_path / "s.db"), settings=settings)
+
+    result = bot.turn({BTC: pair_market(price=price)})
+
+    assert [p.reason for p in result.pairs] == [PairNote.FILL_OUTSIDE_STOP_TARGET]
+    assert result.buys == ()
+
+
+def test_fill_just_inside_stop_and_target_still_buys(tmp_path: Path) -> None:
+    """Plan A-1: kapı yalnız sınırdakini ve dışındakini keser."""
+    settings = make_settings(strategy=replace(STRATEGY, r=Decimal(1)), slippage=Decimal(0))
+    bot = Bot(opened_store(tmp_path / "s.db"), settings=settings)
+
+    low = bot.turn({BTC: pair_market(price=Decimal("8.01"))})
+
+    assert [o.fill_price for o in low.buys] == [Decimal("8.01")]
+
+    other = Bot(opened_store(tmp_path / "t.db"), settings=settings)
+    high = other.turn({BTC: pair_market(price=Decimal("11.99"))})
+
+    assert [o.fill_price for o in high.buys] == [Decimal("11.99")]
+
+
 def test_each_buy_is_observed_before_the_next(tmp_path: Path) -> None:
     """Plan Risk 4: son kasa iki alımı da görür; ikinci onay ilkinin kasasıyla boyutlanır."""
     bot = Bot(opened_store(tmp_path / "s.db"), settings=make_settings((BTC, ETH)))

@@ -34,11 +34,12 @@ class BuyHalt(Enum):
 
 
 class PairNote(Enum):
-    """`app`'in çift başına nedenleri: tekrar koruması (R-3), dolum kapıları (plan Risk 1, 2)."""
+    """`app`'in çift başına nedenleri: tekrar koruması (R-3), dolum kapıları (Risk 1, 2, A-1)."""
 
     ALREADY_ORDERED = "already_ordered"
     FILL_EXCEEDS_BALANCE = "fill_exceeds_balance"
     RISK_CAP_AT_FILL = "risk_cap_at_fill"
+    FILL_OUTSIDE_STOP_TARGET = "fill_outside_stop_target"
 
 
 @dataclass(frozen=True)
