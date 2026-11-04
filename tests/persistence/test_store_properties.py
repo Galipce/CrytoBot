@@ -40,16 +40,30 @@ PRICES = ["100.10", "99.5", "1.000", "0.00123456"]
 EQUITIES = ["10000", "11000.50", "5000", "10000.00"]
 Step = tuple[str, str, str]
 
+# observe is weighted and the lists are longer, so that random sequences reach the risk states of
+# spec 0012 CB-5 (halted or not, peak above the last equity or at it) with the other steps kept
 STEPS = st.lists(
     st.tuples(
         st.sampled_from(
-            ["buy", "buy", "close", "rejected", "unknown", "fill", "refuse", "observe", "resume"]
+            [
+                "buy",
+                "buy",
+                "close",
+                "rejected",
+                "unknown",
+                "fill",
+                "refuse",
+                "observe",
+                "resume",
+                "observe",
+                "observe",
+            ]
         ),
         st.sampled_from(AMOUNTS),
         st.sampled_from(PRICES),
     ),
-    min_size=1,
-    max_size=8,
+    min_size=4,
+    max_size=12,
 )
 
 
@@ -134,12 +148,19 @@ def forbidden_writes(world: World, earlier_ledger: Ledger) -> dict[str, World]:
 
 def risk_writes(risk: RiskState) -> dict[str, RiskState]:
     """Spec 0012 CB-1, CB-2'nin o anki duruma uyan yasak yazımları."""
-    if risk.last_equity is None or risk.peak_equity is None or risk.day_start_equity is None:
+    if (
+        risk.last_time is None
+        or risk.last_equity is None
+        or risk.peak_equity is None
+        or risk.day_start_equity is None
+    ):
         return {}
     other_start = risk.day_start_equity + 1
     # the equity of a new observation at the same moment; 10% off the peak does not start a halt
     below_peak = risk.peak_equity * Decimal("0.9")
     observed = observe(risk, risk.last_time, below_peak, DEFAULT_LIMITS).state
+    # the sequences stay within one UTC day: this write carries its own next-day observation
+    next_day = observe(risk, risk.last_time + timedelta(days=1), below_peak, DEFAULT_LIMITS).state
     writes = {
         "day_start_changed": replace(risk, day_start_equity=other_start),
         "day_start_same_value_other_text": replace(
@@ -147,6 +168,7 @@ def risk_writes(risk: RiskState) -> dict[str, RiskState]:
         ),
         # applies at peak == last too: the last equity moves down with the peak
         "peak_lowered_as_last_changes": replace(observed, peak_equity=below_peak),
+        "peak_lowered_on_new_utc_day": replace(next_day, peak_equity=below_peak),
     }
     if risk.halted:
         closed = resume(risk, "cli").state
@@ -162,6 +184,11 @@ def risk_writes(risk: RiskState) -> dict[str, RiskState]:
         else:
             writes["peak_lowered"] = lowered
             writes["peak_lowered_as_halt_starts"] = replace(lowered, halted=True)
+    elif not risk.halted:
+        # peak == last: the last equity moves down with the peak, or R-6 would answer first
+        writes["peak_lowered_as_halt_starts"] = replace(
+            observed, peak_equity=below_peak, halted=True
+        )
     return writes
 
 
