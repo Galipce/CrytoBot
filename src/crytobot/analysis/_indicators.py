@@ -10,7 +10,6 @@ ile toplanır (plan 0014, Risk 7). Bedel O(n * periyot); çevrimdışı hesap i�
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from itertools import pairwise
 from statistics import pstdev
 
 from crytobot.analysis._candles import (
@@ -143,7 +142,7 @@ def rsi(candles: Sequence[Candle], *, period: int) -> Series:
     """
     check_period(period, "period")
     closes = checked_prices(candles).closes
-    changes = [after - before for before, after in pairwise(closes)]
+    changes = [closes[index] - closes[index - 1] for index in range(1, len(closes))]
     gains = _wilder_values([max(change, 0.0) for change in changes], period, "rsi", 1)
     losses = _wilder_values([max(-change, 0.0) for change in changes], period, "rsi", 1)
     values = [_rsi_value(gain, loss) for gain, loss in zip(gains, losses, strict=True)]
