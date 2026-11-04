@@ -8,6 +8,7 @@ import pytest
 
 from crytobot.app import NoticeKind, TurnOutcome, _turn
 from crytobot.execution import OrderStatus
+from crytobot.persistence import StoreOutcome
 from crytobot.risk import PairRules
 from tests.app.helpers import (
     BTC,
@@ -24,6 +25,8 @@ from tests.app.helpers import (
     make_settings,
     opened_store,
     pair_market,
+    refuse_saves,
+    writes_closure,
 )
 
 SOL = "SOL/USDT"
@@ -160,6 +163,51 @@ def test_stale_price_gives_no_false_exit_for_rejected_observation(tmp_path: Path
 
     assert bot.kinds(entering=False) == [NoticeKind.OBSERVATION_REJECTED, NoticeKind.STALE_DATA]
     assert bot.kinds().count(NoticeKind.OBSERVATION_REJECTED) == 1
+
+
+def test_save_not_attempted_gives_no_false_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-11, R-10: yazımsız turda kayıt denenmedi; çıkış ancak bir kayıt geçince gider."""
+    bot = bot_with_position(tmp_path / "s.db")
+    refuse_saves(monkeypatch, StoreOutcome.WRITE_FAILED, writes_closure, times=2)
+    low = Decimal(7)
+    bot.turn({BTC: pair_market(price=low, price_at=LATER)}, now=LATER)
+    stale_turn = LATER + MAX_PRICE_AGE + 2 * MINUTE
+    bot.turn({BTC: pair_market(price=low, price_at=LATER)}, now=stale_turn)
+    refused_again = stale_turn + MINUTE
+    bot.turn({BTC: pair_market(price=low, price_at=refused_again)}, now=refused_again)
+
+    assert [(n.kind, n.entering) for n in bot.notices] == [
+        (NoticeKind.SAVE_REFUSED, True),
+        (NoticeKind.STALE_DATA, True),
+    ]
+
+    written = refused_again + MINUTE
+    result = bot.turn({BTC: pair_market(price=low, price_at=written)}, now=written)
+
+    assert len(result.closes) == 1
+    assert bot.kinds(entering=False) == [NoticeKind.SAVE_REFUSED, NoticeKind.STALE_DATA]
+    assert bot.kinds().count(NoticeKind.SAVE_REFUSED) == 1
+
+
+def test_stale_price_gives_no_false_exit_for_price_the_ledger_refused(tmp_path: Path) -> None:
+    """Review 2 F-4: defterin kullanmadığı fiyat sürerken gözlem yapılmayan turda çıkış yok."""
+    bot = bot_with_position(tmp_path / "s.db")
+    long_price = Decimal("9." + "1" * 28)
+    bot.turn({BTC: pair_market(price=long_price, price_at=LATER)}, now=LATER)
+    stale_turn = LATER + MAX_PRICE_AGE + 2 * MINUTE
+    bot.turn({BTC: pair_market(price=long_price, price_at=LATER)}, now=stale_turn)
+
+    assert [(n.kind, n.subject, n.entering) for n in bot.notices] == [
+        (NoticeKind.INVALID_DATA, "", True),
+        (NoticeKind.STALE_DATA, BTC, True),
+    ]
+
+    fresh = stale_turn + MINUTE
+    bot.turn({BTC: pair_market(price_at=fresh)}, now=fresh)
+
+    assert bot.kinds(entering=False) == [NoticeKind.INVALID_DATA, NoticeKind.STALE_DATA]
 
 
 def test_unexpected_error_is_named_without_its_text(

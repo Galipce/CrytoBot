@@ -113,6 +113,7 @@ class TurnRun:
                 self.notices.enter(NoticeKind.HISTORY_IMMUTABLE, "", result.message)
             raise SaveRefusedError(result.message)
         self.state = result.state
+        self.notices.evaluated(NoticeKind.SAVE_REFUSED)  # only a write that went through ends it
         if result.conflicts:
             self.flag_reconciliation(result.message)
         self.sync_safe_mode()
@@ -126,7 +127,6 @@ class TurnRun:
             return
         snapshot = account_state(ledger, dict(self.report.prices))
         if snapshot.outcome is SnapshotOutcome.MISSING_PRICE:
-            self.notices.keep(NoticeKind.OBSERVATION_REJECTED)  # not evaluated: it still lasts
             if not self.report.issues:  # a price only the ledger refuses, e.g. too many digits
                 self.halt(BuyHalt.INVALID_DATA)
                 self.notices.enter(NoticeKind.INVALID_DATA, "", snapshot.message)
@@ -134,6 +134,7 @@ class TurnRun:
         if snapshot.snapshot is None:
             self._refuse_observation(snapshot.message)
             return
+        self.notices.clear(NoticeKind.INVALID_DATA)  # the ledger priced every position
         update = observe(self.state.risk, self.now, snapshot.snapshot.equity, self.settings.limits)
         if not update.accepted:
             self._refuse_observation(update.message)

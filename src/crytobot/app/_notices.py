@@ -24,6 +24,25 @@ class NoticeKind(Enum):
     UNEXPECTED_ERROR = "unexpected_error"
 
 
+# Absence ends only these: every completed turn evaluates them. Any other state ends with `clear`
+# or `evaluated`, so what a turn did not evaluate gets no exit (R-10)
+_EVALUATED_EVERY_TURN = frozenset(
+    {
+        NoticeKind.STALE_DATA,
+        NoticeKind.INVALID_DATA,
+        NoticeKind.RECONCILIATION,
+        NoticeKind.CLOSE_REFUSED,
+        NoticeKind.UNEXPECTED_ERROR,
+    }
+)
+# about the account, not a pair: evaluated only when the ledger is asked for the equity
+_ACCOUNT_INVALID_DATA = (NoticeKind.INVALID_DATA, "")
+
+
+def _ended_by_absence(key: tuple[NoticeKind, str]) -> bool:
+    return key[0] in _EVALUATED_EVERY_TURN and key != _ACCOUNT_INVALID_DATA
+
+
 @dataclass(frozen=True)
 class TurnNotice:
     """`entering`: durum başladı (`True`) ya da bitti (`False`). `subject`: çift ya da kimlik."""
@@ -51,6 +70,7 @@ class Notices:
         self._sink = sink
         self._now = now
         self._touched: set[tuple[NoticeKind, str]] = set()
+        self._evaluated: set[tuple[NoticeKind, str]] = set()
         self.errors: list[str] = []
 
     def _send(self, key: tuple[NoticeKind, str], entering: bool, message: str) -> None:
@@ -81,10 +101,14 @@ class Notices:
         if key in self._memory.active:
             self._touched.add(key)
 
+    def evaluated(self, kind: NoticeKind, subject: str = "") -> None:
+        """Durum bu tur değerlendirildi; tur tamamlanırsa bitmiş sayılır, erken biterse sürer."""
+        self._evaluated.add((kind, subject))
+
     def settle(self) -> None:
-        """Tamamlanan turda bu tur görülmeyen durumlar bitmiştir. Erken biten turda çağrılmaz, tur
-        içinde atlanan durum `keep` ile işaretlenir: değerlendirilmeyene çıkış yok (Risk 11)."""
-        for kind, subject in sorted(
-            self._memory.active - self._touched, key=lambda key: (key[0].value, key[1])
-        ):
+        """Tamamlanan turda, değerlendirilip bu tur görülmeyen durumlar bitmiştir. Erken biten
+        turda çağrılmaz; değerlendirilmeyene çıkış yok (Risk 11, review round 2 F-2)."""
+        unseen = self._memory.active - self._touched
+        ended = {key for key in unseen if _ended_by_absence(key) or key in self._evaluated}
+        for kind, subject in sorted(ended, key=lambda key: (key[0].value, key[1])):
             self.clear(kind, subject)
