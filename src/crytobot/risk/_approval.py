@@ -214,7 +214,7 @@ def approve_trade(
         )
     if intent.side != BUY:
         return reject(ApprovalReason.NOT_BUY, f"yön {_show(intent.side)}: yalnızca alım onaylanır")
-    if intent.pair not in whitelist:
+    if not _listed(intent.pair, whitelist):
         return reject(ApprovalReason.NOT_WHITELISTED, "beyaz listede değil")
     entry = _number(intent.entry)
     if entry is None or entry <= 0:
@@ -260,6 +260,14 @@ def approve_trade(
             f"açık pozisyon {_show(positions)}, limit {limits.max_open_positions}",
         )
     return _size(intent, entry, stop, target, costs, limits, account, rules)
+
+
+def _listed(pair: object, whitelist: Set[str]) -> bool:
+    """Spec 0016 R-15: metin olmayan ya da hash'lenemeyen çift listede değildir."""
+    try:
+        return isinstance(pair, str) and pair in whitelist
+    except TypeError:  # a str subclass may still refuse to be hashed
+        return False
 
 
 def _edge(
