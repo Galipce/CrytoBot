@@ -283,11 +283,16 @@ def _text_of(moment: datetime | None) -> str | None:
 
 
 def _risk_allows(stored: RiskState, risk: RiskState) -> bool:
-    """R-8: gözlem zamanı geri alınmaz; durdurma yalnız `resume`'un ürettiği biçimde kapanır (depo
-    CLI yetkisini doğrulayamaz, bu kural hatalı yazımı yakalar)."""
-    if stored.last_time is not None and (
-        risk.last_time is None or risk.last_time < stored.last_time
-    ):
+    """R-8, spec 0012 CB-1, CB-2: gözlem zamanı geri alınmaz; aynı UTC gününde gün başı kasa metni
+    değişmez; durdurma yalnız `resume`'un ürettiği biçimde kapanır; zirve başka yerde düşmez (depo
+    CLI yetkisini doğrulayamaz, bu kural hatalı yazımı yakalar). Zirve sayısal karşılaştırılır
+    (`1.10` → `1.1` düşüş değil); `Decimal` karşılaştırması tamdır, bağlam hassasiyetine bağlı
+    değildir."""
+    if stored.last_time is None:
+        return True  # no observation yet: the first one sets every field
+    if risk.last_time is None or risk.last_time < stored.last_time:
+        return False
+    if risk.day == stored.day and str(risk.day_start_equity) != str(stored.day_start_equity):
         return False
     if stored.halted and not risk.halted:
         return (
@@ -295,7 +300,8 @@ def _risk_allows(stored: RiskState, risk: RiskState) -> bool:
             and str(risk.last_equity) == str(stored.last_equity)
             and _text_of(risk.last_time) == _text_of(stored.last_time)
         )
-    return True
+    assert risk.peak_equity is not None and stored.peak_equity is not None  # R-6: all or none
+    return risk.peak_equity >= stored.peak_equity
 
 
 def _history_allows(
