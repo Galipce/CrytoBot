@@ -18,9 +18,10 @@ from tests.app.helpers import (
     bot_with_position,
     opened_store,
     pair_market,
+    refuse_saves,
     series,
+    writes_order,
 )
-from tests.app.saving import refuse_saves, writes_order
 
 
 def test_second_turn_with_same_data_makes_no_order(tmp_path: Path) -> None:

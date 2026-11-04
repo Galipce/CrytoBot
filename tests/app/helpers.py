@@ -3,17 +3,34 @@
 Seri `10, 8, 9, 10`, EMA 1/2, RSI 2, ATR 2, `k=r=2`, tick `0.01`: giriş 10, stop 8, hedef 14.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from crytobot.analysis import Candle
-from crytobot.app import PairMarket, TurnMemory, TurnNotice, TurnResult, TurnSettings, run_turn
+from crytobot.app import (
+    PairMarket,
+    TurnMemory,
+    TurnNotice,
+    TurnResult,
+    TurnSettings,
+    _session,
+    run_turn,
+)
 from crytobot.execution import OrderStatus, PaperExchange
-from crytobot.persistence import StoredState, create_store, load_store, save_store
+from crytobot.persistence import (
+    StoredState,
+    StoreOutcome,
+    StoreResult,
+    create_store,
+    load_store,
+    save_store,
+)
 from crytobot.portfolio import EMPTY_LEDGER, open_ledger
 from crytobot.risk import DEFAULT_LIMITS, PairRules
 from crytobot.strategy import StrategySettings
@@ -162,3 +179,33 @@ def bot_with_position(path: Path, **kwargs: Any) -> Bot:
     bought = bot.turn({BTC: pair_market()})
     assert len(bought.buys) == 1, bought
     return bot
+
+
+Writes = Callable[[Any, Any, Any], bool]
+
+
+def refuse_saves(
+    monkeypatch: pytest.MonkeyPatch,
+    outcome: StoreOutcome,
+    when: Writes = lambda *_: True,
+    times: int = 1,
+) -> list[StoreOutcome]:
+    """`when(ledger, execution, risk)` doğruysa kayıt `outcome` ile reddedilir, `times` kez."""
+    refused: list[StoreOutcome] = []
+
+    def fake(path: object, base: object, ledger: Any, execution: Any, risk: Any) -> StoreResult:
+        if len(refused) < times and when(ledger, execution, risk):
+            refused.append(outcome)
+            return StoreResult(outcome, None, (), outcome.value)
+        return save_store(path, base, ledger, execution, risk)
+
+    monkeypatch.setattr(_session, "save_store", fake)
+    return refused
+
+
+def writes_closure(ledger: Any, _execution: Any, _risk: Any) -> bool:
+    return bool(ledger.closures)
+
+
+def writes_order(_ledger: Any, execution: Any, _risk: Any) -> bool:
+    return bool(execution.orders)

@@ -16,8 +16,9 @@ from tests.app.helpers import (
     make_settings,
     opened_store,
     pair_market,
+    refuse_saves,
+    writes_closure,
 )
-from tests.app.saving import refuse_saves, writes_closure
 
 CLOSE_AND_CROSS = {
     BTC: pair_market(price=Decimal(7), price_at=LATER),
