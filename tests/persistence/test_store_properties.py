@@ -16,7 +16,7 @@ from hypothesis import strategies as st
 from crytobot.execution import OrderStatus, PaperExchange, query_order
 from crytobot.persistence import StoredState, StoreOutcome, load_store
 from crytobot.portfolio import EMPTY_LEDGER, Ledger
-from crytobot.risk import RiskState, resume
+from crytobot.risk import DEFAULT_LIMITS, RiskState, observe, resume
 from tests.persistence.chain import (
     DEPOSIT,
     FEE,
@@ -137,10 +137,24 @@ def risk_writes(risk: RiskState) -> dict[str, RiskState]:
     if risk.last_equity is None or risk.peak_equity is None or risk.day_start_equity is None:
         return {}
     other_start = risk.day_start_equity + 1
-    writes = {"day_start_changed": replace(risk, day_start_equity=other_start)}
+    # the equity of a new observation at the same moment; 10% off the peak does not start a halt
+    below_peak = risk.peak_equity * Decimal("0.9")
+    observed = observe(risk, risk.last_time, below_peak, DEFAULT_LIMITS).state
+    writes = {
+        "day_start_changed": replace(risk, day_start_equity=other_start),
+        "day_start_same_value_other_text": replace(
+            risk, day_start_equity=risk.day_start_equity.normalize()
+        ),
+        # applies at peak == last too: the last equity moves down with the peak
+        "peak_lowered_as_last_changes": replace(observed, peak_equity=below_peak),
+    }
     if risk.halted:
         closed = resume(risk, "cli").state
         writes["day_start_changed_at_halt_close"] = replace(closed, day_start_equity=other_start)
+    else:
+        # 20% off the peak halts, then resume closes it: the halt never reaches the disk
+        unwritten = observe(risk, risk.last_time, risk.peak_equity * Decimal("0.8"), DEFAULT_LIMITS)
+        writes["halt_never_written"] = resume(unwritten.state, "cli").state
     if risk.peak_equity > risk.last_equity:
         lowered = replace(risk, peak_equity=risk.last_equity)
         if risk.halted:
@@ -184,6 +198,13 @@ def assert_refused(path: Path, state: StoredState, writes: dict[str, World]) -> 
     steps=[
         ("observe", "0.5", "1.000"),
         ("observe", "0.5", "1.000"),
+        ("rejected", "0.5", "1.000"),
+        ("observe", "0.5", "1.000"),
+    ]
+)
+# day start 11000.50: the same value as 11000.5, the shape of 1.10 -> 1.1 (spec 0012)
+@example(
+    steps=[
         ("rejected", "0.5", "1.000"),
         ("observe", "0.5", "1.000"),
     ]
