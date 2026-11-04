@@ -4,10 +4,14 @@ Değerler `high = low = open = close` serilerde elle hesaplandı (plan 0015, Ris
 seride kesişim kurmak içindir; "doğru" strateji değeri değildir (spec, Constraints).
 """
 
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 
-from crytobot.strategy import StrategySettings
+from crytobot.analysis import Candle
+from crytobot.risk import TradeIntent
+from crytobot.strategy import NoProposal, StrategySettings, propose
+from tests.analysis.helpers import from_closes
 
 PAIR = "BTC/USDT"
 # EMA 1/2: önceki mumda 9.0 == 9.0, son mumda 10.0 > 9.67; RSI 2 = 60.0, ATR 2 = 1.0
@@ -27,3 +31,27 @@ def make_settings(**overrides: Any) -> StrategySettings:
         "r": Decimal(2),
     }
     return StrategySettings(**{**values, **overrides})
+
+
+def run(
+    closes: Sequence[float] | None = None,
+    *,
+    candles: Sequence[Candle] | None = None,
+    tick: Any = 1,
+    position_open: Any = False,
+    pair: Any = PAIR,
+    **settings: Any,
+) -> TradeIntent | NoProposal:
+    """Geçerli varsayılan senaryo: `CROSS_FROM_EQUAL`; test yalnız sınadığı alanı değiştirir."""
+    series = (
+        candles
+        if candles is not None
+        else from_closes(CROSS_FROM_EQUAL if closes is None else closes)
+    )
+    return propose(
+        pair=pair,
+        candles=series,
+        position_open=position_open,
+        tick=tick,
+        settings=make_settings(**settings),
+    )

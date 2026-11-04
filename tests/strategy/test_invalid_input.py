@@ -6,20 +6,23 @@ from typing import Any
 
 import pytest
 
-from crytobot.strategy import InputProblem, InvalidInputError, StrategyError, StrategySettings
-from crytobot.strategy._inputs import check_inputs
-from tests.strategy.helpers import PAIR, make_settings
-
-
-def call(*, tick: Any = 1, pair: Any = PAIR, position_open: Any = False, **settings: Any) -> None:
-    check_inputs(
-        pair=pair, position_open=position_open, tick=tick, settings=make_settings(**settings)
-    )
+from crytobot.analysis import CandleProblem
+from crytobot.strategy import (
+    InputProblem,
+    InvalidCandlesError,
+    InvalidInputError,
+    NonFiniteIndicatorError,
+    StrategyError,
+    StrategySettings,
+    propose,
+)
+from tests.analysis.helpers import candle, from_closes
+from tests.strategy.helpers import CROSS_FROM_EQUAL, PAIR, run
 
 
 def problem_of(**arguments: Any) -> InvalidInputError:
     with pytest.raises(InvalidInputError) as caught:
-        call(**arguments)
+        run(**arguments)
     return caught.value
 
 
@@ -60,7 +63,7 @@ def test_invalid_threshold_is_rejected(value: Any) -> None:
 
 @pytest.mark.parametrize("value", [1, 100, Decimal(100), Decimal("0.0001")])
 def test_threshold_limits_are_accepted(value: Any) -> None:
-    call(rsi_threshold=value)
+    run(rsi_threshold=value)
 
 
 @pytest.mark.parametrize("name", ["k", "r"])
@@ -124,7 +127,7 @@ def test_out_of_scale_values_are_rejected(name: str, value: Any) -> None:
     ],
 )
 def test_values_at_the_scale_limit_are_accepted(name: str, value: Any) -> None:
-    call(**{name: value})
+    run(**{name: value})
 
 
 @pytest.mark.parametrize(
@@ -160,7 +163,7 @@ def test_invalid_position_flag_is_rejected(flag: Any) -> None:
 @pytest.mark.parametrize("settings", [None, {}, "settings", 1])
 def test_object_that_is_not_settings_is_rejected(settings: Any) -> None:
     with pytest.raises(InvalidInputError) as caught:
-        check_inputs(pair=PAIR, position_open=False, tick=1, settings=settings)
+        propose(pair=PAIR, candles=[], position_open=False, tick=1, settings=settings)
     assert caught.value.problem is InputProblem.NOT_SETTINGS
 
 
@@ -170,5 +173,65 @@ def test_settings_have_no_defaults() -> None:
     assert all(p.default is inspect.Parameter.empty for p in parameters.values())
 
 
-def test_input_error_is_a_strategy_error() -> None:
-    assert issubclass(InvalidInputError, StrategyError)
+def test_propose_has_no_defaults() -> None:
+    parameters = inspect.signature(propose).parameters
+    assert all(p.default is inspect.Parameter.empty for p in parameters.values())
+    assert all(p.kind is inspect.Parameter.KEYWORD_ONLY for p in parameters.values())
+
+
+def broken_series() -> list[Any]:
+    """İkinci konumdaki mumda `high < low`."""
+    return [*from_closes((10.0, 8.0)), candle(2, 9.0, 8.0, 9.5, 9.0), *from_closes((10.0,))]
+
+
+def test_invalid_candle_keeps_problem_and_position() -> None:
+    with pytest.raises(InvalidCandlesError) as caught:
+        run(candles=broken_series())
+    assert caught.value.problem is CandleProblem.HIGH_BELOW_LOW
+    assert caught.value.position == 2
+    assert isinstance(caught.value, StrategyError)
+
+
+@pytest.mark.parametrize(
+    ("series", "problem"),
+    [
+        (iter(from_closes(CROSS_FROM_EQUAL)), CandleProblem.NOT_A_SERIES),
+        ("candles", CandleProblem.NOT_A_SERIES),
+        ([None], CandleProblem.NOT_A_CANDLE),
+    ],
+)
+def test_input_that_is_not_a_candle_series_is_rejected(series: Any, problem: CandleProblem) -> None:
+    with pytest.raises(InvalidCandlesError) as caught:
+        run(candles=series)
+    assert caught.value.problem is problem
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"k": 2.0},
+        {"fast_period": 0},
+        {"rsi_threshold": 0},
+        {"tick": 0},
+        {"pair": ""},
+        {"position_open": 1},
+    ],
+)
+def test_setting_error_wins_over_candle_error(arguments: dict[str, Any]) -> None:
+    with pytest.raises(InvalidInputError):
+        run(candles=broken_series(), **arguments)
+
+
+def test_candle_error_wins_over_position_open() -> None:
+    with pytest.raises(InvalidCandlesError):
+        run(candles=broken_series(), position_open=True)
+
+
+@pytest.mark.parametrize("position_open", [False, True])
+def test_non_finite_indicator_is_a_named_error(position_open: bool) -> None:
+    """İki kapanışın toplamı `float`'a sığmaz; hata `POSITION_OPEN`'ın arkasına saklanmaz."""
+    with pytest.raises(NonFiniteIndicatorError) as caught:
+        run((1.7e308, 1.7e308, 1.7e308), position_open=position_open)
+    assert caught.value.indicator == "ema"
+    assert caught.value.position == 1
+    assert isinstance(caught.value, StrategyError)
