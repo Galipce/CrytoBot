@@ -20,6 +20,7 @@ class AnalysisError(Exception):
 class CandleProblem(Enum):
     """Mumun reddedilme nedeni (AC-8)."""
 
+    NOT_A_SERIES = "not_a_series"
     NOT_A_CANDLE = "not_a_candle"
     NON_NUMERIC = "non_numeric"
     NON_FINITE = "non_finite"
@@ -125,7 +126,13 @@ def _candle_problem(candle: object) -> CandleProblem | None:
 
 
 def checked_prices(candles: Sequence[Candle]) -> Prices:
-    """Tüm seriyi denetler; indikatörün kullanmadığı alanlar da dahil (AC-8)."""
+    """Tüm seriyi denetler; indikatörün kullanmadığı alanlar da dahil (AC-8).
+
+    Dizi olmayan girdi, dokunulmadan reddedilir: generator iki geçişte sessizce boş sonuç verir ve
+    tükenir; `dict` ile metin de mum serisi değildir.
+    """
+    if not isinstance(candles, Sequence) or isinstance(candles, str | bytes | bytearray):
+        raise InvalidCandleError(CandleProblem.NOT_A_SERIES, 0)
     previous: datetime | None = None
     for position, candle in enumerate(candles):
         problem = _candle_problem(candle)

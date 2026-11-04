@@ -1,5 +1,6 @@
 """Spec 0014 AC-8: geçersiz veri adı konmuş hatayla reddedilir; kullanılmayan alan da denetlenir."""
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
@@ -194,3 +195,42 @@ def test_non_finite_bollinger_band_is_rejected() -> None:
         bollinger(from_closes([1, 2, 30, 40]), period=3, k=1.7e308)
     assert caught.value.indicator == "bollinger"
     assert caught.value.position == 2
+
+
+def _generator(candles: list[Candle]) -> Any:
+    return (candle for candle in candles)
+
+
+NOT_SERIES: dict[str, Callable[[list[Candle]], Any]] = {
+    "generator": _generator,
+    "iterator": iter,
+    "map": lambda candles: map(lambda candle: candle, candles),
+    "none": lambda _: None,
+    "number": lambda _: 5,
+    "empty_dict": lambda _: {},
+    "dict": lambda candles: dict.fromkeys(candles, 1),
+    "set": set,
+    "empty_text": lambda _: "",
+    "text": lambda _: "abc",
+    "empty_bytes": lambda _: b"",
+}
+
+
+@pytest.mark.parametrize("indicator", INDICATORS, ids=INDICATOR_IDS)
+@pytest.mark.parametrize("make", NOT_SERIES.values(), ids=NOT_SERIES.keys())
+def test_series_that_is_not_a_sequence_is_rejected(
+    indicator: Indicator, make: Callable[[list[Candle]], Any]
+) -> None:
+    with pytest.raises(InvalidCandleError) as caught:
+        indicator.compute(make(base()))
+    assert caught.value.problem is CandleProblem.NOT_A_SERIES
+    assert caught.value.position == 0
+
+
+@pytest.mark.parametrize("indicator", INDICATORS, ids=INDICATOR_IDS)
+def test_rejected_generator_is_not_consumed(indicator: Indicator) -> None:
+    candles = base()
+    generator = _generator(candles)
+    with pytest.raises(InvalidCandleError):
+        indicator.compute(generator)
+    assert next(generator) is candles[0]
