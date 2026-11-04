@@ -6,7 +6,7 @@ Dolan emir ve defter kaydı tek kayıtta yazılır. Defter dolu emri reddederse 
 
 from crytobot.app._inputs import PairMarket
 from crytobot.app._notices import NoticeKind
-from crytobot.app._session import TurnRun
+from crytobot.app._session import TurnRun, buy_fill
 from crytobot.execution import (
     PAPER,
     CloseOrder,
@@ -21,7 +21,6 @@ from crytobot.portfolio import (
     Close,
     CloseReason,
     Decision,
-    Fill,
     Ledger,
     close_position,
     exit_decisions,
@@ -31,18 +30,7 @@ from crytobot.risk import CloseRequest, approve_close
 
 
 def _record_buy(run: TurnRun, order: Order) -> Ledger:
-    fill = Fill(
-        order.client_order_id,
-        order.pair,
-        order.side,
-        order.amount,
-        order.fill_price,
-        order.fee,
-        order.stop,
-        order.target,
-        run.now,
-    )
-    return record_fill(run.state.ledger, fill).ledger
+    return record_fill(run.state.ledger, buy_fill(order, run.now)).ledger
 
 
 def _record_close(run: TurnRun, order: CloseOrder) -> Ledger:

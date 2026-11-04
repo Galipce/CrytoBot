@@ -12,7 +12,7 @@ from crytobot.app._notices import NoticeKind, Notices, TurnMemory
 from crytobot.app._result import BuyHalt, PairOutcome, TurnOutcome, TurnResult
 from crytobot.execution import CloseOrder, ExecutionState, Order, PaperExchange
 from crytobot.persistence import StoredState, StoreOutcome, save_store
-from crytobot.portfolio import Ledger, SnapshotOutcome, account_state
+from crytobot.portfolio import Fill, Ledger, SnapshotOutcome, account_state
 from crytobot.risk import RiskState, observe
 
 
@@ -26,6 +26,21 @@ class SaveRefusedError(AppError):
 
 # what stays visible without stopping the buys: risk refuses them itself (R-8)
 _INFORMATIONAL = frozenset({BuyHalt.DRAWDOWN})
+
+
+def buy_fill(order: Order, at: datetime) -> Fill:
+    """Dolan alım emrinin defter kaydı: alım yolu ve bilinmeyen emir sorgusu aynı kaydı yazar."""
+    return Fill(
+        order.client_order_id,
+        order.pair,
+        order.side,
+        order.amount,
+        order.fill_price,
+        order.fee,
+        order.stop,
+        order.target,
+        at,
+    )
 
 
 @dataclass

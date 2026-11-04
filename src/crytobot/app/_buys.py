@@ -18,7 +18,7 @@ from decimal import (
 
 from crytobot.app._inputs import PairMarket
 from crytobot.app._result import PairNote, PairOutcome
-from crytobot.app._session import TurnRun
+from crytobot.app._session import TurnRun, buy_fill
 from crytobot.execution import (
     CLIENT_ID_PREFIX,
     PAPER,
@@ -26,7 +26,7 @@ from crytobot.execution import (
     OrderStatus,
     place_order,
 )
-from crytobot.portfolio import AccountSnapshot, Fill, SnapshotOutcome, account_state, record_fill
+from crytobot.portfolio import AccountSnapshot, SnapshotOutcome, account_state, record_fill
 from crytobot.risk import HARD_CAPS, AccountState, PairRules, TradeApproval, approve_trade
 from crytobot.strategy import NoProposal, propose
 
@@ -97,18 +97,7 @@ def _approved_buy(
         return
     ledger = run.state.ledger
     if order.status is OrderStatus.FILLED:
-        fill = Fill(
-            order.client_order_id,
-            order.pair,
-            order.side,
-            order.amount,
-            order.fill_price,
-            order.fee,
-            order.stop,
-            order.target,
-            run.now,
-        )
-        ledger = record_fill(ledger, fill).ledger
+        ledger = record_fill(ledger, buy_fill(order, run.now)).ledger
     run.save(ledger=ledger, execution=placed.state)
     run.buys.append(order)
     if not run.buying_stopped:
