@@ -16,7 +16,7 @@ from hypothesis import strategies as st
 from crytobot.execution import OrderStatus, PaperExchange, query_order
 from crytobot.persistence import StoredState, StoreOutcome, load_store
 from crytobot.portfolio import EMPTY_LEDGER, Ledger
-from crytobot.risk import resume
+from crytobot.risk import RiskState, resume
 from tests.persistence.chain import (
     DEPOSIT,
     FEE,
@@ -128,6 +128,26 @@ def forbidden_writes(world: World, earlier_ledger: Ledger) -> dict[str, World]:
         writes["observation_moved_back"] = replace(world, risk=replace(risk, last_time=earlier))
     if risk.halted and str(risk.peak_equity) != str(risk.last_equity):
         writes["halt_closed_unlike_resume"] = replace(world, risk=replace(risk, halted=False))
+    writes |= {name: replace(world, risk=write) for name, write in risk_writes(risk).items()}
+    return writes
+
+
+def risk_writes(risk: RiskState) -> dict[str, RiskState]:
+    """Spec 0012 CB-1, CB-2'nin o anki duruma uyan yasak yazımları."""
+    if risk.last_equity is None or risk.peak_equity is None or risk.day_start_equity is None:
+        return {}
+    other_start = risk.day_start_equity + 1
+    writes = {"day_start_changed": replace(risk, day_start_equity=other_start)}
+    if risk.halted:
+        closed = resume(risk, "cli").state
+        writes["day_start_changed_at_halt_close"] = replace(closed, day_start_equity=other_start)
+    if risk.peak_equity > risk.last_equity:
+        lowered = replace(risk, peak_equity=risk.last_equity)
+        if risk.halted:
+            writes["peak_lowered_during_halt"] = lowered
+        else:
+            writes["peak_lowered"] = lowered
+            writes["peak_lowered_as_halt_starts"] = replace(lowered, halted=True)
     return writes
 
 
@@ -154,6 +174,15 @@ def assert_refused(path: Path, state: StoredState, writes: dict[str, World]) -> 
     steps=[
         ("observe", "0.5", "1.000"),
         ("rejected", "0.5", "1.000"),
+        ("observe", "0.5", "1.000"),
+        ("rejected", "0.5", "1.000"),
+        ("observe", "0.5", "1.000"),
+    ]
+)
+# peak above the last equity with no halt: 11000.50, then 10000.00 (spec 0012)
+@example(
+    steps=[
+        ("observe", "0.5", "1.000"),
         ("observe", "0.5", "1.000"),
         ("rejected", "0.5", "1.000"),
         ("observe", "0.5", "1.000"),
