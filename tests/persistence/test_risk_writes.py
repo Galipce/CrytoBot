@@ -181,6 +181,14 @@ LOWERED_PEAKS: dict[str, tuple[World, World]] = {
     ),
     "during_a_halt": (HALTED, risk_changed(HALTED, peak_equity=Decimal("6000"))),
     "halt_never_written": (AT_THE_PEAK, lifted(seen(AT_THE_PEAK, "8000", T2))),
+    "new_utc_day_no_halt": (
+        PEAK_ABOVE_LAST,
+        risk_changed(seen(PEAK_ABOVE_LAST, "10100", T2 + NEXT_DAY), peak_equity=Decimal("10500")),
+    ),
+    "new_utc_day_during_a_halt": (
+        HALTED,
+        risk_changed(seen(HALTED, "5100", T2 + NEXT_DAY), peak_equity=Decimal("6000")),
+    ),
 }
 
 
