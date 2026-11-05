@@ -34,6 +34,7 @@
 - `control`: yetkisiz chat ID reddi, TOTP'siz hassas komut reddi, Telegram'dan limit gevşetme reddi (limit artırma, kâr/maliyet katı düşürme).
 - LLM çıktısı: şema dışı / alıntısız skorun yok sayılması; prompt-injection içerikli dokümanın aksiyon üretmemesi.
 - **Coverage:** `risk`, `execution`, `portfolio`, `persistence`, `app` için **her biri ayrı ayrı** %90 branch coverage zorunlu; diğer modüllerde eşik yok.
+- `app`: bağımsız beklenen-sonuç modelli `hypothesis` property testi (model `app` ve `portfolio`'yu kullanmaz).
 - **e2e yok** (CLI + Telegram; tüm kriterler unit/entegrasyon katmanında kanıtlanır).
 - Strateji kabulü (BR-10) bir test değil, kanıt artefaktıdır: komisyon/slippage dahil out-of-sample backtest raporu spec'e bağlanır.
 
