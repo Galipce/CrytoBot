@@ -17,6 +17,7 @@ from tests.app.helpers import (
     DEPOSIT,
     ETH,
     LATER,
+    NEXT_CANDLE,
     NOW,
     RULES,
     TICK,
@@ -136,6 +137,45 @@ def test_bad_third_pair_stops_first_pair_buy(tmp_path: Path) -> None:
 
     assert result.buys == ()
     assert bot.stored().execution.orders == {}
+
+
+@pytest.mark.parametrize(
+    "bad_price",
+    [
+        {"price_at": LATER + SECOND},
+        {"price": Decimal("NaN"), "price_at": LATER},
+        {"price_at": LATER.replace(tzinfo=None)},
+    ],
+    ids=["future_price", "nan_price", "naive_price_time"],
+)
+def test_invalid_position_price_stays_open_other_closes(
+    tmp_path: Path, bad_price: dict[str, Any]
+) -> None:
+    """R-4, VERIFY round 1 V-2: geçersiz fiyatlı pozisyon kapanmaz, geçerli olan kapanır."""
+    bot = Bot(opened_store(tmp_path / "s.db"), settings=make_settings((BTC, ETH)))
+    bot.turn({BTC: pair_market(), ETH: pair_market()})
+
+    halted = bot.turn(
+        {BTC: pair_market(**bad_price), ETH: pair_market(price=Decimal(7), price_at=LATER)},
+        now=LATER,
+    )
+
+    assert [o.pair for o in halted.closes] == [ETH]
+    assert halted.buys == ()
+    assert BuyHalt.INVALID_DATA in halted.halts
+    assert [p.pair for p in bot.stored().ledger.positions.values()] == [BTC]
+
+    clean = bot.turn(
+        {
+            BTC: pair_market(closed_at=NEXT_CANDLE),
+            ETH: pair_market(closed_at=NEXT_CANDLE),
+        },
+        now=NEXT_CANDLE,
+    )
+
+    assert clean.halts == ()
+    assert [o.pair for o in clean.buys] == [ETH]
+    assert sorted(p.pair for p in bot.stored().ledger.positions.values()) == [BTC, ETH]
 
 
 def test_market_that_is_not_a_mapping_is_missing_data(tmp_path: Path) -> None:
