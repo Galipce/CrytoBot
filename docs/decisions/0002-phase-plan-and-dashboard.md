@@ -24,20 +24,25 @@ Pano hiçbir kontrol komutu taşımaz; kontrol CLI ve Telegram'da kalır.
 
 ## Consequences
 - Faz 1'in bitişi tek cümleyle ölçülür: bot tek komutla başlar, turları kendi atar, yeniden başlamada durumunu korur,
-  durdurulabilir, sorunda haber verir. Tahmin 6–8 spec; tahmin, ölçüm değil. Bedeli: bu tanıma girmeyen her istek
+  durdurulabilir, sorunda haber verir. Tahmin 6–8 spec, 1–2 hafta; tahmin, ölçüm değil. Bedeli: bu tanıma girmeyen her istek
   (ekran, live, LLM) Faz 1 bitene kadar bekler ya da bu ADR'ı yeniden açar.
-- Backtest Faz 1'de olduğu için paper koşusu BR-10'a uyar ve sonuçları strateji kanıtı sayılır. Bedeli: botun ilk
-  gözetimsiz koşusu 2 spec kadar gecikir.
+- Backtest Faz 1'de olduğu için paper koşusu BR-10'un backtest şartını karşılar ve sonuçları strateji kanıtı sayılır;
+  metrik eşiği ve insan onayı aşama geçişinde ayrıca aranır. Bedeli: botun ilk gözetimsiz koşusu 2 spec kadar gecikir.
 - Pano Faz 1'i uzatmaz ve live kararından önce hazır olur: paper sonuçları (kâr/zarar, drawdown, işlemler, ret
   nedenleri) live geçiş kararı için okunur hale gelir. Bedeli: Faz 1 boyunca gözlem yalnız CLI, Telegram ve rapordan
   olur; live 2–3 spec daha geç başlar.
-- Salt okunur ve localhost olduğu için pano yeni bir yetkilendirme yüzeyi (oturum, CSRF, ağ erişimi) açmaz, para riski
-  taşımaz. Bedeli: kill switch ya da limit için ekrandan değil CLI veya Telegram'dan işlem yapılır.
+- Salt okunur ve localhost olduğu için pano kontrol yüzeyi (oturum, CSRF, komut) açmaz, emir ya da limit değiştiremez.
+  Bedeli: kill switch ya da limit için ekrandan değil CLI veya Telegram'dan işlem yapılır; pano yine de bir okuma yüzeyi
+  açar: yerel süreçler ve tarayıcı üzerinden DNS rebinding kasa ve işlem verisini okuyabilir. Bu yüzden pano spec'i
+  şunları şart koşar: yalnız 127.0.0.1'e bağlanma, Host başlığı denetimi; `docs/architecture.md`'ye modül satırı ve
+  yasak bağımlılık kuralı (pano `control` ve `execution`'ı import etmez).
 - LLM sinyalleri en sona kalır: teknik strateji onlarsız çalışır, LLM harcaması ve güvenilmeyen girdi riski live
   oturmadan eklenmez. Bedeli: botun ilk live dönemi yalnız teknik sinyalle işlem yapar.
 - B-29, B-42, B-45, B-48, B-50 Faz 1 spec'lerine, B-51 Faz 2'nin stop emri spec'ine bağlanır: açık kayıtların hangi
-  işte kapanacağı bellidir. Bedeli: B-51 (stop'taki satışın slippage'ı) paper boyunca açık kalır; paper sonuçlarında
-  kayıp stop fiyatında, slippage'sız hesaplanır ve gerçeğe göre biraz iyimserdir.
+  işte kapanacağı bellidir. Bedeli: B-51 paper boyunca açık kalır. Risk kapıları ve boyutlama işlem riskini stop
+  fiyatında, satış slippage'ı ve boşluklu düşüş olmadan hesaplar; gerçekleşen zarar BR-4'teki sınırı aşabilir
+  (backlog örneğinde kasanın ~%0,004'ü kadar, boşluklu düşüşte sınırsız). Paper'ın gerçekleşen sonuçları bundan
+  etkilenmez: kapanış güncel fiyat ve slippage'la dolar.
 
 ## Alternatives considered
 - **Backtest'i Faz 1'den çıkarmak:** bot birkaç gün önce gözetimsiz çalışırdı, ama paper'a BR-10'u çiğneyerek geçilirdi
