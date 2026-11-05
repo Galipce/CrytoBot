@@ -1,6 +1,6 @@
 # Spec 0017 — `market_data`: gerçek piyasa verisini okuma
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0017-plan.md`
 - Self-critique: done
@@ -54,34 +54,36 @@ none — no user interface
 - Out of scope: beyaz liste ile açık pozisyonları birleştirip çift listesi kurmak (giriş noktası spec'i); OHLCV ve ticker saklama (ayrı spec, backtest'in ön koşulu); emir defteri derinliği; döngü, zamanlayıcı, CLI, giriş noktası; config dosyası okuma; saat eşitleme; borsa seçimi ölçümü (BR-12); live ve testnet; `execution`'ın borsa adaptörü; backtest.
 
 ## Acceptance criteria
-- [ ] AC-1 — Mutlu yol: kayıtlı borsa yanıtıyla iki çiftlik okuma, istek sırasıyla R-1'in tüm alanlarını doğru değerlerle döndürür; fiyat son işlem fiyatıdır, spread tanımdaki formülle hesaplanır; değerler `Decimal`'dir ve kayıtlı değerle birebir aynıdır, zamanlar UTC ve timezone-aware'dir (R-1, R-9).
-- [ ] AC-2 — Yalnız okuma: ortamda anahtar varken bile okuma anahtar kullanmaz; sahte borsa yalnız herkese açık veri çağrıları kaydeder, emir ve hesap çağrısı kaydetmez (R-2).
-- [ ] AC-3 — Kısmi hata: bir çiftin mum çağrısı, başka bir çiftin fiyat çağrısı başarısız olunca yalnız o alanlar adı konmuş nedenle eksik döner, kalan alanlar doğrudur; istisna fırlamaz (R-3).
-- [ ] AC-4 — Süre: takılan çağrı süresinde kesilir; bütçe bitince kalan alanlar "süre bitti" nedeniyle eksik döner ve okuma bütçeyi aşmaz; geçici hata bütçe içinde yeniden denenip başarılı olunca değer döner; geçersiz sembol ve bozuk yanıt tek çağrıda kalır (R-4).
-- [ ] AC-5 — Kapanmamış mum: kapanışı saatten bir birim sonra olan mum çıkarılır, saate eşit olan kalır; bu durum nedeni üretmez (R-5).
-- [ ] AC-6 — Boşluk: ortasında boşluk olan seride yalnız son boşluktan sonraki mumlar döner, boşluk raporlanır; iki boşlukta yine sonuncu esas alınır; boşluksuz seride rapor yoktur (R-6).
-- [ ] AC-7 — Fiyat zamanı: damgasız fiyat ve zamanı eksik döner, yerel saat kullanılmaz; saatin ilerisindeki damga değişmeden döner ve "saat kayması" raporlanır (R-7).
-- [ ] AC-8 — Fiyat biçimi: fiyat adımına tam oturan fiyat döner, adımdan ince olan eksik döner; B-43'ün bileşim senaryosu yeniden denenir, sonucu kayda geçer (R-8).
-- [ ] AC-9 — Tur uyumu: kayıtlı veriden gelen sonuç çevrilip `run_turn`'e verilince temiz veride tur tamamlanır; eksik fiyatlı ya da eksik mumlu çiftte alım durur, fiyatı taze pozisyon kapanır (R-3, R-10).
-- [ ] AC-10 — Sır ve güvenilmeyen girdi: bozuk yanıt ve içinde sır biçimli metin taşıyan hata, adı konmuş nedenle eksik alan üretir; sonuçta ham metin ve sır yoktur (R-11).
-- [ ] AC-11 — Gerçek borsa: kayıtlı verilerin kaynağı ve tarihi yazılıdır; VERIFY'da Binance spot'a karşı `check` dışında yapılan tek gerçek okuma, R-1 alanlarını döndürdüğünü gösteren kanıtla belgelenir (anahtarsız).
-- [ ] AC-12 — Spread sınırları: alış satışa eşitse spread 0'dır; alış ya da satış eksikken, alış satıştan büyükken ve oran 1'e eşit veya büyükken spread adıyla eksik döner, fiyat etkilenmez; son işlem fiyatı yoksa fiyat alış ya da satıştan türetilmez (R-12, Güncel fiyat).
-- [ ] AC-13 — Bozuk mum: R-13'teki her bozukluk türü o çiftin serisini adıyla eksik yapar, diğer çiftin serisi etkilenmez; onarılmış ya da kısmi seri dönmez (R-13).
-- [ ] AC-14 — Çift ve kural: borsada olmayan, spot olmayan, işleme kapalı ve USDT olmayan çiftin her birinde tüm alanlar adıyla eksik döner; bildirilmemiş kural değeri kuralları eksik yapar, 0 dönmez (R-14).
-- [ ] AC-15 — Geçersiz girdi ve mum sayısı: her geçersiz ya da eksik ayar, desteklenmeyen borsa adı (OKX dahil), tekrarlı ve metin olmayan çift adı adıyla reddedilir, sahte borsa çağrı kaydetmez; boş liste boş sonuç verir, çağrı yoktur; mum sayısı 1 ve 1000 kabul, 0 ve 1001 ret; borsa az mum verince kısa seri hatasız döner (R-15, R-16).
+- [x] AC-1 — Mutlu yol: kayıtlı borsa yanıtıyla iki çiftlik okuma, istek sırasıyla R-1'in tüm alanlarını doğru değerlerle döndürür; fiyat son işlem fiyatıdır, spread tanımdaki formülle hesaplanır; değerler `Decimal`'dir ve kayıtlı değerle birebir aynıdır, zamanlar UTC ve timezone-aware'dir (R-1, R-9).
+- [x] AC-2 — Yalnız okuma: ortamda anahtar varken bile okuma anahtar kullanmaz; sahte borsa yalnız herkese açık veri çağrıları kaydeder, emir ve hesap çağrısı kaydetmez (R-2).
+- [x] AC-3 — Kısmi hata: bir çiftin mum çağrısı, başka bir çiftin fiyat çağrısı başarısız olunca yalnız o alanlar adı konmuş nedenle eksik döner, kalan alanlar doğrudur; istisna fırlamaz (R-3).
+- [x] AC-4 — Süre: takılan çağrı süresinde kesilir; bütçe bitince kalan alanlar "süre bitti" nedeniyle eksik döner ve okuma bütçeyi aşmaz; geçici hata bütçe içinde yeniden denenip başarılı olunca değer döner; geçersiz sembol ve bozuk yanıt tek çağrıda kalır (R-4).
+- [x] AC-5 — Kapanmamış mum: kapanışı saatten bir birim sonra olan mum çıkarılır, saate eşit olan kalır; bu durum nedeni üretmez (R-5).
+- [x] AC-6 — Boşluk: ortasında boşluk olan seride yalnız son boşluktan sonraki mumlar döner, boşluk raporlanır; iki boşlukta yine sonuncu esas alınır; boşluksuz seride rapor yoktur (R-6).
+- [x] AC-7 — Fiyat zamanı: damgasız fiyat ve zamanı eksik döner, yerel saat kullanılmaz; saatin ilerisindeki damga değişmeden döner ve "saat kayması" raporlanır (R-7).
+- [x] AC-8 — Fiyat biçimi: fiyat adımına tam oturan fiyat döner, adımdan ince olan eksik döner; B-43'ün bileşim senaryosu yeniden denenir, sonucu kayda geçer (R-8).
+- [x] AC-9 — Tur uyumu: kayıtlı veriden gelen sonuç çevrilip `run_turn`'e verilince temiz veride tur tamamlanır; eksik fiyatlı ya da eksik mumlu çiftte alım durur, fiyatı taze pozisyon kapanır (R-3, R-10).
+- [x] AC-10 — Sır ve güvenilmeyen girdi: bozuk yanıt ve içinde sır biçimli metin taşıyan hata, adı konmuş nedenle eksik alan üretir; sonuçta ham metin ve sır yoktur (R-11).
+- [x] AC-11 — Gerçek borsa: kayıtlı verilerin kaynağı ve tarihi yazılıdır; VERIFY'da Binance spot'a karşı `check` dışında yapılan tek gerçek okuma, R-1 alanlarını döndürdüğünü gösteren kanıtla belgelenir (anahtarsız).
+- [x] AC-12 — Spread sınırları: alış satışa eşitse spread 0'dır; alış ya da satış eksikken, alış satıştan büyükken ve oran 1'e eşit veya büyükken spread adıyla eksik döner, fiyat etkilenmez; son işlem fiyatı yoksa fiyat alış ya da satıştan türetilmez (R-12, Güncel fiyat).
+- [x] AC-13 — Bozuk mum: R-13'teki her bozukluk türü o çiftin serisini adıyla eksik yapar, diğer çiftin serisi etkilenmez; onarılmış ya da kısmi seri dönmez (R-13).
+- [x] AC-14 — Çift ve kural: borsada olmayan, spot olmayan, işleme kapalı ve USDT olmayan çiftin her birinde tüm alanlar adıyla eksik döner; bildirilmemiş kural değeri kuralları eksik yapar, 0 dönmez (R-14).
+- [x] AC-15 — Geçersiz girdi ve mum sayısı: her geçersiz ya da eksik ayar, desteklenmeyen borsa adı (OKX dahil), tekrarlı ve metin olmayan çift adı adıyla reddedilir, sahte borsa çağrı kaydetmez; boş liste boş sonuç verir, çağrı yoktur; mum sayısı 1 ve 1000 kabul, 0 ve 1001 ret; borsa az mum verince kısa seri hatasız döner (R-15, R-16).
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 2 (review round 1, VERIFY round 1) |
+| Review findings: real / noise / deferred | 6 / 3 / 2 (real: F-1, F-2, F-3, F-5, V-1, V-2; noise: I-1, I-2, I-3; deferred: F-4 → B-48, F-6 → B-49) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `check` ve `doctor` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). AC-11'in gerçek okuma kanıtı PR açıklamasındadır (Evidence policy 3).
