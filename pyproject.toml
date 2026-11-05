@@ -87,7 +87,7 @@ root_package = "crytobot"
 # `coverage` step in scripts/check.conf (fail_under below).
 [tool.coverage.run]
 branch = true
-source_pkgs = ["crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.persistence"]
+source_pkgs = ["crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.persistence", "crytobot.app"]
 # test-slow (tooling tests in subprocesses) appends to test-unit's data without importing these packages
 disable_warnings = ["module-not-imported", "no-data-collected"]
 

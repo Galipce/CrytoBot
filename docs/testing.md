@@ -21,7 +21,7 @@
 - **Veri izolasyonu:** her test kendi geçici SQLite dosyasını (`tmp_path`) kullanır; koşular arası durum taşınmaz.
 - **Araç öz-testleri** (`tests/tooling/`, hepsi `slow`): projeyi `tmp_path`'e kopyalar, bir kuralı bilerek bozar ve
   adım komutunu `scripts/check.conf`'tan okuyarak çalıştırır — her kapının gerçekten kırmızıya döndüğünün kanıtı.
-  Kopya hassas modüllerin (`risk`, `execution`, `portfolio`, `persistence`) gerçek testlerini de alır (`test_volume.py` hariç); gerçek kod kopyada da kapıyı geçer.
+  Kopya hassas modüllerin (`risk`, `execution`, `portfolio`, `persistence`, `app`) gerçek testlerini de alır (`test_volume.py` hariç); gerçek kod kopyada da kapıyı geçer.
 - **Coverage verisi:** `test-unit` `.coverage`'ı sıfırdan yazar, `test-slow` ekler, full-only `coverage` adımı eşiği **her modüle ayrı** uygular (toplam değil).
 
 ## What must be tested
@@ -33,7 +33,8 @@
 - `execution`: idempotent `clientOrderId`, belirsiz emir durumunda fail-safe (BR-11), hassasiyet/minNotional.
 - `control`: yetkisiz chat ID reddi, TOTP'siz hassas komut reddi, Telegram'dan limit gevşetme reddi (limit artırma, kâr/maliyet katı düşürme).
 - LLM çıktısı: şema dışı / alıntısız skorun yok sayılması; prompt-injection içerikli dokümanın aksiyon üretmemesi.
-- **Coverage:** `risk`, `execution`, `portfolio`, `persistence` için **her biri ayrı ayrı** %90 branch coverage zorunlu; diğer modüllerde eşik yok.
+- **Coverage:** `risk`, `execution`, `portfolio`, `persistence`, `app` için **her biri ayrı ayrı** %90 branch coverage zorunlu; diğer modüllerde eşik yok.
+- `app`: bağımsız beklenen-sonuç modelli `hypothesis` property testi (model `app` ve `portfolio`'yu kullanmaz).
 - **e2e yok** (CLI + Telegram; tüm kriterler unit/entegrasyon katmanında kanıtlanır).
 - Strateji kabulü (BR-10) bir test değil, kanıt artefaktıdır: komisyon/slippage dahil out-of-sample backtest raporu spec'e bağlanır.
 

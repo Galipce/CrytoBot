@@ -314,3 +314,29 @@ def test_whitelist_must_be_a_set_of_pairs(whitelist: Any) -> None:
 
     assert result.reason is ApprovalReason.INVALID_INPUT and result.amount is None
     assert "beyaz liste" in result.message
+
+
+class _UnhashableText(str):
+    __hash__ = None  # type: ignore[assignment]
+
+
+@pytest.mark.parametrize(
+    "pair",
+    [["BTC/USDT"], {"pair": "BTC/USDT"}, {"BTC/USDT"}, _UnhashableText("BTC/USDT")],
+    ids=["list", "dict", "set", "unhashable_text"],
+)
+def test_unhashable_pair_is_not_whitelisted(pair: Any) -> None:
+    """Spec 0016 R-15 (B-6): istisna yok, BR-2 reddi."""
+    result = approve(TradeIntent(pair, "buy", Decimal("100"), Decimal("95"), Decimal("200")))
+
+    assert result.reason is ApprovalReason.NOT_WHITELISTED
+    assert result.amount is None
+
+
+@pytest.mark.parametrize("pair", [1, None, b"BTC/USDT"], ids=["int", "none", "bytes"])
+def test_non_text_pair_is_not_whitelisted(pair: Any) -> None:
+    """Spec 0016 R-15: listede aynı değer olsa bile metin olmayan çift listede sayılmaz."""
+    whitelist: Any = frozenset({PAIR, pair})
+    intent = TradeIntent(pair, "buy", Decimal("100"), Decimal("95"), Decimal("200"))
+
+    assert approve(intent, whitelist=whitelist).reason is ApprovalReason.NOT_WHITELISTED
