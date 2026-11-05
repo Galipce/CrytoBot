@@ -60,6 +60,24 @@ def test_root_package_importing_module_internals_is_violation(project: Project) 
     assert "R-3d: no module imports another module's internal submodules BROKEN" in result.stdout
 
 
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "from crytobot.market_data._client import x\n",
+        "from crytobot.market_data import _client\n",
+    ],
+)
+def test_app_importing_market_data_internals_is_violation(project: Project, statement: str) -> None:
+    """0019 PB-2: `app` `market_data` kökünü import edebilir, içini edemez (R-3d)."""
+    project.write("src/crytobot/market_data/_client.py", '"""İç alt modül."""\n\nx = 1\n')
+    project.write("src/crytobot/app/_probe.py", statement)
+
+    result = project.run_step("boundaries")
+
+    assert result.returncode != 0
+    assert "R-3d: no module imports another module's internal submodules BROKEN" in result.stdout
+
+
 def write_legitimate_flow(project: Project) -> None:
     """strategy → risk → execution: risk kökü kendi _flow'unu, o da execution'ı import eder."""
     project.write("src/crytobot/risk/_flow.py", "import crytobot.execution\n")
