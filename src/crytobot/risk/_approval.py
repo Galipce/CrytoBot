@@ -300,7 +300,11 @@ def _size(
     account: AccountState,
     rules: PairRules,
 ) -> TradeApproval:
-    """R-5, R-6: risk bütçesine ve serbest bakiyeye sığan, adıma aşağı yuvarlı en büyük miktar."""
+    """R-5, R-6: risk bütçesine ve serbest bakiyeye sığan, adıma aşağı yuvarlı en büyük miktar.
+
+    Spec 0020 R-1: risk koşulu girişi slippage'lı dolum olarak hesaplar (spec 0005 R-9'un
+    slippage kısmının yerine); spread ve serbest bakiye koşulu miktarı etkilemez.
+    """
     rate, spread, slippage = costs
     pair = intent.pair
     equity, free, step, min_amount, min_notional = (
@@ -319,7 +323,8 @@ def _size(
             exact.prec = MAX_PREC
             exact.traps[Inexact] = True
             budget = equity * limits.per_trade_risk
-            unit_loss = (entry - stop) + entry * rate + stop * rate
+            slipped = entry * (1 + slippage)
+            unit_loss = (slipped - stop) + slipped * rate + stop * rate
             unit_cost = entry * (1 + rate)
             # integer division is never rounded here: the quotient is the largest fitting step count
             by_risk = budget // (step * unit_loss)

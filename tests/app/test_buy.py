@@ -30,7 +30,7 @@ from tests.app.helpers import (
 
 
 def test_crossover_buys_the_approved_amount(tmp_path: Path) -> None:
-    """R-1, R-2: elle hesap: bütçe 100, birim kayıp 2.018, adım 0.001."""
+    """R-1, R-2: elle hesap: bütçe 100, birim kayıp 2.02801 (spec 0020 R-1), adım 0.001."""
     bot = Bot(opened_store(tmp_path / "s.db"))
 
     result = bot.turn()
@@ -62,7 +62,7 @@ def test_order_and_fill_share_one_revision(tmp_path: Path, monkeypatch: pytest.M
 
 
 def test_reload_gives_same_state_and_clean_reconcile(tmp_path: Path) -> None:
-    """R-1: elle hesap: maliyet = 49.554 * 10.01 * 1.001."""
+    """R-1: elle hesap: maliyet = 49.309 * 10.01 * 1.001."""
     bot = Bot(opened_store(tmp_path / "s.db"))
 
     result = bot.turn()

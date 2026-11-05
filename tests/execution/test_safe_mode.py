@@ -36,6 +36,7 @@ ACCOUNT = AccountState(Decimal("10000"), Decimal("5000"), 0)
 RULES = PairRules(Decimal("0.001"), Decimal("0.001"), Decimal("5"))
 INTENT = TradeIntent(PAIR, "buy", Decimal("100"), Decimal("95"), Decimal("110"))
 FEE, SLIPPAGE = Decimal("0.001"), Decimal("0.001")
+# spec 0020 R-1: approval with slippage 0 keeps 0003's 19.249; fills keep it (plan Risk 1c)
 APPROVAL = approve_trade(
     INTENT,
     DEFAULT_LIMITS,
@@ -44,7 +45,7 @@ APPROVAL = approve_trade(
     frozenset({PAIR}),
     FEE,
     Decimal("0.0005"),
-    SLIPPAGE,
+    Decimal(0),
     observe(EMPTY_STATE, NOW, ACCOUNT.equity, DEFAULT_LIMITS).state,
     NOW,
 )
