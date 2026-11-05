@@ -22,6 +22,7 @@ from tests.market_data.helpers import (
     http_response,
     make_settings,
     recorded_client,
+    ticker,
 )
 
 
@@ -280,3 +281,49 @@ def test_hanging_connect_counts_against_the_budget(release: threading.Event) -> 
     read = read_market_data((BTC,), settings, clock_at(), connect=connect)
     assert time.monotonic() - started < 2
     assert {issue.reason for issue in read.pairs[0].issues} == {IssueReason.BUDGET_ENDED}
+
+
+# F-1: Retry-After belongs to the client, not to the call that received it.
+def _stamped(times: list[float], *answers: object) -> object:
+    steps = Steps(*answers)
+
+    def request() -> object:
+        times.append(time.monotonic())
+        answer = steps.next()
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    return request
+
+
+def test_retry_after_holds_back_the_next_call_of_the_read() -> None:
+    limited: list[float] = []
+    sent: list[float] = []
+    klines = _stamped(
+        limited,
+        ExchangeCallError(CallFailure.RATE_LIMITED),
+        ExchangeCallError(CallFailure.RATE_LIMITED),
+        ExchangeCallError(CallFailure.RATE_LIMITED, 0.6),
+    )
+    exchange = FakeExchange(
+        pairs=(BTC,), klines={"BTCUSDT": klines}, tickers={"BTCUSDT": _stamped(sent, ticker())}
+    )
+    read = read_market_data((BTC,), make_settings(), clock_at(), connect=lambda: exchange)
+    reasons = {issue.field: issue.reason for issue in read.pairs[0].issues}
+    assert reasons[ReadField.CANDLES] is IssueReason.RATE_LIMITED
+    assert read.pairs[0].price is not None
+    assert sent[0] - limited[-1] >= 0.59
+
+
+def test_retry_after_past_the_budget_sends_nothing_else() -> None:
+    exchange = FakeExchange(klines={"BTCUSDT": ExchangeCallError(CallFailure.RATE_LIMITED, 500)})
+    settings = make_settings(read_budget=timedelta(seconds=5))
+    started = time.monotonic()
+    btc, eth = read_market_data((BTC, ETH), settings, clock_at(), connect=lambda: exchange).pairs
+    assert exchange.calls == ["markets", "klines BTCUSDT"]
+    assert time.monotonic() - started < 2
+    for pair in (btc, eth):
+        reasons = {issue.field: issue.reason for issue in pair.issues}
+        assert reasons[ReadField.CANDLES] is IssueReason.BUDGET_ENDED
+        assert reasons[ReadField.PRICE] is IssueReason.BUDGET_ENDED

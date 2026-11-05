@@ -59,19 +59,29 @@ def _run_limited[T](request: Callable[[float], T], limit: float) -> T:
 
 
 class Caller:
-    """Bir okumanın çağrıları: bütçe okuma başına, yasak (HTTP 418) okuma boyunca geçerlidir."""
+    """Bir okumanın çağrıları: bütçe okuma başına; yasak ve `Retry-After` okuma boyuncadır."""
 
     def __init__(self, call_timeout: float, read_budget: float) -> None:
         self._call_timeout = call_timeout
         self._deadline = time.monotonic() + read_budget
         self._banned = False
+        self._not_before = 0.0
 
     def _remaining(self) -> float:
         return self._deadline - time.monotonic()
 
+    def _wait(self, seconds: float) -> None:
+        """Bütçe yetiyorsa bekler; yetmiyorsa beklemez ve hiçbir şey göndermez."""
+        if seconds <= 0:
+            return
+        if seconds >= self._remaining():
+            raise CallFailed(IssueReason.BUDGET_ENDED)
+        time.sleep(seconds)
+
     def _attempt[T](self, request: Callable[[float], T]) -> T:
         if self._banned:
             raise CallFailed(IssueReason.RATE_LIMITED)
+        self._wait(self._not_before - time.monotonic())
         remaining = self._remaining()
         if remaining <= 0:
             raise CallFailed(IssueReason.BUDGET_ENDED)
@@ -96,7 +106,6 @@ class Caller:
     def call[T](self, request: Callable[[float], T]) -> T:
         """Geçici hatada bütçe içinde en çok 3 deneme; bekleme bütçeyi aşacaksa `BUDGET_ENDED`."""
         for delay in (*_RETRY_DELAYS, None):
-            retry_after = None
             try:
                 return self._attempt(request)
             except CallFailed:
@@ -104,14 +113,13 @@ class Caller:
             except _CallTimedOut:
                 reason = IssueReason.CALL_TIMED_OUT
             except ExchangeCallError as error:
+                if error.retry_after is not None:
+                    # The server's limit binds the client, so every later call of this read waits
+                    self._not_before = max(self._not_before, time.monotonic() + error.retry_after)
                 reason = self._retry_reason(error)
-                retry_after = error.retry_after
             except Exception:
                 raise CallFailed(IssueReason.UNEXPECTED) from None
             if delay is None:
                 raise CallFailed(reason)
-            wait = max(delay, retry_after or 0.0)
-            if wait >= self._remaining():
-                raise CallFailed(IssueReason.BUDGET_ENDED)
-            time.sleep(wait)
+            self._wait(max(delay, self._not_before - time.monotonic()))
         raise AssertionError("the last delay raises")  # pragma: no cover
