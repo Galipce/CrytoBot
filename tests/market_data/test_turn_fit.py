@@ -151,6 +151,17 @@ def test_refused_read_makes_no_trade(tmp_path: Path) -> None:
     assert BuyHalt.INVALID_DATA in result.halts
 
 
+def test_refused_read_with_its_own_time_is_an_invalid_turn(tmp_path: Path) -> None:
+    bot = Bot(opened_store(tmp_path / "s.db"))
+    refused = read_market_data([BTC, BTC], make_settings(), clock_at(FRESH_NOW))
+    assert refused.read_at is None
+
+    result = bot.turn(to_turn_market(refused), now=refused.read_at)
+
+    assert result.outcome is TurnOutcome.INVALID_TIME
+    assert result.buys == ()
+
+
 def test_position_with_fresh_price_closes(tmp_path: Path) -> None:
     """R-3, 0016 R-4: mumu alınamayan çiftin fiyatı taze ise stop kapanışı sürer, alım durur."""
     bot = bot_with_position(tmp_path / "s.db")

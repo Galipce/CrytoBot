@@ -60,6 +60,8 @@ def _pair_market(pair: PairRead) -> PairMarket:
 def to_turn_market(read: MarketRead) -> dict[str, PairMarket]:
     """Her çift için `PairMarket`; okumadaki eksik alan turda eksik veri olur (R-10).
 
-    Reddedilen okumada sonuç boştur: tur her çifti eksik veri sayar.
+    Reddedilen okumada sonuç boştur ve `read_at` `None`'dır: `now=read.read_at` ile tur
+    `INVALID_TIME` döner, işlem yapmaz. Yalnız çağıran başka bir `now` verirse tur her çifti eksik
+    veri sayar ve alımı durdurur.
     """
     return {pair.pair: _pair_market(pair) for pair in read.pairs}

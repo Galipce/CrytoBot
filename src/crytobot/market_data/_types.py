@@ -146,8 +146,8 @@ class PairRead:
 class MarketRead:
     """Okumanın sonucu: `pairs` istek sırasıyla; ret: `pairs` boş, `input_problem` dolu.
 
-    `read_at` okumanın son saat değeridir, `run_turn`'ün `now`'ı odur (plan Risk 4). Saat
-    reddedildiyse `None`'dır.
+    `read_at` okumanın son saat değeridir, `run_turn`'ün `now`'ı odur (plan Risk 4). Yalnız saat
+    reddinde değil her retde `None`'dır; bu değerle `run_turn` `INVALID_TIME` döner.
     """
 
     pairs: tuple[PairRead, ...]
