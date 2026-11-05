@@ -1,6 +1,6 @@
 """Spec 0017 AC-12: spread sınırları; fiyat alış ya da satıştan türetilmez (R-12)."""
 
-from decimal import Decimal
+from decimal import Context, Decimal
 
 import pytest
 
@@ -19,7 +19,8 @@ def test_spread_is_exact_when_the_ratio_terminates() -> None:
 def test_rounding_never_understates_the_spread() -> None:
     quote = parse_quote(ticker(bidPrice="1", askPrice="2"), "BTCUSDT", TICK, NOW)
     assert quote.spread is not None
-    assert quote.spread * 3 >= 2
+    # The default 28-digit context would round a floored 1.99...98 back up to 2
+    assert Context(prec=120).multiply(quote.spread, Decimal(3)) >= 2
     assert len(quote.spread.as_tuple().digits) == 28
 
 
