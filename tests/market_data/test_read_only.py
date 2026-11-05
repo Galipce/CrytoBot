@@ -48,3 +48,8 @@ def test_the_client_exposes_only_the_three_reads() -> None:
     public = {name for name in vars(_BinancePublic) if not name.startswith("_")}
     assert public == {"markets", "klines", "ticker"}
     assert type(connect_public()) is _BinancePublic
+
+
+def test_ccxt_rate_limit_stays_on() -> None:
+    client, _ = recorded_client()
+    assert client._exchange.enableRateLimit is True  # type: ignore[attr-defined]
