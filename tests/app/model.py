@@ -13,6 +13,8 @@ STEP = Decimal("0.001")
 MINIMUM_NOTIONAL = Decimal(10)
 RISK_SHARE = Decimal("0.01")
 HARD_CAP = Decimal("0.02")
+SPREAD = Decimal("0.0005")  # `helpers.pair_market`'s spread
+MULTIPLE = Decimal(2)
 
 
 @dataclass
@@ -58,6 +60,13 @@ class Model:
         if cost > self.balance or loss > self.balance * HARD_CAP:
             return
         if price <= STOP or fill >= TARGET:
+            return
+        # spec 0020 R-2, R-4: the config limit at the fill, BR-8 at the current price
+        if loss > self.balance * RISK_SHARE:
+            return
+        both_legs = price + TARGET
+        cost_per_unit = both_legs * self.fee + price * SPREAD + both_legs * self.slippage
+        if TARGET - price <= MULTIPLE * cost_per_unit:
             return
         self.balance -= cost
         self.position = ModelPosition(amount)

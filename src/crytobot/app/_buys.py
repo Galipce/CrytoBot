@@ -27,7 +27,14 @@ from crytobot.execution import (
     place_order,
 )
 from crytobot.portfolio import AccountSnapshot, SnapshotOutcome, account_state, record_fill
-from crytobot.risk import HARD_CAPS, AccountState, PairRules, TradeApproval, approve_trade
+from crytobot.risk import (
+    HARD_CAPS,
+    AccountState,
+    PairRules,
+    TradeApproval,
+    approve_trade,
+    edge_clears,
+)
 from crytobot.strategy import NoProposal, propose
 
 _INTENT_ID_LENGTH = 32
@@ -45,18 +52,24 @@ def _fill_gate(
     run: TurnRun,
     amount: Decimal,
     price: Decimal,
+    spread: Decimal,
     stop: Decimal,
     target: Decimal,
     account: AccountSnapshot,
 ) -> PairNote | None:
-    """Plan Risk 1, 2, A-1: `risk` girişe göre boyutlar, dolum güncel fiyat ve slippage'la olur.
+    """Plan Risk 1, 2, A-1; spec 0020 R-2…R-9: `risk` slippage'lı girişe göre boyutlar, dolum
+    güncel fiyat ve slippage'la olur.
 
-    Birincisi defterin kalıcı reddini (R-7), ikincisi sabit üst sınırın aşılmasını, üçüncüsü
-    sonraki turda kesin zararla kapanan alımı önler: kapanış güncel fiyatla karşılaştırır, stop
-    tarafı bu yüzden dolumla değil fiyatla denetlenir (A-3). Kayıp formülü `risk._size`'ın
-    kopyasıdır: orada değişirse burada da değişir (Known traps).
+    Sıra (spec 0020 R-5): bakiye defterin kalıcı reddini (R-7), sabit üst sınır BR-4'ün
+    aşılmasını, stop/hedef sonraki turda kesin zararla kapanan alımı önler — kapanış güncel
+    fiyatla karşılaştırır, stop tarafı bu yüzden dolumla değil fiyatla denetlenir (A-3); config
+    limiti dolumdaki riski, BR-8 katı güncel fiyattaki kârı denetler. Kapı yalnız emrin oluşup
+    oluşmayacağına karar verir, miktarı değiştirmez (R-6). Kayıp formülü `risk._size`'ın
+    kopyasıdır, giriş yerine güncel fiyatla: orada değişirse burada da değişir (Known traps).
+    BR-8 formülü `risk`'indir (`edge_clears`).
     """
     fee, slippage = Decimal(run.settings.fee), Decimal(run.settings.slippage)
+    limits = run.settings.limits
     try:
         with localcontext(_BOUNDED):
             fill = price * (1 + slippage)
@@ -65,13 +78,20 @@ def _fill_gate(
             cost = notional + commission
             loss = amount * (fill - stop) + commission + amount * stop * fee
             cap = account.equity * HARD_CAPS.per_trade_risk
-    except DecimalException:
+            limit = account.equity * limits.per_trade_risk
+    except DecimalException:  # R-9: a risk that does not fit is named as the cap
         return PairNote.RISK_CAP_AT_FILL
     if cost > account.free_balance:
         return PairNote.FILL_EXCEEDS_BALANCE
     if loss > cap:
         return PairNote.RISK_CAP_AT_FILL
-    return PairNote.FILL_OUTSIDE_STOP_TARGET if price <= stop or fill >= target else None
+    if price <= stop or fill >= target:
+        return PairNote.FILL_OUTSIDE_STOP_TARGET
+    if loss > limit:
+        return PairNote.RISK_LIMIT_AT_FILL
+    if not edge_clears(price, target, fee, spread, slippage, limits.profit_cost_multiple):
+        return PairNote.INSUFFICIENT_EDGE_AT_FILL
+    return None
 
 
 def _note(run: TurnRun, pair: str, note: PairNote, message: str) -> None:
@@ -147,10 +167,10 @@ def _buy_pair(run: TurnRun, pair: str) -> None:
         assert approval.reason is not None  # a refusal names its reason
         run.pairs.append(PairOutcome(pair, approval.reason, approval.message))
         return
-    assert data.price is not None  # checked by the data gate
+    assert data.price is not None and data.spread is not None  # checked by the data gate
     assert isinstance(proposal.stop, Decimal) and isinstance(proposal.target, Decimal)  # likewise
-    price = Decimal(data.price)
-    note = _fill_gate(run, amount, price, proposal.stop, proposal.target, account)
+    price, spread = Decimal(data.price), Decimal(data.spread)
+    note = _fill_gate(run, amount, price, spread, proposal.stop, proposal.target, account)
     if note is not None:
         _note(run, pair, note, "dolum fiyatıyla emir oluşmaz")
         return

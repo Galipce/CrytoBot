@@ -102,15 +102,6 @@ def test_risk_over_hard_cap_at_fill_places_no_order(tmp_path: Path) -> None:
     assert result.buys == () and bot.notices == []
 
 
-def test_risk_under_hard_cap_at_fill_still_buys(tmp_path: Path) -> None:
-    """Plan Risk 2: kapı yalnız sınırı aşanı keser; fiyat 11'de kayıp ~150 USDT."""
-    bot = Bot(opened_store(tmp_path / "s.db"))
-
-    result = bot.turn({BTC: pair_market(price=Decimal(11))})
-
-    assert [o.amount for o in result.buys] == [FIRST_AMOUNT]
-
-
 def test_fill_below_stop_places_no_order(tmp_path: Path) -> None:
     """Plan A-1: fiyat 7.9, dolum 7.9079, stop 8: alım sonraki turda kesin zararla kapanırdı."""
     bot = Bot(opened_store(tmp_path / "s.db"))
@@ -173,7 +164,12 @@ def test_price_just_above_stop_with_slippage_still_buys_and_stays_open(tmp_path:
 
 
 def test_fill_just_inside_stop_and_target_still_buys(tmp_path: Path) -> None:
-    """Plan A-1: kapı yalnız sınırdakini ve dışındakini keser."""
+    """Plan A-1: kapı yalnız sınırdakini ve dışındakini keser.
+
+    Spec 0020 (plan Risk 1a): hedefin hemen içi, config limitine ve BR-8'e takılmayan girdilerle:
+    ücret, slippage ve spread 0, adım 25.01: 100 // (25.01 * 2) = 1 adım; fiyat 11.99'da risk
+    25.01 * 3.99 = 99.7899 <= 100, kâr 0.01 > 2 * 0 maliyet.
+    """
     settings = make_settings(strategy=replace(STRATEGY, r=Decimal(1)), slippage=Decimal(0))
     bot = Bot(opened_store(tmp_path / "s.db"), settings=settings)
 
@@ -181,10 +177,14 @@ def test_fill_just_inside_stop_and_target_still_buys(tmp_path: Path) -> None:
 
     assert [o.fill_price for o in low.buys] == [Decimal("8.01")]
 
-    other = Bot(opened_store(tmp_path / "t.db"), settings=settings)
-    high = other.turn({BTC: pair_market(price=Decimal("11.99"))})
+    free = make_settings(
+        strategy=replace(STRATEGY, r=Decimal(1)), fee=Decimal(0), slippage=Decimal(0)
+    )
+    step = PairRules(Decimal("25.01"), RULES.min_amount, RULES.min_notional)
+    other = Bot(opened_store(tmp_path / "t.db"), settings=free)
+    high = other.turn({BTC: pair_market(price=Decimal("11.99"), rules=step, spread=Decimal(0))})
 
-    assert [o.fill_price for o in high.buys] == [Decimal("11.99")]
+    assert [(o.fill_price, o.amount) for o in high.buys] == [(Decimal("11.99"), Decimal("25.01"))]
 
 
 def test_order_refused_by_execution_appears_for_the_pair(tmp_path: Path) -> None:
