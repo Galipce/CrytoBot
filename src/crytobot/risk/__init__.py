@@ -8,7 +8,8 @@ risk bütçesi ve serbest bakiyeyle sınırlı, borsa adımına aşağı yuvarla
 Kasa `observe` ile `RiskState`'e gözlenir (gün başı, zirve, drawdown durdurması); onay bu
 durumu ister ve günlük zarar ya da drawdown limitinde reddeder; durdurmayı yalnızca CLI `resume`
 ile kaldırır. Önerinin hedefe kadar beklenen kârı, efektif maliyetin (komisyon + spread +
-slippage) katını geçmiyorsa öneri reddedilir. Onay sonucu karara bağladığı öneriyi değiştirmeden
+slippage) katını geçmiyorsa öneri reddedilir; aynı formül `edge_clears` ile girişin yerine güncel
+fiyatla yeniden denetlenir (spec 0020). Onay sonucu karara bağladığı öneriyi değiştirmeden
 taşır (`TradeApproval.intent`); `execution` emri yalnızca o öneriden oluşturur.
 Açık pozisyonun stop ya da hedefte kapanışı yeni işlem değildir (spec 0009): `approve_close`
 talebi yalnızca biçimine bakarak onaylar — hiçbir giriş limiti, beyaz liste ya da kill switch
@@ -22,6 +23,7 @@ from crytobot.risk._approval import (
     TradeApproval,
     TradeIntent,
     approve_trade,
+    edge_clears,
 )
 from crytobot.risk._close import (
     CLOSE_REASONS,
@@ -87,6 +89,7 @@ __all__: list[str] = [
     "approve_trade",
     "close_request_problems",
     "decide_change",
+    "edge_clears",
     "load_limits",
     "observe",
     "resume",
