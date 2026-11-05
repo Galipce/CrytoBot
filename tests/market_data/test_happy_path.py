@@ -6,13 +6,17 @@ from decimal import Context, Decimal
 from crytobot.market_data import MarketRead, MarketRules, read_market_data
 from tests.market_data.helpers import (
     BTC,
+    CLOSE_MS,
     ETH,
+    HOUR_MS,
     FakeExchange,
     at_ms,
+    candle_rows,
     clock_at,
     fixture,
     make_settings,
     recorded_client,
+    ticker,
 )
 
 # After the last recorded candle closes and after both recorded stamps
@@ -104,6 +108,54 @@ def test_clock_reads_before_candles_and_after_the_ticker() -> None:
     read = read_market_data([BTC], make_settings(), lambda: next(ticks), connect=lambda: exchange)
     # first check, candle filter, drift check, read_at
     assert read.read_at == RECORDED_NOW + timedelta(seconds=3)
+
+
+class _MovingClock:
+    """Yanıt gelirken ilerleyen saat: çağrının öncesini ve sonrasını ayırır."""
+
+    def __init__(self, start: datetime) -> None:
+        self.now = start
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+def test_drift_check_reads_the_clock_after_the_ticker_answers() -> None:
+    """Plan Risk 4: çağrı sırasında gelen damga, çağrı öncesi saate göre gelecek sayılmaz."""
+    clock = _MovingClock(at_ms(CLOSE_MS + 60_000))
+    stamp_ms = CLOSE_MS + 60_500
+
+    def answer() -> object:
+        clock.now = at_ms(CLOSE_MS + 61_000)
+        return ticker(closeTime=stamp_ms)
+
+    exchange = FakeExchange((BTC,), tickers={"BTCUSDT": answer})
+    read = read_market_data([BTC], make_settings(), clock, connect=lambda: exchange)
+
+    btc = read.pairs[0]
+    assert btc.issues == ()
+    assert btc.price_at == at_ms(stamp_ms)
+    assert read.read_at == clock.now
+
+
+def test_candle_filter_reads_the_clock_before_the_request() -> None:
+    """Plan Risk 4: istek sırasında kapanan mum, açıkken gelmiş olabilir; kapanmış sayılmaz."""
+    clock = _MovingClock(at_ms(CLOSE_MS - 1))
+
+    def answer() -> object:
+        clock.now = at_ms(CLOSE_MS + 1_000)
+        return candle_rows(3)
+
+    exchange = FakeExchange((BTC,), klines={"BTCUSDT": answer})
+    read = read_market_data([BTC], make_settings(), clock, connect=lambda: exchange)
+
+    btc = read.pairs[0]
+    assert btc.issues == ()
+    assert btc.candles is not None
+    assert [candle.open_time for candle in btc.candles] == [
+        at_ms(CLOSE_MS - 3 * HOUR_MS),
+        at_ms(CLOSE_MS - 2 * HOUR_MS),
+    ]
 
 
 def test_read_at_is_later_than_every_stamp_so_the_turn_sees_no_future() -> None:
