@@ -53,8 +53,9 @@ DEPOSIT = Decimal(10000)
 MAX_CANDLE_AGE = 30 * MINUTE
 MAX_PRICE_AGE = 5 * MINUTE
 STRATEGY = StrategySettings(1, 2, 2, Decimal(70), 2, Decimal(2), Decimal(2))
-# risk bütçesi 100 USDT, birim kayıp 2.018: amount = 100 // (0.001 * 2.018) * 0.001
-FIRST_AMOUNT = Decimal("49.554")
+# spec 0020 R-1: risk bütçesi 100 USDT, slippage'lı giriş 10.01, birim kayıp
+# (10.01 - 8) + 10.01 * 0.001 + 8 * 0.001 = 2.02801: amount = 100 // (0.001 * 2.02801) * 0.001
+FIRST_AMOUNT = Decimal("49.309")
 
 
 def series(closes: Sequence[float], closed_at: datetime = NOW) -> list[Candle]:

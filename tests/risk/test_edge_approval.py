@@ -51,10 +51,16 @@ def approve(
 
 
 def test_trade_clearing_the_threshold_is_sized_as_spec_0003() -> None:
-    """AC-1 (R-3, R-9): maliyet 0.47, eşik 0.94, kâr 10 → onay; miktar spec 0003 AC-1 ile aynı."""
+    """AC-1 (R-3, R-9): maliyet 0.47, eşik 0.94, kâr 10 → onay; slippage 0'da miktar spec 0003
+    AC-1 ile aynı.
+
+    Spec 0020 R-1: slippage'lı giriş 100.1, birim kayıp (100.1 - 95) + 100.1 * 0.001 + 95 * 0.001
+    = 5.2951; 100 // (0.001 * 5.2951) = 18885 adım.
+    """
     result = approve()
 
-    assert result.approved and result.amount == Decimal("19.249")
+    assert result.approved and result.amount == Decimal("18.885")
+    assert approve(slippage=Decimal(0)).amount == Decimal("19.249")
 
 
 @pytest.mark.parametrize(
@@ -185,13 +191,17 @@ def test_changed_multiple_applies_at_once() -> None:
 
 @pytest.mark.parametrize(
     ("free", "amount", "limited"),
-    [("1926.8249", "19.249", False), ("1926.8248", "19.248", True)],
+    [("1890.3885", "18.885", False), ("1890.3884", "18.884", True)],
     ids=["same_steps", "one_step_fewer"],
 )
 def test_spread_and_slippage_leave_the_balance_limit_as_spec_0003(
     free: str, amount: str, limited: bool
 ) -> None:
-    """AC-1 (R-9): spread ve slippage sıfırdan büyükken bakiye sınırı spec 0003 AC-3 ile aynı."""
+    """AC-1 (R-9): spread ve slippage sıfırdan büyükken bakiye sınırı spec 0003 AC-3 ile aynı.
+
+    Spec 0020 R-1: riskle sınırlı miktar 18.885; bakiye koşulu slippage'sız, 18.885 * 100 * 1.001
+    = 1890.3885 tam bu adım sayısını, 0.0001 eksiği bir adım azını verir.
+    """
     result = approve(account=replace(ACCOUNT, free_balance=Decimal(free)))
 
     assert result.approved and result.amount == Decimal(amount)

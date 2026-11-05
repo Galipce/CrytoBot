@@ -3,7 +3,19 @@
 from collections.abc import Set
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from decimal import MAX_EMAX, MAX_PREC, MIN_EMIN, Decimal, DecimalException, Inexact, localcontext
+from decimal import (
+    MAX_EMAX,
+    MAX_PREC,
+    MIN_EMIN,
+    Context,
+    Decimal,
+    DecimalException,
+    DivisionByZero,
+    Inexact,
+    InvalidOperation,
+    Overflow,
+    localcontext,
+)
 from enum import Enum
 from typing import TYPE_CHECKING, cast
 
@@ -13,6 +25,8 @@ if TYPE_CHECKING:  # _tracking imports this module; the state is only read here
     from crytobot.risk._tracking import RiskState
 
 BUY = "buy"
+# spec 0020 R-9: as `execution` and `portfolio` calculate, a result past 60 digits raises
+_BOUNDED = Context(prec=60, traps=[DivisionByZero, Inexact, InvalidOperation, Overflow])
 
 
 @dataclass(frozen=True)
@@ -284,10 +298,43 @@ def _edge(
         # every operand is inside the default exponent range (R-7): exact, bounded, no Overflow
         exact.Emax, exact.Emin = MAX_EMAX, MIN_EMIN
         exact.traps[Inexact] = True
-        profit = target - entry
-        both_legs = entry + target
-        cost = both_legs * rate + entry * spread + both_legs * slippage
-        return profit, cost, profit > multiple * cost
+        return _edge_terms(entry, target, rate, spread, slippage, multiple)
+
+
+def _edge_terms(
+    entry: Decimal,
+    target: Decimal,
+    rate: Decimal,
+    spread: Decimal,
+    slippage: Decimal,
+    multiple: Decimal,
+) -> tuple[Decimal, Decimal, bool]:
+    """BR-8'in tek formülü; bağlamı çağıran seçer (onay tam, dolum kapısı 60 basamak)."""
+    profit = target - entry
+    both_legs = entry + target
+    cost = both_legs * rate + entry * spread + both_legs * slippage
+    return profit, cost, profit > multiple * cost
+
+
+def edge_clears(
+    price: Decimal,
+    target: Decimal,
+    fee: Decimal,
+    spread: Decimal,
+    slippage: Decimal,
+    multiple: Decimal,
+) -> bool:
+    """Spec 0020 R-4, R-9: onaydaki BR-8 formülü, girişin yerine güncel fiyatla.
+
+    Giriş bacağının slippage'ı maliyette olduğundan dolum fiyatı ayrıca konmaz. Hesap 60
+    basamaklı, sonucu yuvarlamak yerine fırlatan bağlamda yapılır (`execution` ve `portfolio`
+    gibi); sığmayan hesap kat sağlanmamış sayılır: `False`, istisna yok.
+    """
+    try:
+        with localcontext(_BOUNDED):
+            return _edge_terms(price, target, fee, spread, slippage, multiple)[2]
+    except DecimalException:
+        return False
 
 
 def _size(
@@ -300,7 +347,11 @@ def _size(
     account: AccountState,
     rules: PairRules,
 ) -> TradeApproval:
-    """R-5, R-6: risk bütçesine ve serbest bakiyeye sığan, adıma aşağı yuvarlı en büyük miktar."""
+    """R-5, R-6: risk bütçesine ve serbest bakiyeye sığan, adıma aşağı yuvarlı en büyük miktar.
+
+    Spec 0020 R-1: risk koşulu girişi slippage'lı dolum olarak hesaplar (spec 0005 R-9'un
+    slippage kısmının yerine); spread ve serbest bakiye koşulu miktarı etkilemez.
+    """
     rate, spread, slippage = costs
     pair = intent.pair
     equity, free, step, min_amount, min_notional = (
@@ -319,7 +370,8 @@ def _size(
             exact.prec = MAX_PREC
             exact.traps[Inexact] = True
             budget = equity * limits.per_trade_risk
-            unit_loss = (entry - stop) + entry * rate + stop * rate
+            slipped = entry * (1 + slippage)
+            unit_loss = (slipped - stop) + slipped * rate + stop * rate
             unit_cost = entry * (1 + rate)
             # integer division is never rounded here: the quotient is the largest fitting step count
             by_risk = budget // (step * unit_loss)

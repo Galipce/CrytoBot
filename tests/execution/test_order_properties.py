@@ -49,9 +49,10 @@ EXAMPLES = 300
 
 def judge(intent: TradeIntent) -> TradeApproval:
     state = observe(EMPTY_STATE, NOW, ACCOUNT.equity, DEFAULT_LIMITS).state
+    # spec 0020 R-1: approval with slippage 0 keeps 0003's 19.249; fills keep it (plan Risk 1c)
     return approve_trade(
         intent, DEFAULT_LIMITS, ACCOUNT, RULES, frozenset({PAIR}), FEE, Decimal("0.0005"),
-        Decimal("0.001"), state, NOW,
+        Decimal(0), state, NOW,
     )  # fmt: skip
 
 
