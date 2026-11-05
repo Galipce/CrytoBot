@@ -28,8 +28,10 @@ _PROBE_EQUITY = Decimal(10000)
 _PROBE_INTENT = TradeIntent(_PROBE_PAIR, "buy", Decimal(100), Decimal(90), Decimal(1000))
 _PROBE_RULES = PairRules(Decimal(1), Decimal(0), Decimal(0))
 # A filled close whose ledger entry does not fit leaves a lasting flag (R-7), so such a price stops
-# at the gate. Measured with 5e9 units: refused from 1E31 and from the 41st decimal. No real spot
-# price nears these limits, which leave room for far larger amounts (review round 2 F-3)
+# at the gate. Measured with 5e9 units: refused from 1E31 and from the 41st decimal (review round
+# 2 F-3). These limits judge one price at a time, not a combination: 26 decimals, a 9E15 close and
+# a 1e12 deposit left a lasting conflict. A market read stops at 18 decimals, where the same
+# combination is clean (spec 0017, B-43)
 _MAX_PRICE_SCALE = 15
 _MIN_PRICE_PLACE = -28
 

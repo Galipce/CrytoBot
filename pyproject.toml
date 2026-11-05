@@ -33,6 +33,12 @@ allowed-confusables = ["ı"]
 strict = true
 python_version = "3.12"
 
+# ccxt is an external library reached only by market_data/_client.py: its code is not type-checked here
+[[tool.mypy.overrides]]
+module = ["ccxt", "ccxt.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
 # Forbidden dependencies (docs/architecture.md; spec 0001 R-3). Direct imports only: the documented rule
 # is "never imports", and the legitimate strategy -> risk -> execution flow must not count (plan 0001, risk 1).
 [tool.importlinter]

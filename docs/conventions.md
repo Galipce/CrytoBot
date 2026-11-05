@@ -102,6 +102,12 @@
 - `risk` girişle boyutlar, `execution` güncel fiyat ve slippage'la doldurur: bakiyeyle sınırlı onay slippage'la defterden döner (dolu emir + kalıcı mutabakat), fiyat girişten uzaksa gerçek risk sabit üst sınırı aşar (ölçüm: %5.93). dolum stop'un altına ya da hedefin üstüne düşebilir (sonraki turda kesin zararla kapanış). `app` emirden önce üç kapıyla keser; kayıp formülü `risk._size`'ın kopyasıdır, biri değişirse ikisi değişir — from spec 0016, plan Risk 1, 2, A-1
 - Defter, `now`'ı pozisyonun açılışından eski dolumu reddeder ama `execution` emri önce doldurur: geri giden saatte dolu emir + kalıcı çelişki kalır, aynı kimlik yeniden denenemez. Emirden önce `now` karşılaştırılır — from spec 0016, plan Risk 3
 - `tests/tooling` kopya projesi yalnız hassas modül testlerini taşır: `tests/app`, `tests/analysis` ya da `tests/strategy`'den import edemez, yoksa kapı testleri toplama hatasıyla kırmızı olur — from spec 0016, plan Risk 16
+- `ccxt`'nin birleşik çağrıları bozuk yanıtı gizler: `fetch_ohlcv` yanıtı sıralar (`[3000, 1000, 1000]` `[1000, 1000, 3000]` olur), varsayılan sayı `float`'tır, istenenden başka sembol dönse de geçer. Mum ve fiyatta ham uçlar (`publicGetKlines`, `publicGetTicker24hr`), piyasalarda `number=str`; yanıttaki `symbol` istenenle karşılaştırılır — from spec 0017, plan Risk 3
+- Okuma boyunca saat tek değer olamaz: başta alınan `now` sonra gelen fiyat damgasını "gelecek" gösterir ve 0016 tüm alımları keser; sonda alınan `now` okuma sırasında kapanan mumu kapanmış sayar. Mum süzgeci istekten önce, kayma denetimi yanıttan sonra okur; `run_turn`'ün `now`'ı `read.read_at`'tir — from spec 0017, plan Risk 4
+- Binance `klines` istenen sayıya açık mumu da katar: `limit=1` hiç kapanmış mum bırakmaz, `limit+1` de 1000'de 999 döndürür. İstekte `endTime` = son kapanmış mumun kapanışı − 1 ms. `limit=1001` hata vermez, 1000 döner: üst sınırı kod korur — from spec 0017, plan Risk 5
+- `ccxt`'nin `timeout`'u soket süresidir, toplam değil: yavaş akan yanıt onu aşar. Her çağrı daemon iş parçacığında, bekleme `min(çağrı süresi, kalan bütçe)`; `ThreadPoolExecutor` çıkışta takılan işi bekler, kullanılmaz — from spec 0017, plan Risk 6
+- `Retry-After` çağrıya değil istemciye aittir; yeniden deneme döngüsünde uygulamak sonraki çağrıları korumaz. — from spec 0017, review round 1 F-1
+- `ccxt` `OperationFailed`, `NetworkError` değildir; Binance'in `-1000/-1001/-1006` kodları `NetworkError` süzgecinden kaçar. — from spec 0017, review round 1 F-2
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
