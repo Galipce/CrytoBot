@@ -5,9 +5,17 @@ from typing import Any
 
 import pytest
 
+from crytobot.market_data import read_market_data
 from crytobot.market_data._pairs import PairSpec, pair_spec
 from crytobot.market_data._types import IssueReason, MarketRules, ReadField, ReadIssue
-from tests.market_data.helpers import BTC, market, recorded_client
+from tests.market_data.helpers import (
+    BTC,
+    FakeExchange,
+    clock_at,
+    make_settings,
+    market,
+    recorded_client,
+)
 
 UNUSABLE: list[tuple[str, dict[str, Any], IssueReason]] = [
     ("not_listed", {}, IssueReason.NOT_LISTED),
@@ -132,3 +140,37 @@ def test_recorded_market_keeps_the_exchange_text() -> None:
     assert str(spec.rules.amount_step) == "0.00001000"
     assert str(spec.rules.min_amount) == "0.00001000"
     assert str(spec.rules.min_notional) == "5.00000000"
+
+
+@pytest.mark.parametrize(
+    ("pair", "reason"),
+    [
+        ("NOPE/USDT", IssueReason.NOT_LISTED),
+        ("BTCUP/USDT", IssueReason.NOT_SPOT),
+        ("EOS/USDT", IssueReason.NOT_TRADING),
+        ("ETH/BTC", IssueReason.NOT_USDT),
+    ],
+)
+def test_unusable_pair_misses_all_fields(pair: str, reason: IssueReason) -> None:
+    """BR-2: tüm alanlar adıyla eksik; bu çift için mum ve fiyat çağrısı gitmez."""
+    client, session = recorded_client()
+    read = read_market_data((pair,), make_settings(), clock_at(), connect=lambda: client)
+    result = read.pairs[0]
+    assert result.pair == pair
+    assert result.candles is None
+    assert result.price is None
+    assert result.price_at is None
+    assert result.spread is None
+    assert result.tick is None
+    assert result.rules is None
+    assert {issue.field for issue in result.issues} == set(ReadField)
+    assert {issue.reason for issue in result.issues} == {reason}
+    assert len(session.requests) == 1
+
+
+def test_unreported_rule_reaches_the_result_without_a_zero() -> None:
+    limits = {"amount": {"min": "0.001"}, "cost": {"min": None}}
+    exchange = FakeExchange((BTC,), markets={BTC: market(BTC, limits=limits)})
+    read = read_market_data((BTC,), make_settings(), clock_at(), connect=lambda: exchange)
+    assert read.pairs[0].rules is None
+    assert read.pairs[0].issues == (ReadIssue(ReadField.RULES, IssueReason.RULE_NOT_REPORTED),)

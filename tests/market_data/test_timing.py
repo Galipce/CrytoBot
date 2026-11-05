@@ -3,14 +3,26 @@
 import threading
 import time
 from collections.abc import Iterator
+from datetime import timedelta
 
 import pytest
 import requests
 
+from crytobot.market_data import ReadField, read_market_data
 from crytobot.market_data._calls import Caller, CallFailed
 from crytobot.market_data._client import CallFailure, ExchangeCallError
 from crytobot.market_data._types import IssueReason
-from tests.market_data.helpers import Steps, fixture, http_response, recorded_client
+from tests.market_data.helpers import (
+    BTC,
+    ETH,
+    FakeExchange,
+    Steps,
+    clock_at,
+    fixture,
+    http_response,
+    make_settings,
+    recorded_client,
+)
 
 
 @pytest.fixture
@@ -216,3 +228,55 @@ def test_market_ccxt_cannot_parse_is_an_exchange_error() -> None:
     with pytest.raises(ExchangeCallError) as raised:
         client.markets(5.0)
     assert raised.value.failure is CallFailure.OTHER
+
+
+def _hang_until(release: threading.Event) -> object:
+    def hang() -> None:
+        release.wait(30)
+
+    return hang
+
+
+def test_budget_end_names_remaining_fields(release: threading.Event) -> None:
+    exchange = FakeExchange(klines={"BTCUSDT": _hang_until(release)})
+    settings = make_settings(
+        call_timeout=timedelta(seconds=20), read_budget=timedelta(milliseconds=150)
+    )
+    btc, eth = read_market_data((BTC, ETH), settings, clock_at(), connect=lambda: exchange).pairs
+    assert btc.candles is None
+    assert btc.price is None
+    assert eth.candles is None
+    assert eth.price is None
+    assert btc.tick is not None  # came with the markets answer, before the budget ended
+    for pair in (btc, eth):
+        reasons = {issue.field: issue.reason for issue in pair.issues}
+        assert reasons[ReadField.CANDLES] is IssueReason.BUDGET_ENDED
+        assert reasons[ReadField.PRICE] is IssueReason.BUDGET_ENDED
+        assert reasons[ReadField.SPREAD] is IssueReason.BUDGET_ENDED
+    # Nothing is sent once the budget is gone
+    assert exchange.calls == ["markets", "klines BTCUSDT"]
+
+
+def test_read_stays_within_budget(release: threading.Event) -> None:
+    exchange = FakeExchange(tickers={"BTCUSDT": _hang_until(release)})
+    settings = make_settings(
+        call_timeout=timedelta(seconds=20), read_budget=timedelta(milliseconds=200)
+    )
+    started = time.monotonic()
+    read_market_data((BTC, ETH), settings, clock_at(), connect=lambda: exchange)
+    # the slack only absorbs a loaded machine; the hung call would take 30 s
+    assert time.monotonic() - started < 2
+
+
+def test_hanging_connect_counts_against_the_budget(release: threading.Event) -> None:
+    def connect() -> FakeExchange:
+        release.wait(30)
+        return FakeExchange()
+
+    settings = make_settings(
+        call_timeout=timedelta(seconds=20), read_budget=timedelta(milliseconds=100)
+    )
+    started = time.monotonic()
+    read = read_market_data((BTC,), settings, clock_at(), connect=connect)
+    assert time.monotonic() - started < 2
+    assert {issue.reason for issue in read.pairs[0].issues} == {IssueReason.BUDGET_ENDED}

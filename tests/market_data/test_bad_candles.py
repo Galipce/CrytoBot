@@ -2,9 +2,22 @@
 
 import pytest
 
+from crytobot.market_data import read_market_data
 from crytobot.market_data._candles import parse_series
 from crytobot.market_data._types import IssueReason
-from tests.market_data.helpers import CLOSE_MS, HOUR, HOUR_MS, NOW, candle_row, candle_rows
+from tests.market_data.helpers import (
+    BTC,
+    CLOSE_MS,
+    ETH,
+    HOUR,
+    HOUR_MS,
+    NOW,
+    FakeExchange,
+    candle_row,
+    candle_rows,
+    clock_at,
+    make_settings,
+)
 
 FIRST = CLOSE_MS - 3 * HOUR_MS
 SECOND = CLOSE_MS - 2 * HOUR_MS
@@ -110,3 +123,15 @@ def test_fewer_candles_than_requested_is_not_an_error() -> None:
     assert series.issue is None
     assert series.candles is not None
     assert len(series.candles) == 2
+
+
+def test_other_pair_is_unaffected() -> None:
+    exchange = FakeExchange(klines={"BTCUSDT": _with_bad_middle(high="8.00")})
+    btc, eth = read_market_data(
+        (BTC, ETH), make_settings(), clock_at(), connect=lambda: exchange
+    ).pairs
+    assert btc.candles is None
+    assert btc.price is not None
+    assert eth.candles is not None
+    assert len(eth.candles) == 3
+    assert eth.issues == ()

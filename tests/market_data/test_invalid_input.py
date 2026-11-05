@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from crytobot.market_data import read_market_data
 from crytobot.market_data._numbers import exact_decimal, ms_from_utc, utc_from_ms
 from crytobot.market_data._types import (
     InputProblem,
@@ -13,6 +14,7 @@ from crytobot.market_data._types import (
     pairs_problem,
     settings_problem,
 )
+from tests.market_data.helpers import BTC, NOW, FakeExchange, candle_rows, clock_at, make_settings
 
 GOOD: dict[str, Any] = {
     "exchange": "binance",
@@ -119,3 +121,95 @@ def test_milliseconds_convert_to_aware_utc() -> None:
 @pytest.mark.parametrize("value", [-1, 1.5, "1000", None, True, 10**30])
 def test_bad_milliseconds_are_refused(value: object) -> None:
     assert utc_from_ms(value) is None
+
+
+def _no_tz() -> datetime:
+    return datetime(2026, 11, 5, 12, 0)
+
+
+def _not_a_time() -> Any:
+    return "now"
+
+
+def _clock_raises() -> datetime:
+    raise RuntimeError("no clock")
+
+
+@pytest.mark.parametrize(
+    ("pairs", "settings", "clock", "problem"),
+    [
+        ([BTC], make_settings(exchange="okx"), clock_at(), InputProblem.EXCHANGE),
+        ([BTC], make_settings(exchange=None), clock_at(), InputProblem.EXCHANGE),
+        ([BTC], make_settings(candle_interval=None), clock_at(), InputProblem.CANDLE_INTERVAL),
+        ([BTC], make_settings(candle_count=None), clock_at(), InputProblem.CANDLE_COUNT),
+        ([BTC], make_settings(call_timeout=None), clock_at(), InputProblem.CALL_TIMEOUT),
+        ([BTC], make_settings(read_budget=None), clock_at(), InputProblem.READ_BUDGET),
+        ([BTC], None, clock_at(), InputProblem.SETTINGS),
+        ([BTC, BTC], make_settings(), clock_at(), InputProblem.PAIR_DUPLICATE),
+        ([BTC, 1], make_settings(), clock_at(), InputProblem.PAIR_NOT_TEXT),
+        (BTC, make_settings(), clock_at(), InputProblem.PAIRS),
+        ([BTC], make_settings(), None, InputProblem.CLOCK),
+        ([BTC], make_settings(), _no_tz, InputProblem.CLOCK),
+        ([BTC], make_settings(), _not_a_time, InputProblem.CLOCK),
+        ([BTC], make_settings(), _clock_raises, InputProblem.CLOCK),
+        ([], make_settings(exchange="okx"), clock_at(), InputProblem.EXCHANGE),
+    ],
+)
+def test_invalid_input_is_named_without_calls(
+    pairs: Any, settings: Any, clock: Any, problem: InputProblem
+) -> None:
+    exchange = FakeExchange()
+    connections: list[int] = []
+
+    def connect() -> FakeExchange:
+        connections.append(1)
+        return exchange
+
+    read = read_market_data(pairs, settings, clock, connect=connect)
+    assert read.input_problem is problem
+    assert read.pairs == ()
+    assert read.read_at is None
+    assert connections == []
+    assert exchange.calls == []
+
+
+def test_empty_list_gives_empty_result() -> None:
+    connections: list[int] = []
+
+    def connect() -> FakeExchange:
+        connections.append(1)
+        return FakeExchange()
+
+    read = read_market_data([], make_settings(), clock_at(), connect=connect)
+    assert read.pairs == ()
+    assert read.input_problem is None
+    assert read.read_at == NOW
+    assert connections == []
+
+
+@pytest.mark.parametrize(
+    ("count", "problem"),
+    [(1, None), (1000, None), (0, InputProblem.CANDLE_COUNT), (1001, InputProblem.CANDLE_COUNT)],
+)
+def test_candle_count_bounds(count: int, problem: InputProblem | None) -> None:
+    exchange = FakeExchange(klines={"BTCUSDT": candle_rows(1)})
+    settings = make_settings(candle_count=count)
+    read = read_market_data([BTC], settings, clock_at(), connect=lambda: exchange)
+    assert read.input_problem is problem
+    if problem is None:
+        assert exchange.kline_requests[0]["limit"] == count
+        assert read.pairs[0].candles is not None
+    else:
+        assert exchange.calls == []
+
+
+def test_fewer_candles_is_a_short_series() -> None:
+    exchange = FakeExchange(klines={"BTCUSDT": candle_rows(2)})
+    read = read_market_data(
+        [BTC], make_settings(candle_count=1000), clock_at(), connect=lambda: exchange
+    )
+    btc = read.pairs[0]
+    assert btc.issues == ()
+    assert btc.candles is not None
+    assert len(btc.candles) == 2
+    assert exchange.calls.count("klines BTCUSDT") == 1  # R-16: one candle request per pair
