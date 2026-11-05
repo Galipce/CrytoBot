@@ -1,6 +1,6 @@
 # Spec 0018 — `ccxt` runtime bağımlılığı (mini)
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0018-plan.md`
 - Self-critique: done
@@ -14,18 +14,18 @@ istiyor. Bugün 0001/AC-10 runtime bağımlılığını yasaklıyor ve test bunu
 yazmaz, borsaya bağlanmaz, botun davranışını değiştirmez. 0017 ship edilene kadar `ccxt` kurulu ama kullanılmıyor olur.
 
 ## Changed behavior
-- [ ] CB-1 — `pyproject.toml`'un doğrudan runtime bağımlılığı tam olarak birdir: `ccxt>=4.5,<5`.
-- [ ] CB-2 — `uv.lock`'ta projenin doğrudan runtime bağımlılığı tam olarak `ccxt`'dir; `ccxt` ve dolaylı bağımlılıkları sürüm ve hash ile sabittir; kilit `pyproject.toml` ile tutarlıdır (`uv lock --check` temiz).
-- [ ] CB-3 — `tests/test_dependencies.py` runtime listesini kesin ad listesi olarak zorlar, hem `pyproject.toml` hem `uv.lock` için: başka bir ad eklenince ya da `ccxt` çıkınca kırmızı olur; `ccxt` sürüm aralığı değişince kırmızı olmaz.
-- [ ] CB-4 — `docs/security.md`, "Dependencies" bölümünde tek satırlık istisna taşır: dolaylı bağımlılıkta MPL-2.0, kod değiştirilmeden kullanım kabul (spec 0018). Bölümün diğer satırları aynı kalır.
-- [ ] CB-5 — CI'daki `pip-audit` (`--strict`, hash'li kilit çıktısı) `ccxt` ve dolaylı bağımlılıklarıyla yeşildir. Açık bulunursa ship durur: açık yok sayılmaz, bu spec içinde istisna tanımlanmaz, çözüm ayrı karar olarak sahibine gelir. Kanıt ship PR'ının `audit` işidir: VERIFY tablosu bunu "PR'da bekleniyor" diye gösterir, iş yeşil olmadan merge olmaz.
+- [x] CB-1 — `pyproject.toml`'un doğrudan runtime bağımlılığı tam olarak birdir: `ccxt>=4.5,<5`.
+- [x] CB-2 — `uv.lock`'ta projenin doğrudan runtime bağımlılığı tam olarak `ccxt`'dir; `ccxt` ve dolaylı bağımlılıkları sürüm ve hash ile sabittir; kilit `pyproject.toml` ile tutarlıdır (`uv lock --check` temiz).
+- [x] CB-3 — `tests/test_dependencies.py` runtime listesini kesin ad listesi olarak zorlar, hem `pyproject.toml` hem `uv.lock` için: başka bir ad eklenince ya da `ccxt` çıkınca kırmızı olur; `ccxt` sürüm aralığı değişince kırmızı olmaz.
+- [x] CB-4 — `docs/security.md`, "Dependencies" bölümünde tek satırlık istisna taşır: dolaylı bağımlılıkta MPL-2.0, kod değiştirilmeden kullanım kabul (spec 0018). Bölümün diğer satırları aynı kalır.
+- [x] CB-5 — CI'daki `pip-audit` (`--strict`, hash'li kilit çıktısı) `ccxt` ve dolaylı bağımlılıklarıyla yeşildir. Açık bulunursa ship durur: açık yok sayılmaz, bu spec içinde istisna tanımlanmaz, çözüm ayrı karar olarak sahibine gelir. Kanıt ship PR'ının `audit` işidir: VERIFY tablosu bunu "PR'da bekleniyor" diye gösterir, iş yeşil olmadan merge olmaz.
 
 ## Preserved behavior
-- [ ] PB-1 — Geliştirme araçları listesi aynen kalır (`hypothesis`, `import-linter`, `mypy`, `pytest`, `pytest-cov`, `pytest-socket`, `ruff`); tek grup `dev`'dir; `optional-dependencies` yoktur. Bunları zorlayan assert'ler değişmez.
-- [ ] PB-2 — Kilitte bugün bulunan paketlerin sürümleri ve hash'leri değişmez; fark yalnız yeni paketler ve proje girdisidir.
-- [ ] PB-3 — 0001/AC-10'un ikinci yarısı geçerlidir: `check` kilit dosyasını değiştirmez, koşu sonrası `git status` temizdir.
-- [ ] PB-4 — `src/`, `tools/`, `scripts/` ve `.github/` değişmez; `src` içinde `ccxt` import eden kod yoktur. Testler ağa çıkmaz (`--disable-socket`). `./scripts/doctor --strict` geçer.
-- [ ] PB-5 — `uv sync --locked` hem bu makinede (Windows) hem CI'da (`ubuntu-latest`) başarılı olur; `check` iki ortamda da yeşildir.
+- [x] PB-1 — Geliştirme araçları listesi aynen kalır (`hypothesis`, `import-linter`, `mypy`, `pytest`, `pytest-cov`, `pytest-socket`, `ruff`); tek grup `dev`'dir; `optional-dependencies` yoktur. Bunları zorlayan assert'ler değişmez.
+- [x] PB-2 — Kilitte bugün bulunan paketlerin sürümleri ve hash'leri değişmez; fark yalnız yeni paketler ve proje girdisidir.
+- [x] PB-3 — 0001/AC-10'un ikinci yarısı geçerlidir: `check` kilit dosyasını değiştirmez, koşu sonrası `git status` temizdir.
+- [x] PB-4 — `src/`, `tools/`, `scripts/` ve `.github/` değişmez; `src` içinde `ccxt` import eden kod yoktur. Testler ağa çıkmaz (`--disable-socket`). `./scripts/doctor --strict` geçer.
+- [x] PB-5 — `uv sync --locked` hem bu makinede (Windows) hem CI'da (`ubuntu-latest`) başarılı olur; `check` iki ortamda da yeşildir.
 
 ## Constraints
 - Sensitive area: yok; `docs/domain.md`'deki hassas alanlara dokunulmaz.
@@ -46,7 +46,18 @@ yazmaz, borsaya bağlanmaz, botun davranışını değiştirmez. 0017 ship edile
 - `ccxt` sürümünü yükseltme düzeni; 0017'nin spec ve plan dosyaları; `scripts/check.conf`, CI ve `specs/done/`.
 
 ## Definition of Done
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Criterion ↔ evidence table complete for CB-* **and** PB-*
-- [ ] Spec moved to `specs/done/` (immutable there)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Criterion ↔ evidence table complete for CB-* **and** PB-*
+- [x] Spec moved to `specs/done/` (immutable there)
+
+## Scorecard (fill at ship — honest numbers make the process improvable)
+| Metric | Value |
+|---|---|
+| Spec revisions | 0 onay sonrası; plan: A-1 |
+| Fix rounds | 1 (fix-1, yalnız doküman; re-review gerekmedi) |
+| Review findings: real / noise / deferred | 1 / 2 / 0 (L-1; I-1, I-2). VERIFY bulgusu yok |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+CB-5, PB-4'ün `doctor` işi, PB-5'in Ubuntu `check` işi ve DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `audit`, `doctor` ve `check` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10).
