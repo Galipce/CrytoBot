@@ -1,6 +1,6 @@
 # Spec 0016 — `app` bağlantısı: tek paper turu
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0016-plan.md`
 - Self-critique: done
@@ -58,35 +58,37 @@ none — no user interface
 - Out of scope: `market_data`, ağ, ccxt; döngü ve zamanlayıcı; CLI ve giriş noktası; config dosyası okuma; depo oluşturma ve başlangıç yatırması; mutabakatı düzeltme aracı ve depo biçimi değişikliği; Telegram ve gerçek bildirim gönderimi; `control`, kill switch; backtest; haber ve whitepaper sinyalleri; live.
 
 ## Acceptance criteria
-- [ ] AC-1 — Alım: temiz veride kesişim olan çiftte tur alım yapar; emir, defter ve risk durumu kaydedilir; dolu emir ve defter kaydı tek kayıtta yazılır; depo yeniden yüklenince aynı durum ve mutabakat temiz gelir; miktar `risk`'in onayladığı miktardır (R-1, R-2).
-- [ ] AC-2 — Kapanış: stop ve hedefe ulaşan pozisyonlar aynı turda alımdan önce kapanır, bakiye güncellenir; ulaşmayan pozisyon açık kalır; o bakiyeyi sonraki alım onayı görür (R-1, R-2).
-- [ ] AC-3 — Çoklu çift: öneriler beyaz liste sırasıyla işlenir; pozisyon limiti ya da bakiye bir sonraki çiftin onayında etkisini gösterir (R-2).
-- [ ] AC-4 — Tekrar: aynı veriyle ikinci tur ikinci emir oluşturmaz; aynı mumda kapanan pozisyona aynı mumdan yeniden girilmez; yeni mumda öneri çıkarsa alım yapılabilir (R-3).
-- [ ] AC-5 — Bayat veri sınırı: yaşı azami yaşa eşit veri tazedir, bir birim fazlası bayattır; mum ve fiyat için kendi ayarlarıyla ayrı ayrı. Bayat tek çift tüm alımları durdurur; fiyatı bayat pozisyon kapanmaz, fiyatı taze olan (mumu bayat olsa da) kapanır; sonraki temiz turda alım sürer (R-4).
-- [ ] AC-6 — Geçersiz veri: kapanmamış mum, gelecek zamanlı fiyat, zaman dilimsiz zaman, eksik veri ve `strategy`'nin reddettiği seri AC-5'teki durdurmayı uygular (R-4).
-- [ ] AC-7 — Depo yüklenemiyor: yok, okunamıyor, meşgul, bilinmeyen sürüm ve mod uyuşmazlığının her birinde emir yok, depo değişmez, bildirim gider; tur depoyu oluşturmaz; drawdown durdurması yeniden başlatmayla atlanmaz (R-5, R-8).
-- [ ] AC-8 — Kayıt reddi: "yazılamadı", "meşgul", "eski yazım" ve "geçmiş değiştirilemez" enjekte edildiğinde alım durur, bildirim gider, tur biter; sonraki tur diskteki durumdan başlar ve kaydedilemeyen kapanışı yeniden dener. "Geçmiş değiştirilemez" durdurması temiz turda kalkmaz, yeniden başlatmayla kalkar (R-6).
-- [ ] AC-9 — Mutabakat: mutabakat işareti taşıyan depoda ve defterin dolu emri reddettiği turda yeni alım durur, kapanışlar sürer, bildirim gider; emir kayıtlıdır; durum temiz turda ve yeniden başlatmayla kalkmaz (R-2, R-7).
-- [ ] AC-10 — Risk durdurmaları: drawdown ve günlük zarar durumunda alım `risk` nedeniyle olmaz, kapanış olur; "öneri yok" ve ret nedenleri sonuçta görünür, bildirim üretmez (R-8, R-9).
-- [ ] AC-11 — Bildirim: süren durum art arda turlarda tek giriş bildirimi, düzelince tek çıkış bildirimi üretir; yeniden başlatma sonrası ilk tur süren durumu yeniden bildirir; alıcı istisna fırlatınca kapanış ve alım yine yapılır, hata sonuçta görünür; bildirim metninde sır yoktur (R-10, R-11).
-- [ ] AC-12 — Geçersiz girdi ve mod: her geçersiz ya da eksik ayar adı konmuş sonuçla reddedilir, emir yok, depo değişmez; boş beyaz liste kapanışları engellemez; live davranışa götüren girdi yoktur, live depo mod uyuşmazlığıyla reddedilir (R-12, R-13).
-- [ ] AC-13 — Sınırlar ve backlog: `approve_trade` hash'lenemeyen çifti "beyaz listede değil" ile reddeder (B-6); `app` portföye yalnız düz `dict` verir (B-16); kâr hedefi ya da kâr-zarar girdisi yoktur (BR-1); import sınırları `scripts/check`'te korunur (R-14, R-15).
-- [ ] AC-14 — Kasa hesaplanamıyor: açılmamış defterde emir yok, adı konmuş sonuç ve bildirim var; reddedilen gözlemde (eski zaman) alım durur, bildirim gider, kapanış sürer; bayat fiyatlı açık pozisyonda o tur gözlem yapılmaz ve risk durumu değişmez (R-16).
-- [ ] AC-15 — Bilinmeyen emir: durumu bilinmeyen emir varken alım olmaz; sorgu dolu dönünce emir deftere yazılır, mutabakat temiz kalır, güvenli mod giriş ve çıkış bildirimi alıcıya ulaşır; sorgu hâlâ bilinmiyor derse alım durmaya devam eder (R-17).
-- [ ] AC-16 — Kapanış reddi: asgari altı kapanış ve eksik kural pozisyonu açık bırakır, bildirim üretir, koşul sürerse sonraki turda yeniden dener; beyaz liste dışındaki pozisyon kapanır; reddedilmiş kapanış emrinde pozisyon açık kalır ve bildirim gider (B-17) (R-18).
+- [x] AC-1 — Alım: temiz veride kesişim olan çiftte tur alım yapar; emir, defter ve risk durumu kaydedilir; dolu emir ve defter kaydı tek kayıtta yazılır; depo yeniden yüklenince aynı durum ve mutabakat temiz gelir; miktar `risk`'in onayladığı miktardır (R-1, R-2).
+- [x] AC-2 — Kapanış: stop ve hedefe ulaşan pozisyonlar aynı turda alımdan önce kapanır, bakiye güncellenir; ulaşmayan pozisyon açık kalır; o bakiyeyi sonraki alım onayı görür (R-1, R-2).
+- [x] AC-3 — Çoklu çift: öneriler beyaz liste sırasıyla işlenir; pozisyon limiti ya da bakiye bir sonraki çiftin onayında etkisini gösterir (R-2).
+- [x] AC-4 — Tekrar: aynı veriyle ikinci tur ikinci emir oluşturmaz; aynı mumda kapanan pozisyona aynı mumdan yeniden girilmez; yeni mumda öneri çıkarsa alım yapılabilir (R-3).
+- [x] AC-5 — Bayat veri sınırı: yaşı azami yaşa eşit veri tazedir, bir birim fazlası bayattır; mum ve fiyat için kendi ayarlarıyla ayrı ayrı. Bayat tek çift tüm alımları durdurur; fiyatı bayat pozisyon kapanmaz, fiyatı taze olan (mumu bayat olsa da) kapanır; sonraki temiz turda alım sürer (R-4).
+- [x] AC-6 — Geçersiz veri: kapanmamış mum, gelecek zamanlı fiyat, zaman dilimsiz zaman, eksik veri ve `strategy`'nin reddettiği seri AC-5'teki durdurmayı uygular (R-4).
+- [x] AC-7 — Depo yüklenemiyor: yok, okunamıyor, meşgul, bilinmeyen sürüm ve mod uyuşmazlığının her birinde emir yok, depo değişmez, bildirim gider; tur depoyu oluşturmaz; drawdown durdurması yeniden başlatmayla atlanmaz (R-5, R-8).
+- [x] AC-8 — Kayıt reddi: "yazılamadı", "meşgul", "eski yazım" ve "geçmiş değiştirilemez" enjekte edildiğinde alım durur, bildirim gider, tur biter; sonraki tur diskteki durumdan başlar ve kaydedilemeyen kapanışı yeniden dener. "Geçmiş değiştirilemez" durdurması temiz turda kalkmaz, yeniden başlatmayla kalkar (R-6).
+- [x] AC-9 — Mutabakat: mutabakat işareti taşıyan depoda ve defterin dolu emri reddettiği turda yeni alım durur, kapanışlar sürer, bildirim gider; emir kayıtlıdır; durum temiz turda ve yeniden başlatmayla kalkmaz (R-2, R-7).
+- [x] AC-10 — Risk durdurmaları: drawdown ve günlük zarar durumunda alım `risk` nedeniyle olmaz, kapanış olur; "öneri yok" ve ret nedenleri sonuçta görünür, bildirim üretmez (R-8, R-9).
+- [x] AC-11 — Bildirim: süren durum art arda turlarda tek giriş bildirimi, düzelince tek çıkış bildirimi üretir; yeniden başlatma sonrası ilk tur süren durumu yeniden bildirir; alıcı istisna fırlatınca kapanış ve alım yine yapılır, hata sonuçta görünür; bildirim metninde sır yoktur (R-10, R-11).
+- [x] AC-12 — Geçersiz girdi ve mod: her geçersiz ya da eksik ayar adı konmuş sonuçla reddedilir, emir yok, depo değişmez; boş beyaz liste kapanışları engellemez; live davranışa götüren girdi yoktur, live depo mod uyuşmazlığıyla reddedilir (R-12, R-13).
+- [x] AC-13 — Sınırlar ve backlog: `approve_trade` hash'lenemeyen çifti "beyaz listede değil" ile reddeder (B-6); `app` portföye yalnız düz `dict` verir (B-16); kâr hedefi ya da kâr-zarar girdisi yoktur (BR-1); import sınırları `scripts/check`'te korunur (R-14, R-15).
+- [x] AC-14 — Kasa hesaplanamıyor: açılmamış defterde emir yok, adı konmuş sonuç ve bildirim var; reddedilen gözlemde (eski zaman) alım durur, bildirim gider, kapanış sürer; bayat fiyatlı açık pozisyonda o tur gözlem yapılmaz ve risk durumu değişmez (R-16).
+- [x] AC-15 — Bilinmeyen emir: durumu bilinmeyen emir varken alım olmaz; sorgu dolu dönünce emir deftere yazılır, mutabakat temiz kalır, güvenli mod giriş ve çıkış bildirimi alıcıya ulaşır; sorgu hâlâ bilinmiyor derse alım durmaya devam eder (R-17).
+- [x] AC-16 — Kapanış reddi: asgari altı kapanış ve eksik kural pozisyonu açık bırakır, bildirim üretir, koşul sürerse sonraki turda yeniden dener; beyaz liste dışındaki pozisyon kapanır; reddedilmiş kapanış emrinde pozisyon açık kalır ve bildirim gider (B-17) (R-18).
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 1 onay sonrası (AC-5 metni R-4'e eşitlendi, A-4); plan: A-1, A-2, A-3, A-4 |
+| Fix rounds | 4 (fix-1…fix-4; R-06 analizi round 4'te, A-4; review round 5 temiz) |
+| Review findings: real / noise / deferred | 12 / 5 / 5, ayrıca 1 investigate (round 1 F-5, ship PR'ındaki full koşuda karar). VERIFY bulguları dahil: r1 5/1/1, r2 3/0/1, r3 0/0/1, V1 2/3/0, r4 2/0/2, r5 0/0/0, V2 0/1/0 |
+| Regressions introduced | 0 (shipped testlerin assert'i değişmedi) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın full koşusudur, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). `app` coverage kapısı ve `test-slow` da ilk kez bu koşuda görülür.
