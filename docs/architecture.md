@@ -50,6 +50,6 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 - Vadeli işlem, kaldıraç, short, margin.
 - Para çekme / transfer.
 - Çok kullanıcı, SaaS, başkalarının fonunu yönetme.
-- Web dashboard (sonraki feature).
+- Kontrol komutlu ya da localhost dışından açılan web arayüzü. Salt okunur, localhost pano Faz 2'dedir (ADR 0002).
 - Scalping / yüksek frekanslı işlem.
 - Günlük kâr hedefini zorlayan herhangi bir mekanizma (BR-1).
