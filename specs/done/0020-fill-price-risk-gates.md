@@ -1,6 +1,6 @@
 # Spec 0020 — Dolum fiyatında işlem riski ve kâr/maliyet kapıları
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0020-plan.md`
 - Self-critique: done
@@ -53,31 +53,33 @@ none — no user interface
 ## Acceptance criteria
 Aksi yazılmadıkça: kasa 10000, işlem riski %1, sabit üst sınır %2, ücret 0.001, slippage 0.001, spread 0.0005, kat 2, adım 0.001, giriş 10, stop 8, hedef 14. Tutarlar elle hesaplanmıştır.
 
-- [ ] AC-1 — Boyutlama (R-1): onaylı miktar tam olarak `49.309`, risk ~99.999 USDT. Bir adım fazlası (`49.310`) limiti aşar. Slippage 0 ile aynı öneride miktar `49.554` kalır.
-- [ ] AC-2 — Slippage bağımsızlığı sınırı (R-1): spread değişince miktar değişmez. Serbest bakiyeyle sınırlı onayda miktar, slippage'dan etkilenmez.
-- [ ] AC-3 — Fiyat girişe eşit (R-1, R-2): fiyat 10, dolum 10.01, risk en fazla limit: `49.309` birimlik emir oluşur.
-- [ ] AC-4 — Config limiti (R-2): fiyat 10.01'de (risk ~100.49) ve fiyat 11'de (risk ~149.41, sabit üst sınırın altında) emir oluşmaz; neden `RISK_LIMIT_AT_FILL`.
-- [ ] AC-5 — Tam sınır (R-2): ücret ve slippage 0, adım 1, miktar 50: fiyat 10'da risk tam 100 USDT, emir oluşur. Fiyat 10.01'de risk 100.5 USDT, emir oluşmaz.
-- [ ] AC-6 — Sabit üst sınır (R-3, R-5): fiyat 15'te (risk ~347.04) neden `RISK_CAP_AT_FILL`. Config limiti sabit üst sınıra eşitken sınırı aşan alım da aynı nedenle reddedilir.
-- [ ] AC-7 — BR-8 (R-4): adım 25, hedef 12, miktar 25. Fiyat 11.9'da (kâr 0.1, maliyet 0.05375, risk ~98.30) emir oluşmaz, neden `INSUFFICIENT_EDGE_AT_FILL`. Fiyat 11'de (kâr 1, maliyet 0.0515, risk ~75.75) emir oluşur.
-- [ ] AC-8 — BR-8 tam sınırı (R-4): ücret ve slippage 0, spread 0.005, kat 2, giriş 99, stop 90, hedef 101, adım 10, miktar 10: fiyat 100'de risk tam 100 USDT ve kâr maliyetin katına tam eşittir; emir oluşmaz, neden `INSUFFICIENT_EDGE_AT_FILL`. Fiyat 99.9'da emir oluşur.
-- [ ] AC-9 — Çift sayım yok (R-4): giriş ve fiyat 10, hedef 10.10: `risk` onayladıysa BR-8 kapısı da geçer.
-- [ ] AC-10 — Sıra (R-5): fiyat 12 ve hedef 12 iken neden `FILL_OUTSIDE_STOP_TARGET`; fiyat 7.9'da aynı neden. Bakiyeyi aşan dolum `FILL_EXCEEDS_BALANCE` kalır. Hedef 12, fiyat 11.9 iken hem config limiti hem BR-8 bozulur (risk ~193.9, sabit üst sınırın altında); neden `RISK_LIMIT_AT_FILL`.
-- [ ] AC-11 — Etkisizlik ve yeniden deneme (R-6, R-7, R-8): `RISK_LIMIT_AT_FILL` ya da `INSUFFICIENT_EDGE_AT_FILL` turunda emir, defter, durdurma ve bildirim oluşmaz; miktar küçültülerek emir denenmez; diğer çift aynı turda işlem görür. Aynı mumda fiyat 11 ile dönen çift, sonraki turda fiyat 10 ile `49.309` birim alır.
-- [ ] AC-12 — Hesaplanamayan değer (R-9): risk ya da BR-8 hesabı sığmayan girdide istisna fırlamaz, emir oluşmaz, nedenler R-9'daki gibidir.
+- [x] AC-1 — Boyutlama (R-1): onaylı miktar tam olarak `49.309`, risk ~99.999 USDT. Bir adım fazlası (`49.310`) limiti aşar. Slippage 0 ile aynı öneride miktar `49.554` kalır.
+- [x] AC-2 — Slippage bağımsızlığı sınırı (R-1): spread değişince miktar değişmez. Serbest bakiyeyle sınırlı onayda miktar, slippage'dan etkilenmez.
+- [x] AC-3 — Fiyat girişe eşit (R-1, R-2): fiyat 10, dolum 10.01, risk en fazla limit: `49.309` birimlik emir oluşur.
+- [x] AC-4 — Config limiti (R-2): fiyat 10.01'de (risk ~100.49) ve fiyat 11'de (risk ~149.41, sabit üst sınırın altında) emir oluşmaz; neden `RISK_LIMIT_AT_FILL`.
+- [x] AC-5 — Tam sınır (R-2): ücret ve slippage 0, adım 1, miktar 50: fiyat 10'da risk tam 100 USDT, emir oluşur. Fiyat 10.01'de risk 100.5 USDT, emir oluşmaz.
+- [x] AC-6 — Sabit üst sınır (R-3, R-5): fiyat 15'te (risk ~347.04) neden `RISK_CAP_AT_FILL`. Config limiti sabit üst sınıra eşitken sınırı aşan alım da aynı nedenle reddedilir.
+- [x] AC-7 — BR-8 (R-4): adım 25, hedef 12, miktar 25. Fiyat 11.9'da (kâr 0.1, maliyet 0.05375, risk ~98.30) emir oluşmaz, neden `INSUFFICIENT_EDGE_AT_FILL`. Fiyat 11'de (kâr 1, maliyet 0.0515, risk ~75.75) emir oluşur.
+- [x] AC-8 — BR-8 tam sınırı (R-4): ücret ve slippage 0, spread 0.005, kat 2, giriş 99, stop 90, hedef 101, adım 10, miktar 10: fiyat 100'de risk tam 100 USDT ve kâr maliyetin katına tam eşittir; emir oluşmaz, neden `INSUFFICIENT_EDGE_AT_FILL`. Fiyat 99.9'da emir oluşur.
+- [x] AC-9 — Çift sayım yok (R-4): giriş ve fiyat 10, hedef 10.10: `risk` onayladıysa BR-8 kapısı da geçer.
+- [x] AC-10 — Sıra (R-5): fiyat 12 ve hedef 12 iken neden `FILL_OUTSIDE_STOP_TARGET`; fiyat 7.9'da aynı neden. Bakiyeyi aşan dolum `FILL_EXCEEDS_BALANCE` kalır. Hedef 12, fiyat 11.9 iken hem config limiti hem BR-8 bozulur (risk ~193.9, sabit üst sınırın altında); neden `RISK_LIMIT_AT_FILL`.
+- [x] AC-11 — Etkisizlik ve yeniden deneme (R-6, R-7, R-8): `RISK_LIMIT_AT_FILL` ya da `INSUFFICIENT_EDGE_AT_FILL` turunda emir, defter, durdurma ve bildirim oluşmaz; miktar küçültülerek emir denenmez; diğer çift aynı turda işlem görür. Aynı mumda fiyat 11 ile dönen çift, sonraki turda fiyat 10 ile `49.309` birim alır.
+- [x] AC-12 — Hesaplanamayan değer (R-9): risk ya da BR-8 hesabı sığmayan girdide istisna fırlamaz, emir oluşmaz, nedenler R-9'daki gibidir.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 1 (VERIFY round 1) |
+| Review findings: real / noise / deferred | 2 / 1 / 0 (real: F-V1, I-1; noise: F-1) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `check` ve `doctor` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). Full kanıt: CI run 42103497567, `3b062a8`, `CHECK GREEN (full, 7 steps, 355 s)`.
