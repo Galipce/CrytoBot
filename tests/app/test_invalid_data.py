@@ -1,7 +1,7 @@
 """Spec 0016 AC-6: geçersiz veri AC-5'in durdurmasını uygular (R-4, plan Risk 6, 7)."""
 
 import math
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -17,6 +17,8 @@ from tests.app.helpers import (
     DEPOSIT,
     ETH,
     LATER,
+    MAX_CANDLE_AGE,
+    MINUTE,
     NEXT_CANDLE,
     NOW,
     RULES,
@@ -176,6 +178,28 @@ def test_invalid_position_price_stays_open_other_closes(
     assert clean.halts == ()
     assert [o.pair for o in clean.buys] == [ETH]
     assert sorted(p.pair for p in bot.stored().ledger.positions.values()) == [BTC, ETH]
+
+
+@pytest.mark.parametrize(
+    ("bad_candles", "now", "halt"),
+    [
+        ({}, NOW + MAX_CANDLE_AGE + MINUTE, BuyHalt.STALE_DATA),
+        ({"candles": _nan_candles()}, LATER, BuyHalt.INVALID_DATA),
+    ],
+    ids=["stale_candle", "rejected_series"],
+)
+def test_bad_candles_with_fresh_price_still_close(
+    tmp_path: Path, bad_candles: dict[str, Any], now: datetime, halt: BuyHalt
+) -> None:
+    """AC-5, R-4, review round 4 F-1: kapanış yalnız fiyata bağlıdır, alım durur."""
+    bot = bot_with_position(tmp_path / "s.db")
+
+    result = bot.turn({BTC: pair_market(price=Decimal(7), price_at=now, **bad_candles)}, now=now)
+
+    assert [o.pair for o in result.closes] == [BTC]
+    assert result.buys == ()
+    assert halt in result.halts
+    assert bot.stored().ledger.positions == {}
 
 
 def test_market_that_is_not_a_mapping_is_missing_data(tmp_path: Path) -> None:
