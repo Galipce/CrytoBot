@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from crytobot.market_data._calls import Caller, CallFailed
@@ -19,6 +19,7 @@ from crytobot.market_data._types import (
     MarketRead,
     MarketRules,
     PairRead,
+    ReadBan,
     ReadField,
     ReadIssue,
     ReadSettings,
@@ -152,8 +153,8 @@ def _read_all(
     settings: ReadSettings,
     clock: _Clock,
     connect: Callable[[], PublicExchange],
+    caller: Caller,
 ) -> None:
-    caller = Caller(settings.call_timeout.total_seconds(), settings.read_budget.total_seconds())
     try:
         # connect counts too: the first ccxt import alone takes seconds (plan Risk 9)
         exchange = caller.call(lambda _: connect())
@@ -168,6 +169,19 @@ def _read_all(
         return
     for draft in drafts:
         _read_pair(draft, markets, settings, caller, exchange, clock)
+
+
+def _ban(caller: Caller, read_at: datetime | None) -> ReadBan | None:
+    """Spec 0022 R-11: bitiş anı okumanın son saatinden; günler süren değer de kırpılmaz."""
+    if not caller.banned:
+        return None
+    seconds = caller.ban_retry_after
+    if seconds is None or read_at is None:
+        return ReadBan(None)
+    try:
+        return ReadBan(read_at + timedelta(seconds=seconds))
+    except OverflowError:  # past the end of the calendar: no end to wait for
+        return ReadBan(None)
 
 
 def _input_problem(pairs: object, settings: object) -> InputProblem | None:
@@ -197,11 +211,13 @@ def read_market_data(
     if not pairs:
         return MarketRead((), reader.latest, None)
     drafts = [_Draft(pair) for pair in pairs]
+    caller = Caller(settings.call_timeout.total_seconds(), settings.read_budget.total_seconds())
     try:
-        _read_all(drafts, settings, reader, connect)
+        _read_all(drafts, settings, reader, connect, caller)
         reader.read()
     except Exception:
         # Whatever was not settled stays missing by name; the error's text is not kept (R-11)
         for draft in drafts:
             draft.miss_rest(IssueReason.UNEXPECTED)
-    return MarketRead(tuple(draft.result() for draft in drafts), reader.latest, None)
+    results = tuple(draft.result() for draft in drafts)
+    return MarketRead(results, reader.latest, None, _ban(caller, reader.latest))

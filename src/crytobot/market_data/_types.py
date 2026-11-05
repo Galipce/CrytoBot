@@ -143,16 +143,26 @@ class PairRead:
 
 
 @dataclass(frozen=True, slots=True)
+class ReadBan:
+    """Borsanın HTTP 418 yasağı (spec 0022 R-11). `until`: `Retry-After`'tan hesaplanan bitiş anı,
+    okumanın son saatinden; borsa süre bildirmediyse `None`. Üst sınır uygulanmaz."""
+
+    until: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
 class MarketRead:
     """Okumanın sonucu: `pairs` istek sırasıyla; ret: `pairs` boş, `input_problem` dolu.
 
     `read_at` okumanın son saat değeridir, `run_turn`'ün `now`'ı odur (plan Risk 4). Yalnız saat
-    reddinde değil her retde `None`'dır; bu değerle `run_turn` `INVALID_TIME` döner.
+    reddinde değil her retde `None`'dır; bu değerle `run_turn` `INVALID_TIME` döner. `ban`: okuma
+    sırasında borsa yasağı görüldüyse doludur (spec 0022); yasağı sonraki okumalara çağıran taşır.
     """
 
     pairs: tuple[PairRead, ...]
     read_at: datetime | None
     input_problem: InputProblem | None
+    ban: ReadBan | None = None
 
 
 def _positive_duration(value: object) -> bool:
