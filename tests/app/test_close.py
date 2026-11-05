@@ -161,5 +161,6 @@ def test_rejected_close_stays_open_and_notifies(tmp_path: Path) -> None:
     assert second.closes == ()
     assert len(bot.stored().ledger.positions) == 1
     assert bot.kinds() == [NoticeKind.CLOSE_REFUSED]
+    assert bot.kinds(entering=False) == []
     assert len(bot.stored().execution.orders) == 2
     assert bot.conflicts() == ()
