@@ -6,6 +6,7 @@ importu saniyeler sürer, bu yüzden import fonksiyonun içindedir ve okumanın 
 (plan Risk 9).
 """
 
+import json
 import math
 import re
 import threading
@@ -18,6 +19,9 @@ from crytobot.market_data._types import MarketDataError
 _RETRY_AFTER: Final = re.compile(r"[0-9]{1,6}")
 _HTTP_BANNED: Final = 418
 _HTTP_TOO_MANY: Final = 429
+_HTTP_SERVER_ERRORS: Final = range(500, 600)
+# Binance: "too many requests queued, try again"; ccxt does not know the code (plan A-2)
+_BINANCE_TRY_AGAIN: Final = -1008
 
 
 class CallFailure(Enum):
@@ -36,6 +40,17 @@ class ExchangeCallError(MarketDataError):
         super().__init__(failure.value)
         self.failure = failure
         self.retry_after = retry_after
+
+
+def _error_code(body: object) -> object:
+    """Binance hata gövdesindeki `code`; okunamayan gövdede `None`. Metin dışarı çıkmaz (R-11)."""
+    if not isinstance(body, str):
+        return None
+    try:
+        parsed: object = json.loads(body)
+    except (ValueError, RecursionError):
+        return None
+    return parsed.get("code") if isinstance(parsed, dict) else None
 
 
 class PublicExchange(Protocol):
@@ -70,13 +85,14 @@ class _BinancePublic:
         forward = self._exchange.on_rest_response
 
         def remember_response(
-            code: int, reason: str, url: str, method: str, headers: Any, *rest: Any
+            code: int, reason: str, url: str, method: str, headers: Any, body: Any, *rest: Any
         ) -> Any:
             # binance raises DDoSProtection for 429 and 418 alike; only the status tells a limit
             # to wait out from a ban that retries would extend (plan Risk 7)
             self._seen.status = code
             self._seen.retry_after = headers.get("Retry-After")
-            return forward(code, reason, url, method, headers, *rest)
+            self._seen.body = body
+            return forward(code, reason, url, method, headers, body, *rest)
 
         self._exchange.on_rest_response = remember_response
 
@@ -87,11 +103,17 @@ class _BinancePublic:
             return CallFailure.BANNED
         if status == _HTTP_TOO_MANY or isinstance(error, library.RateLimitExceeded):
             return CallFailure.RATE_LIMITED
+        if status in _HTTP_SERVER_ERRORS:
+            # The server's own fault, whatever its body says: -1016 and -1121 included (plan A-2)
+            return CallFailure.TRANSIENT
         if isinstance(error, library.BadSymbol):
             return CallFailure.BAD_SYMBOL
         if isinstance(error, library.BadResponse):
             return CallFailure.BAD_RESPONSE
-        if isinstance(error, library.NetworkError):
+        # OperationFailed, not NetworkError: binance -1000/-1001/-1006 are outside NetworkError
+        if isinstance(error, library.OperationFailed):
+            return CallFailure.TRANSIENT
+        if _error_code(getattr(self._seen, "body", None)) == _BINANCE_TRY_AGAIN:
             return CallFailure.TRANSIENT
         return CallFailure.OTHER
 
@@ -104,6 +126,7 @@ class _BinancePublic:
     def _request(self, timeout: float, request: Callable[[], object]) -> object:
         self._seen.status = None
         self._seen.retry_after = None
+        self._seen.body = None
         self._exchange.timeout = max(1, math.ceil(timeout * 1000))
         try:
             return request()

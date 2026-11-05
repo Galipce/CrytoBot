@@ -327,3 +327,63 @@ def test_retry_after_past_the_budget_sends_nothing_else() -> None:
         reasons = {issue.field: issue.reason for issue in pair.issues}
         assert reasons[ReadField.CANDLES] is IssueReason.BUDGET_ENDED
         assert reasons[ReadField.PRICE] is IssueReason.BUDGET_ENDED
+
+
+# F-2: what the exchange itself calls temporary is retried; a plain refusal gets one call.
+@pytest.mark.parametrize(
+    ("status", "body", "failure"),
+    [
+        (400, '{"code":-1000,"msg":"x"}', CallFailure.TRANSIENT),
+        (400, '{"code":-1001,"msg":"x"}', CallFailure.TRANSIENT),
+        (400, '{"code":-1006,"msg":"x"}', CallFailure.TRANSIENT),
+        (400, '{"code":-1007,"msg":"x"}', CallFailure.TRANSIENT),
+        (400, '{"code":-1008,"msg":"x"}', CallFailure.TRANSIENT),
+        (200, '{"code":-1000,"msg":"x"}', CallFailure.TRANSIENT),
+        (200, '{"code":-1008,"msg":"x"}', CallFailure.TRANSIENT),
+        (500, '{"code":-1000,"msg":"x"}', CallFailure.TRANSIENT),
+        (503, '{"code":-1008,"msg":"x"}', CallFailure.TRANSIENT),
+        (503, '{"code":-1016,"msg":"x"}', CallFailure.TRANSIENT),
+        (503, '{"code":-1121,"msg":"x"}', CallFailure.TRANSIENT),
+        (500, "boom", CallFailure.TRANSIENT),
+        (505, "x", CallFailure.TRANSIENT),
+        (400, '{"code":-1016,"msg":"x"}', CallFailure.OTHER),
+        (400, '{"code":-1099,"msg":"x"}', CallFailure.OTHER),
+        (400, '{"code":-1121,"msg":"x"}', CallFailure.BAD_SYMBOL),
+        (429, '{"code":-1008,"msg":"x"}', CallFailure.RATE_LIMITED),
+        (418, '{"code":-1000,"msg":"x"}', CallFailure.BANNED),
+    ],
+)
+def test_binance_error_maps_to_failure(status: int, body: str, failure: CallFailure) -> None:
+    client, _ = recorded_client({"ticker/24hr": http_response(status, body)})
+    with pytest.raises(ExchangeCallError) as raised:
+        client.ticker("BTCUSDT", 5.0)
+    assert raised.value.failure is failure
+    assert body not in str(raised.value)
+
+
+def test_a_temporary_binance_error_is_retried_within_a_read() -> None:
+    body = http_response(400, '{"code":-1000,"msg":"x"}')
+    client, session = recorded_client({"ticker/24hr": body})
+
+    with pytest.raises(CallFailed) as failed:
+        Caller(call_timeout=5, read_budget=20).call(lambda t: client.ticker("BTCUSDT", t))
+    assert failed.value.reason is IssueReason.NETWORK
+    assert len(session.requests) == 3
+
+
+def test_a_plain_refusal_gets_one_call_within_a_read() -> None:
+    body = http_response(400, '{"code":-1016,"msg":"x"}')
+    client, session = recorded_client({"ticker/24hr": body})
+    with pytest.raises(CallFailed) as failed:
+        Caller(call_timeout=5, read_budget=20).call(lambda t: client.ticker("BTCUSDT", t))
+    assert failed.value.reason is IssueReason.EXCHANGE_ERROR
+    assert len(session.requests) == 1
+
+
+@pytest.mark.parametrize("body", ["[", "[1]", '"text"', "[" * 200_000])
+def test_body_without_a_code_stays_an_exchange_answer(body: str) -> None:
+    """Çözülemeyen hata gövdesi `-1008` sayılmaz; ayrıştırıcı da okumayı düşürmez."""
+    client, _ = recorded_client({"ticker/24hr": http_response(422, body)})
+    with pytest.raises(ExchangeCallError) as raised:
+        client.ticker("BTCUSDT", 5.0)
+    assert raised.value.failure is CallFailure.OTHER

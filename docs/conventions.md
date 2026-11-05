@@ -107,6 +107,7 @@
 - Binance `klines` istenen sayıya açık mumu da katar: `limit=1` hiç kapanmış mum bırakmaz, `limit+1` de 1000'de 999 döndürür. İstekte `endTime` = son kapanmış mumun kapanışı − 1 ms. `limit=1001` hata vermez, 1000 döner: üst sınırı kod korur — from spec 0017, plan Risk 5
 - `ccxt`'nin `timeout`'u soket süresidir, toplam değil: yavaş akan yanıt onu aşar. Her çağrı daemon iş parçacığında, bekleme `min(çağrı süresi, kalan bütçe)`; `ThreadPoolExecutor` çıkışta takılan işi bekler, kullanılmaz — from spec 0017, plan Risk 6
 - `Retry-After` çağrıya değil istemciye aittir; yeniden deneme döngüsünde uygulamak sonraki çağrıları korumaz. — from spec 0017, review round 1 F-1
+- `ccxt` `OperationFailed`, `NetworkError` değildir; Binance'in `-1000/-1001/-1006` kodları `NetworkError` süzgecinden kaçar. — from spec 0017, review round 1 F-2
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
