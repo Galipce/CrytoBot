@@ -187,6 +187,29 @@ def test_limit_outranks_edge(tmp_path: Path) -> None:
     assert reasons(result) == [LIMIT]
 
 
+# k=0.05, r=5: stop 9.95, hedef 10.25; miktar bakiyeyle sınırlı 999 (girişte risk ~79.88 <= 100)
+BALANCE_LIMITED = make_settings(strategy=replace(STRATEGY, k=Decimal("0.05"), r=Decimal(5)))
+
+
+@pytest.mark.parametrize(
+    "price",
+    [
+        pytest.param(Decimal("10.05"), id="over_limit"),
+        pytest.param(Decimal("10.15"), id="over_cap"),
+    ],
+)
+def test_balance_outranks_limit_and_cap(tmp_path: Path, price: Decimal) -> None:
+    """AC-10 (R-5), VERIFY F-V1: dolum bakiyeyi aşar (10.05'te maliyet ~10060.04, 10.15'te
+    ~10160.14 > 10000). 10.05'te risk ~129.93 config limitini, 10.15'te ~230.03 sabit üst
+    sınırı da aşar; stop/hedef tutar. İlk tutmayan koşul bakiyedir."""
+    bot = fresh(tmp_path, settings=BALANCE_LIMITED)
+
+    result = bot.turn({BTC: pair_market(price=price)})
+
+    assert reasons(result) == [PairNote.FILL_EXCEEDS_BALANCE]
+    assert_no_trace(bot, result)
+
+
 REFUSED: dict[str, tuple[TurnSettings, dict[str, Any], PairNote]] = {
     "limit": (make_settings(), {"price": Decimal(11)}, LIMIT),
     "edge": (EDGE_SETTINGS, {"price": Decimal("11.9"), "rules": STEP_25}, EDGE),
