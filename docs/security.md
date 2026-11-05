@@ -38,6 +38,7 @@
 ## Dependencies
 - Sürümler `uv.lock` ile sabit; yeni bağımlılık **insan onayı** ister (spec/plan'da gerekçesiyle):
   lisans (MIT/BSD/Apache uyumlu), bakım durumu, bilinen CVE kontrol edilir.
+- İstisna: dolaylı bağımlılıkta MPL-2.0, kod değiştirilmeden kullanım kabul (spec 0018).
 - `pip-audit` ağ gerektirdiği için `scripts/check` içinde değil, CI'da ayrı adım olarak çalışır.
 - Kripto/borsa ile ilgili az bilinen paketler (typosquatting riski) özellikle incelenir.
 
