@@ -16,6 +16,8 @@
 
 ## Input & output
 - Borsa, haber, whitepaper ve LLM yanıtları **güvenilmeyen girdidir**; sınırda `pydantic` şemalarıyla doğrulanır.
+  Borsa yanıtı `market_data`'nın katı ayrıştırıcısıyla doğrulanır: alan bazında kısmi sonuç ve birebir metin gerekir,
+  şema tümden reddeder ve zorlar (spec 0017, plan Risk 2). Haber, whitepaper ve LLM kuralı aynen geçerlidir.
 - **Prompt injection:** haber/whitepaper metni LLM'e veri olarak, talimat olmayacak şekilde verilir. LLM çıktısı
   yalnızca şemalı bir skor (+ kaynak alıntısı) olabilir; şema dışı çıktı yok sayılır. LLM çıktısı hiçbir
   aksiyonu (emir, limit, mod, beyaz liste) doğrudan tetikleyemez.
