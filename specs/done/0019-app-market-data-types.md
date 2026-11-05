@@ -1,6 +1,6 @@
 # Spec 0019 — `app`'in `market_data` tiplerini import etmesi (mini)
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0019-plan.md`
 - Self-critique: done
@@ -14,15 +14,15 @@ tiplerini import edebilir, okuma işlevini kullanamaz ve izin listesi başka her
 bağlanmaz, turun davranışını değiştirmez.
 
 ## Changed behavior
-- [ ] CB-1 — `app` import denetimi `crytobot.market_data` kökünden yapılan import'u kabul eder (`import crytobot.market_data`, `from crytobot.market_data import MarketRead`). İzin listesine bundan başka modül eklenmez.
-- [ ] CB-2 — `app` import denetimi `market_data`'nın okuma işlevini her biçimde reddeder: adıyla import (`from crytobot.market_data import read_market_data`), takma adla import (`... import read_market_data as r`), yıldızlı import (`from crytobot.market_data import *`) ve modül üzerinden erişim (`crytobot.market_data.read_market_data`). Her biçim testte ayrı bir örnektir.
-- [ ] CB-3 — `read_market_data` adı `app` kaynağındaki hiçbir `.py` dosyasında geçmez; yorum, docstring ve metin değerleri dahildir. Denetim klasördeki her dosyaya uygulanır, sonradan eklenen dosya da kapsamdadır.
+- [x] CB-1 — `app` import denetimi `crytobot.market_data` kökünden yapılan import'u kabul eder (`import crytobot.market_data`, `from crytobot.market_data import MarketRead`). İzin listesine bundan başka modül eklenmez.
+- [x] CB-2 — `app` import denetimi `market_data`'nın okuma işlevini her biçimde reddeder: adıyla import (`from crytobot.market_data import read_market_data`), takma adla import (`... import read_market_data as r`), yıldızlı import (`from crytobot.market_data import *`) ve modül üzerinden erişim (`crytobot.market_data.read_market_data`). Her biçim testte ayrı bir örnektir.
+- [x] CB-3 — `read_market_data` adı `app` kaynağındaki hiçbir `.py` dosyasında geçmez; yorum, docstring ve metin değerleri dahildir. Denetim klasördeki her dosyaya uygulanır, sonradan eklenen dosya da kapsamdadır.
 
 ## Preserved behavior
-- [ ] PB-1 — `test_import_guard_catches_forbidden_code`'un kalan örnekleri reddedilmeyi sürdürür: `import ccxt`, `import socket`, `from crytobot.reporting import x`, `from crytobot.control import x`, `from . import x`, işlev içindeki `import sqlite3`. Listeden yalnız CB-1'in kabul ettiği `from crytobot.market_data import x` çıkar.
-- [ ] PB-2 — `market_data`'nın iç alt modülünü `app`'ten import etmek `boundaries` adımında kırmızıdır (R-3d): `from crytobot.market_data._client import x` ve `from crytobot.market_data import _client`.
-- [ ] PB-3 — `tests/app/test_boundaries.py`'nin saat ve `global` denetimi, düz `dict`, kâr girdisi ve `.realized` testleri ile bunların assert'leri aynen kalır.
-- [ ] PB-4 — `src/`, `tools/`, `pyproject.toml`'un `import-linter` sözleşmeleri, `scripts/check.conf` ve `.github/` değişmez; `run_turn` davranışı değişmez. `./scripts/doctor --strict` geçer.
+- [x] PB-1 — `test_import_guard_catches_forbidden_code`'un kalan örnekleri reddedilmeyi sürdürür: `import ccxt`, `import socket`, `from crytobot.reporting import x`, `from crytobot.control import x`, `from . import x`, işlev içindeki `import sqlite3`. Listeden yalnız CB-1'in kabul ettiği `from crytobot.market_data import x` çıkar.
+- [x] PB-2 — `market_data`'nın iç alt modülünü `app`'ten import etmek `boundaries` adımında kırmızıdır (R-3d): `from crytobot.market_data._client import x` ve `from crytobot.market_data import _client`.
+- [x] PB-3 — `tests/app/test_boundaries.py`'nin saat ve `global` denetimi, düz `dict`, kâr girdisi ve `.realized` testleri ile bunların assert'leri aynen kalır.
+- [x] PB-4 — `src/`, `tools/`, `pyproject.toml`'un `import-linter` sözleşmeleri, `scripts/check.conf` ve `.github/` değişmez; `run_turn` davranışı değişmez. `./scripts/doctor --strict` geçer.
 
 ## Constraints
 - Sensitive area: yok; `docs/domain.md`'deki hassas alanlara dokunulmaz. `app` yalnız coverage kapısındaki hassas modüllerdendir, üretim kodu değişmediği için kapı etkilenmez.
@@ -39,16 +39,18 @@ bağlanmaz, turun davranışını değiştirmez.
 - `specs/done/`.
 
 ## Definition of Done
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Criterion ↔ evidence table complete for CB-* **and** PB-*
-- [ ] Spec moved to `specs/done/` (immutable there)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Criterion ↔ evidence table complete for CB-* **and** PB-*
+- [x] Spec moved to `specs/done/` (immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 0 |
+| Review findings: real / noise / deferred | 0 / 2 / 1 (I-1, I-2; L-1 → B-47). VERIFY: F-1 (Low), B-47'ye eklendi |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+PB-4'ün `doctor` işi ve DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `doctor` ve `check` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10).
