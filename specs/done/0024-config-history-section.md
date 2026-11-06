@@ -40,7 +40,7 @@ ayarlarını denetlemez, indirme kodu yazmaz, turun davranışını değiştirme
 - Bölüm adında büyük/küçük harf duyarsızlığı ya da başka bir bölüme izin vermek.
 
 ## Definition of Done
-- [ ] `scripts/check` green
+- [x] `scripts/check` green — `CHECK GREEN (full, 7 steps, 389 s)`, CI run 42213403068 @`9cf785e`
 - [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
 - [x] Criterion ↔ evidence table complete for CB-* **and** PB-*
 - [x] Spec moved to `specs/done/` (immutable there)
