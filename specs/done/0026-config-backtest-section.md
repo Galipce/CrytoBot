@@ -39,7 +39,7 @@ Botun sahibi, backtest koşusunun (0025) ayarlarını botun ayar dosyasında bir
 - Bölüm adında büyük/küçük harf duyarsızlığı ya da başka bir bölüme izin vermek.
 
 ## Definition of Done
-- [ ] `scripts/check` green
+- [x] `scripts/check` green — `CHECK GREEN (full, 7 steps, 438 s)`, CI run 42268024592 @`0122ed3`
 - [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
 - [x] Criterion ↔ evidence table complete for CB-* **and** PB-*
 - [x] Spec moved to `specs/done/` (immutable there)
