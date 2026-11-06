@@ -430,6 +430,20 @@ def test_log_is_appended_never_rewritten(bot: Bot) -> None:
     assert len(event_lines(bot.log.read_text(encoding="utf-8"), "başlatma")) == 2
 
 
+def test_log_path_naming_the_store_another_way_never_writes_into_the_store(bot: Bot) -> None:
+    """R-05 reproduction, review round 1 L-3 (QA, VERIFY 0022): `bot.log_path` is compared with
+    `bot.store_path` only as text, so `<root>/./bot.db` passes and log lines are appended into
+    the SQLite store file. Whatever the fix (refuse the setting, or keep the files apart), no
+    log line may ever land in the store file (persistence, sensitive area)."""
+    bot.write_config(log_path=f'"{bot.root.as_posix()}/./bot.db"')
+    for command in ("prepare", "start"):
+        bot.run(command)
+    if bot.store.exists():
+        data = bot.store.read_bytes()
+        assert "hazırlık".encode() not in data  # prepare's line
+        assert TRIAL_MARK.encode() not in data  # start's line and every turn summary
+
+
 def test_output_without_log_writes_only_the_console() -> None:
     out = io.StringIO()
     Output(out)("satır")

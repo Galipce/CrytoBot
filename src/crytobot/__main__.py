@@ -203,6 +203,12 @@ def _config(path: Path, output: Output, clock: Clock) -> BotConfig | None:
     result = load_config(document, clock())
     if result.config is None:
         output.say(line(clock(), "ayar", f"bot başlamadı: {result.message}"))
+        return None
+    # `app` compares the paths as text only; another spelling of the store (`./bot.db`) is caught
+    # here, resolved, before any line is written (review round 1 L-3, VERIFY 0022)
+    if Path(result.config.log_path).resolve() == Path(result.config.store_path).resolve():
+        output.say(line(clock(), "ayar", "bot başlamadı: ayar geçersiz: bot.log_path"))
+        return None
     return result.config
 
 
