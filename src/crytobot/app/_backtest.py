@@ -59,7 +59,7 @@ class BacktestOutcome(Enum):
 
 @dataclass(frozen=True)
 class BacktestExit:
-    """`turns`: atılan tur sayısı; `report`: konsola yazılan rapor (yalnız koşu tamamlandıysa)."""
+    """`turns`: yalnız tamamlanan koşuda tur sayısı, ret ve durmada 0; `report`: konsola yazılan rapor (yalnız koşu tamamlandıysa)."""
 
     outcome: BacktestOutcome
     message: str
