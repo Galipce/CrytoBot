@@ -132,3 +132,32 @@ class Caller:
                 raise CallFailed(reason)
             self._wait(max(delay, self._not_before - time.monotonic()))
         raise AssertionError("the last delay raises")  # pragma: no cover
+
+
+class OnceFailed(MarketDataError):
+    """Tek çağrı değer vermedi (spec 0023 R-7). `banned`: HTTP 418; `retry_after`: borsanın
+    bildirdiği bekleme, saniye; bildirilmediyse `None`. Borsanın metnini taşımaz."""
+
+    def __init__(
+        self, reason: IssueReason, *, banned: bool = False, retry_after: float | None = None
+    ) -> None:
+        super().__init__(reason.value)
+        self.reason = reason
+        self.banned = banned
+        self.retry_after = retry_after
+
+
+def call_once[T](request: Callable[[float], T], timeout: float) -> T:
+    """Yeniden denemesiz tek çağrı, süre `timeout` saniye (spec 0023 plan Risk 3).
+
+    Süre aşımı, ağ hatası, 429 ve 418 `OnceFailed` olur; sonra çağıran yeniden istek atmaz. Borsa
+    dışı beklenmeyen hata olduğu gibi yükselir, adını çağıran koyar.
+    """
+    try:
+        return _run_limited(request, timeout)
+    except _CallTimedOut:
+        raise OnceFailed(IssueReason.CALL_TIMED_OUT) from None
+    except ExchangeCallError as error:
+        banned = error.failure is CallFailure.BANNED
+        reason = _FINAL.get(error.failure) or _RETRYABLE[error.failure]
+        raise OnceFailed(reason, banned=banned, retry_after=error.retry_after) from None
