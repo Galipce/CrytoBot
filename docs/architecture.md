@@ -22,13 +22,13 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | `risk` | Her işlem önerisini BR-3…BR-11'e göre onaylamak/reddetmek, pozisyon boyutlamak | Risk limitleri, sabit üst sınırlar, kill switch durumu |
 | `execution` | Onaylı emirleri borsaya (live) / simülatöre (paper, backtest) iletmek, emir durumunu izlemek | Emir kayıtları, clientOrderId'ler |
 | `portfolio` | Pozisyonlar, bakiye mutabakatı, kâr/zarar defteri | Defter (append-only), pozisyonlar, kasa geçmişi |
-| `backtest` | Geçmiş veri üzerinde strateji+risk+simüle execution koşturmak | Backtest sonuçları |
+| `backtest` | Geçmiş veri üzerinde strateji+risk+simüle execution koşturmak | Backtest sonuçları: metrikler, rapor metni ve rapor dosyası (spec 0025) |
 | `control` | CLI ve Telegram komutları, yetkilendirme (chat ID, TOTP, teyit), audit log | Audit log, mod/aşama durumu |
 | `reporting` | Günlük rapor, metrikler (günlük hedef dahil), bildirim gönderimi | Rapor kayıtları |
 | `persistence` | Defter, emirler ve risk durumunu tek SQLite deposunda korumak; okunamayan depoda durumu reddetmek | Depo dosyası, biçim sürümü, depo modu |
 | `app` | Bileşim kökü (composition root): modülleri bağlar, ayarları denetler, zamanlayıcı/döngü | — (depo hazırlığı ve başlatma kapıları; gerçek etkiler enjekte edilir) |
 
-**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start|download`, spec 0022, 0023) bir modül
+**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start|download|backtest`, spec 0022, 0023, 0025) bir modül
 değildir, paket olmadığı için tabloda yer almaz. Karar içermez: ayar dosyasını (`crytobot.toml`) okur,
 gerçek saati, ≤1 s'lik beklemeyi, sinyalleri, tek süreç kilidini (`<depo>.lock`), konsol ve kayıt
 dosyası yazıcısını ve piyasa okumasını `app`'e verir. Kararların, zamanlamanın ve depo kapılarının
@@ -36,6 +36,11 @@ hepsi `app`'tedir; `app` saat çağırmaz ve okuma işlevini import etmez, yaln�
 `download` (spec 0023) aynı ayar dosyasının `[history]` bölümüyle geçmiş veriyi indirir: giriş noktası
 `market_data`'nın indirme işlevini ve gerçek saati `app`'e verir; kilit alınmaz, depo ve kayıt dosyası
 açılmaz, çıktı yalnız konsoladır.
+`backtest` (spec 0025) aynı ayar dosyasının `[backtest]` bölümüyle koşar: giriş noktası veri
+dosyası okumasını (`market_data`), rapor dosyası yazıcısını (`backtest`), konsolu, durdurma
+isteğini ve geçici bir dizindeki depo yolunu `app`'e verir; saat verilmez, ağa çıkılmaz, kilit
+alınmaz, bot deposu ve kayıt dosyası açılmaz. Turları `app` atar (paper turunun aynısı, simüle
+saatle); `backtest` tur kayıtlarından metrikleri ve raporu üretir.
 
 ## Communication rules
 - Modüller birbirini yalnızca **public arayüz** (`<module>/__init__.py` ile dışa açılanlar) üzerinden çağırır.

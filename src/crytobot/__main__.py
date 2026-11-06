@@ -1,4 +1,4 @@
-"""Giriş noktası: `python -m crytobot prepare|start|download` (spec 0022, 0023).
+"""Giriş noktası: `python -m crytobot prepare|start|download|backtest` (spec 0022, 0023, 0025).
 
 Karar içermez: kararların hepsi `app`'tedir. Burada yalnız gerçek etkiler bağlanır: ayar dosyası
 (`tomllib`, çalışma dizinindeki `crytobot.toml`), gerçek UTC saati, ≤1 s'lik parçalarla bekleme,
@@ -8,12 +8,21 @@ mod seçeneği, API anahtarı ve ortam değişkeni okunmaz.
 `download` (spec 0023) geçmiş veriyi aynı ayar dosyasının `[history]` bölümüne göre indirir. Kilit
 alınmaz, depo ve kayıt dosyası açılmaz: çıktı yalnız konsoladır, çalışan bir paper botu etkilenmez.
 
-Çıkış kodları: 0 temiz durma, hazırlık ya da indirme tamam, 1 başlatma, hazırlık ya da indirme reddi
-(ayarlar), 2 okuma reddiyle durma, 3 kayıt dosyası yazılamıyor, 4 indirme durdu, 130 zorla durma.
+`backtest` (spec 0025) veri dosyasıyla, aynı ayar dosyasının `[backtest]` bölümüne göre koşar. Ağa
+çıkılmaz, saat verilmez, kilit alınmaz; bot deposu ve kayıt dosyası açılmaz. Turların durumu
+`tempfile` ile açılan geçici bir dizindeki depodadır ve dizin her çıkışta silinir (zorla durdurma
+dahil; süreç öldürülürse işletim sisteminin geçici dizininde kalır, bir daha okunmaz). Konsol
+satırları zaman damgası taşımaz.
+
+Çıkış kodları: 0 temiz durma, hazırlık, indirme ya da backtest tamam, 1 başlatma, hazırlık, indirme
+ya da backtest reddi (ayarlar, veri dosyası, rapor dosyası var), 2 okuma reddiyle durma, 3 kayıt
+dosyası yazılamıyor, 4 indirme durdu, 5 backtest durdu, 6 backtest tamam ama rapor dosyası
+yazılamadı (rapor konsolda), 130 zorla durma.
 """
 
 import signal
 import sys
+import tempfile
 import time
 import tomllib
 from collections.abc import Callable, Sequence
@@ -25,6 +34,9 @@ from typing import IO, TextIO
 
 from crytobot.app import (
     PREPARE_HINT,
+    BacktestConfig,
+    BacktestOutcome,
+    BacktestParts,
     BotConfig,
     DownloadConfig,
     DownloadParts,
@@ -36,36 +48,48 @@ from crytobot.app import (
     StartOutcome,
     StopRequest,
     line,
+    load_backtest_config,
     load_config,
     load_download_config,
     open_for_start,
     prepare_store,
+    run_backtest,
     run_download,
     run_loop,
 )
+from crytobot.backtest import report_exists, write_report
 from crytobot.market_data import (
     HistoryRequest,
     HistoryResult,
     MarketRead,
     ReadSettings,
     download_history,
+    read_history,
     read_market_data,
 )
 
 CONFIG_FILE = "crytobot.toml"
-USAGE = "kullanım: python -m crytobot prepare|start|download"
-COMMANDS = (["prepare"], ["start"], ["download"])
+USAGE = "kullanım: python -m crytobot prepare|start|download|backtest"
+COMMANDS = (["prepare"], ["start"], ["download"], ["backtest"])
 EXIT_OK = 0
 EXIT_REFUSED = 1
 EXIT_READ_REFUSED = 2
 EXIT_LOG_FAILED = 3
 EXIT_DOWNLOAD_STOPPED = 4
+EXIT_BACKTEST_STOPPED = 5
+EXIT_REPORT_NOT_WRITTEN = 6
 EXIT_FORCED = 130
 _EXIT_CODES = {
     ExitReason.STOPPED: EXIT_OK,
     ExitReason.READ_REFUSED: EXIT_READ_REFUSED,
     ExitReason.LOG_FAILED: EXIT_LOG_FAILED,
     ExitReason.FORCED: EXIT_FORCED,
+}
+_BACKTEST_EXIT_CODES = {
+    BacktestOutcome.COMPLETED: EXIT_OK,
+    BacktestOutcome.REFUSED: EXIT_REFUSED,
+    BacktestOutcome.STOPPED: EXIT_BACKTEST_STOPPED,
+    BacktestOutcome.REPORT_NOT_WRITTEN: EXIT_REPORT_NOT_WRITTEN,
 }
 _LOG_FAILED = "kayıt dosyası yazılamıyor: bot durdu"
 _PIECE_S = 1.0
@@ -206,17 +230,24 @@ def make_read(clock: Clock) -> Read:
     return read
 
 
-def _document(path: Path, output: Output, clock: Clock) -> dict[str, object] | None:
-    """Ayar dosyasının eşlemi; dosya yoksa ya da okunamıyorsa `None`, nedeni konsolda."""
+def _load_toml(path: Path) -> dict[str, object] | str:
+    """Ayar dosyasının eşlemi ya da dosya yoksa, okunamıyorsa nedeni."""
     try:
         with open(path, "rb") as file:
             return tomllib.load(file)
     except FileNotFoundError:
-        output.say(line(clock(), "ayar", f"ayar dosyası yok: {path.name}"))
-        return None
+        return f"ayar dosyası yok: {path.name}"
     except (OSError, ValueError, RecursionError):  # TOML, encoding and 4300-digit errors
-        output.say(line(clock(), "ayar", f"ayar dosyası okunamıyor: {path.name}"))
+        return f"ayar dosyası okunamıyor: {path.name}"
+
+
+def _document(path: Path, output: Output, clock: Clock) -> dict[str, object] | None:
+    """Ayar dosyasının eşlemi; dosya yoksa ya da okunamıyorsa `None`, nedeni konsolda."""
+    document = _load_toml(path)
+    if isinstance(document, str):
+        output.say(line(clock(), "ayar", document))
         return None
+    return document
 
 
 def _same_file(first: str, second: str) -> bool:
@@ -271,6 +302,53 @@ def _download(
     return EXIT_OK if exit_.completed else EXIT_DOWNLOAD_STOPPED
 
 
+def _backtest_config(path: Path, output: Output) -> BacktestConfig | None:
+    """Spec 0025 R-2: ayarlar veri dosyası okunmadan ve hiçbir şey yazılmadan önce; ilk sorun
+    adıyla. Satırlar zaman damgası taşımaz (R-12)."""
+    document = _load_toml(path)
+    if isinstance(document, str):
+        output.say(f"backtest reddedildi: {document}")
+        return None
+    result = load_backtest_config(document)
+    config = result.config
+    if config is None:
+        output.say(f"backtest reddedildi: {result.message}")
+        return None
+    bot = (config.bot.store_path, config.bot.log_path)
+    # R-2: `app` compares the paths as text; another spelling of the same file is caught here
+    if any(_same_file(config.data_path, other) for other in bot):
+        output.say("backtest reddedildi: ayar geçersiz: backtest.data_path")
+        return None
+    if any(_same_file(config.report_path, other) for other in (config.data_path, *bot)):
+        output.say("backtest reddedildi: ayar geçersiz: backtest.report_path")
+        return None
+    return config
+
+
+def _backtest(config_path: Path, output: Output, stop: StopRequest) -> int:
+    """Ağ yok, saat yok, kilit yok; bot deposu ve kayıt dosyası açılmaz (spec 0025 R-1). Geçici
+    dizin her çıkışta silinir; `.part`'ı rapor yazıcısı siler (R-13)."""
+    config = _backtest_config(config_path, output)
+    if config is None:
+        return EXIT_REFUSED
+    with tempfile.TemporaryDirectory(
+        prefix="crytobot-backtest-", ignore_cleanup_errors=True
+    ) as work:
+        parts = BacktestParts(
+            read_history,
+            report_exists,
+            write_report,
+            output.say,
+            stop,
+            str(Path(work) / "backtest.db"),
+        )
+        try:
+            exit_ = run_backtest(config, parts)
+        except ForcedStop:  # the second request: the line is written, the report is not
+            return EXIT_FORCED
+    return _BACKTEST_EXIT_CODES[exit_.outcome]
+
+
 def _prepare(config: BotConfig, output: Output, clock: Clock) -> int:
     result = prepare_store(config.store_path, config.opening_balance, clock())
     output(line(clock(), "hazırlık", result.message))
@@ -309,6 +387,8 @@ def run(
         return EXIT_REFUSED
     if argv[0] == "download":
         return _download(config_path, output, clock, stop, download)
+    if argv[0] == "backtest":
+        return _backtest(config_path, output, stop)
     config = _config(config_path, output, clock)
     if config is None:
         return EXIT_REFUSED
