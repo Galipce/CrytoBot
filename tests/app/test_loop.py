@@ -154,6 +154,39 @@ def test_missed_boundaries_survive_a_failed_turn(tmp_path: Path) -> None:
     assert "kaçan_sınır=2" in second
 
 
+def test_missed_boundaries_survive_a_failed_clock_in_turn(tmp_path: Path) -> None:
+    """R-8 (review round 2 L-1): uyanıştan sonra turun saat çağrısı hata verirse kaçan sınırlar
+    sonraki özete girer."""
+    calls: dict[str, int | None] = {"after_sleep": None}
+
+    def sleep(bot: Any) -> None:
+        bot.clock.advance(3 * 3600)  # NOW+1h and NOW+2h are never seen
+        calls["after_sleep"] = 0
+
+    bot = harness(opened_store(tmp_path / "s.db"), stop_after=2, wait_hooks={0: sleep})
+    real_clock = bot.clock
+
+    def flaky_clock() -> Any:
+        count = calls["after_sleep"]
+        if count is not None:
+            calls["after_sleep"] = count + 1
+            if count == 1:  # 0: the loop finds the due boundary, 1: the turn's own moment
+                raise OSError("x")
+        return real_clock()
+
+    parts = bot.parts()
+    exit_ = _loop.run_loop(
+        bot.config, type(parts)(flaky_clock, bot.wait, bot.read, bot.write, bot.stop)
+    )
+    assert exit_.turns == 2
+    assert len(bot.read_times()) == 2  # the failed turn read nothing
+    assert bot.read_times()[1] == NOW + 4 * HOUR
+    assert [text.rsplit(" ", 2)[-2] for text in bot.events("hata")] == ["saat"]
+    first, second = bot.events("tur")
+    assert "kaçan_sınır=0" in first
+    assert "kaçan_sınır=2" in second
+
+
 def test_error_text_and_secrets_never_logged(tmp_path: Path) -> None:
     """R-15: saat, bekleme ve okuma hatalarının metni hiçbir satırda yoktur."""
     bot = harness(opened_store(tmp_path / "s.db"), stop_after=2, answers={0: ValueError(SECRET)})
