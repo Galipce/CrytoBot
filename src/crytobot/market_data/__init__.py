@@ -14,6 +14,10 @@ Geçmiş veri (spec 0023): `download_history`, verilen çiftlerin bir dönemdeki
 bir veri dosyasına (JSON Lines) yazar. Her çağrı bir kez yapılır; ilk hata, güvenilmeyen veri ya
 da durdurma isteği indirmeyi durdurur ve tamamlanmış görünen dosya bırakmaz. Var olan dosyanın
 üzerine yazılmaz. İstisna fırlatmaz: sonuç `HistoryResult`'tır (özetler ya da `HistoryStop`).
+
+Backtest girdisi (spec 0025): `read_history` veri dosyasını bütünüyle okur ve denetler. Sonuç ya
+`HistoryData`'dır ya da adı konmuş bir sorun (`HistoryReadProblem`: yok, okunamıyor, bozuk,
+tamamlanmamış, güvenilmeyen veri). 0017'nin mum denetimleri aynen uygulanır; boşluk doldurulmaz.
 """
 
 from crytobot.market_data._history import (
@@ -23,6 +27,13 @@ from crytobot.market_data._history import (
     HistoryStopReason,
     PairSummary,
     download_history,
+)
+from crytobot.market_data._history_read import (
+    HistoryData,
+    HistoryPair,
+    HistoryRead,
+    HistoryReadProblem,
+    read_history,
 )
 from crytobot.market_data._read import read_market_data
 from crytobot.market_data._types import (
@@ -42,6 +53,10 @@ from crytobot.market_data._types import settings_problem as read_settings_proble
 
 __all__: list[str] = [
     "CANDLE_INTERVALS",
+    "HistoryData",
+    "HistoryPair",
+    "HistoryRead",
+    "HistoryReadProblem",
     "HistoryRequest",
     "HistoryResult",
     "HistoryStop",
@@ -58,6 +73,7 @@ __all__: list[str] = [
     "ReadIssue",
     "ReadSettings",
     "download_history",
+    "read_history",
     "read_market_data",
     "read_settings_problem",
 ]
