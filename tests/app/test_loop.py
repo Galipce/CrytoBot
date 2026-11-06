@@ -203,6 +203,20 @@ def test_a_failing_step_is_logged_once_while_it_keeps_failing(tmp_path: Path) ->
     ]
 
 
+def test_each_failed_read_is_logged(tmp_path: Path) -> None:
+    """R-15 (review L-2): okuma sınır başına bir kez çalışır; art arda her hatası yazılır."""
+    bot = harness(
+        opened_store(tmp_path / "s.db"),
+        stop_after=2,
+        answers={1: RuntimeError("x"), 2: RuntimeError("x")},
+    )
+    bot.run()
+    assert bot.read_times() == [START, NOW + HOUR, NOW + 2 * HOUR, NOW + 3 * HOUR]
+    errors = [text.split(" ", 2)[2] for text in bot.events("hata")]
+    assert errors == ["döngü hatası: okuma RuntimeError"] * 2
+    assert len(bot.events("tur")) == 2
+
+
 def test_clock_without_time_zone_is_a_loop_error(tmp_path: Path) -> None:
     bot = harness(opened_store(tmp_path / "s.db"))
     values = iter([NOW.replace(tzinfo=None)])

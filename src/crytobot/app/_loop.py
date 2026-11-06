@@ -39,6 +39,8 @@ from crytobot.market_data import MarketRead, ReadSettings
 
 # The clock is read again at least this often while waiting: a sleep or a clock jump is seen
 MAX_WAIT_S = 60.0
+# Steps retried within a second: a repeat of the same failure is logged once (R-15)
+_RETRIED_EVERY_SECOND = frozenset({"saat", "bekleme"})
 
 
 class ForcedStop(BaseException):
@@ -117,10 +119,16 @@ class _Loop:
             self.log_failed = True
 
     def failed(self, step: str, error: Exception, at: object = None) -> None:
-        """R-15: tip adıyla, istisna metni olmadan; aynı adım art arda hata verirse bir kez."""
-        if step not in self.failing:
+        """R-15: tip adıyla, istisna metni olmadan.
+
+        Saniyede bir yeniden denenen `saat` ve `bekleme` art arda hata verirse bir kez yazılır;
+        `okuma` sınır başına bir kez çalışır, her hatası yazılır (review round 1 L-2).
+        """
+        if step in self.failing:
+            return
+        if step in _RETRIED_EVERY_SECOND:
             self.failing.add(step)
-            self.emit(at, "hata", error_text(step, error))
+        self.emit(at, "hata", error_text(step, error))
 
     def recovered(self, step: str) -> None:
         self.failing.discard(step)
@@ -169,7 +177,6 @@ class _Loop:
         except Exception as error:
             self.failed("okuma", error, now)
             return None
-        self.recovered("okuma")
         if read.input_problem is not None or read.read_at is None:  # R-10, B-50
             self.emit(now, "okuma", read_refused_text(read.input_problem))
             return ExitReason.READ_REFUSED
