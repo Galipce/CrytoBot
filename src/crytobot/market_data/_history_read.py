@@ -11,7 +11,8 @@ Sonuç beş durumdan biridir:
 - **güvenilmeyen veri**: spec 0017'nin mum denetimlerinden (`parse_rows`) geçmeyen mum. Denetim
   kopyalanmaz; okuma ve indirme ile aynı fonksiyondur.
 
-Önce dosyanın bütün yapısı denetlenir, sonra mumların değerleri. Boşluk güvenilmezlik değildir
+Önce dosyanın bütün yapısı denetlenir, sonra mumların değerleri; dönem dışı mum denetimi bunun
+istisnasıdır, o çiftin değer denetiminden sonra yapılır. Boşluk güvenilmezlik değildir
 (spec 0025 R-6). İstisna fırlatmaz; `BaseException` geçer.
 """
 
