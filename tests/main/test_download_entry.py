@@ -150,6 +150,16 @@ def test_download_writes_the_file_and_prints_the_summary(downloader: Downloader)
     )
 
 
+def test_backtest_section_passes_the_download(downloader: Downloader) -> None:
+    """Spec 0026 CB-5: `[backtest]` eklenmiş dosyayla indirme ayarları kabul eder."""
+    with downloader.bot.config_path.open("a", encoding="utf-8") as file:
+        file.write('\n[backtest]\nmode = "live"\nbilinmeyen = 1\n')
+    code, console = downloader.run()
+    assert code == EXIT_OK, console
+    assert downloader.data.is_file()
+    assert "bilinmeyen ayar" not in console
+
+
 def test_keys_ignored_store_and_log_untouched(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

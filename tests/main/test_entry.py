@@ -180,6 +180,19 @@ def test_history_section_passes_prepare_and_start(bot: Bot) -> None:
         assert "bilinmeyen ayar" not in output
 
 
+def test_backtest_section_passes_prepare_and_start(bot: Bot) -> None:
+    """Spec 0026 CB-5: `[backtest]` eklenmiş gerçek dosya giriş noktasından geçer."""
+    text = config_text(bot.root) + '\n[backtest]\nmode = "live"\nbilinmeyen = 1\n'
+    bot.config_path.write_text(text, encoding="utf-8")
+    code, prepared = bot.run("prepare")
+    assert code == EXIT_OK
+    code, started = bot.run("start")
+    assert code == EXIT_OK
+    assert event_lines(started, "tur")
+    for output in (prepared, started, "\n".join(bot.log_lines())):
+        assert "bilinmeyen ayar" not in output
+
+
 def test_trial_mark_on_start_and_every_summary(bot: Bot) -> None:
     """AC-12, R-14: başlatma çıktısı, kayıttaki başlatma satırı ve her tur özeti."""
     bot.run("prepare")

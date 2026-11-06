@@ -349,3 +349,106 @@ def test_first_problem_in_file_order_is_named_beside_history() -> None:
     """PB-3 (0022/AC-3)."""
     values = document(**{"turn.fee": "x", "risk.max_drawdown": "x", "strategy.k": None})
     assert setting_of(with_history(values)) == "turn.fee"
+
+
+# Spec 0026: `[backtest]` backtest koşusunun bölümüdür (0025); bot yükleyicisi adını tanır,
+# içine bakmaz. Değerler `[history]` örnekleriyle aynıdır.
+BACKTEST_NEAR_NAMES = ["Backtest", "BACKTEST", "bactest", "backtests", "backtest_", "back_test"]
+
+
+def with_backtest(values: object, value: object = None) -> dict[str, Any]:
+    """`backtest` eşlemin başına konur: dosya sırası sonucu değiştirmemeli (0024 plan Risk 3)."""
+    assert isinstance(values, dict)
+    return {"backtest": {} if value is None else value, **values}
+
+
+@pytest.mark.parametrize("value", HISTORY_VALUES)
+def test_backtest_section_is_passed_unread(value: object) -> None:
+    """0026 CB-1, CB-2: sonuç `[backtest]` yokken verilenle aynıdır; değeri mesaja girmez."""
+    plain = load_config(document(), NOW)
+    result = load_config(with_backtest(document(), value), NOW)
+    assert result.config is not None and result.setting is None
+    assert result.config == plain.config
+    assert result.message == plain.message == "ayarlar geçerli"
+
+
+def test_backtest_beside_history_is_passed_unread() -> None:
+    """0026 CB-1: `[history]` ile birlikte, iki sırada da."""
+    plain = load_config(document(), NOW)
+    orders = (with_backtest(with_history(document())), with_history(with_backtest(document())))
+    for values in orders:
+        result = load_config(values, NOW)
+        assert result.config is not None and result.config == plain.config
+        assert result.message == "ayarlar geçerli"
+
+
+@pytest.mark.parametrize("name", BACKTEST_NEAR_NAMES)
+def test_only_the_exact_backtest_name_is_passed(name: str) -> None:
+    """0026 CB-3: büyük/küçük harf ya da benzer ad tanınmaz."""
+    values: dict[str, Any] = document()
+    values[name] = {}
+    result = load_config(values, NOW)
+    assert result.config is None and result.setting == name
+    assert result.message == f"bilinmeyen ayar: {name}"
+
+
+@pytest.mark.parametrize("section", list(BASE))
+def test_unknown_key_in_each_section_is_refused_beside_backtest(section: str) -> None:
+    """0026 PB-1: beş bot bölümünde bilinmeyen anahtar, `[backtest]` varken de."""
+    values: dict[str, Any] = document()
+    values[section]["mode"] = "live"
+    result = load_config(with_backtest(values), NOW)
+    assert result.config is None and result.setting == f"{section}.mode"
+    assert result.message == f"bilinmeyen ayar: {section}.mode"
+
+
+@pytest.mark.parametrize("name", ["live", "histroy", "bactest"])
+def test_unknown_section_beside_backtest_is_refused(name: str) -> None:
+    """0026 PB-2."""
+    values: dict[str, Any] = document()
+    values[name] = {}
+    result = load_config(with_backtest(values), NOW)
+    assert result.config is None and result.setting == name
+    assert result.message == f"bilinmeyen ayar: {name}"
+
+
+@pytest.mark.parametrize("name", SETTING_NAMES)
+def test_each_missing_setting_is_named_beside_backtest(name: str) -> None:
+    """0026 PB-3."""
+    result = load_config(with_backtest(document(**{name: None})), NOW)
+    assert result.config is None and result.setting == name
+    assert result.message == f"ayar eksik: {name}"
+
+
+@pytest.mark.parametrize(("name", "value"), INVALID)
+def test_each_invalid_setting_is_named_beside_backtest(name: str, value: object) -> None:
+    """0026 PB-3."""
+    result = load_config(with_backtest(document(**{name: value})), NOW)
+    assert result.config is None and result.setting == name
+    assert result.message == f"ayar geçersiz: {name}"
+
+
+@pytest.mark.parametrize("section", list(BASE))
+def test_missing_or_broken_section_is_named_beside_backtest(section: str) -> None:
+    """0026 PB-3."""
+    values = document()
+    del values[section]
+    result = load_config(with_backtest(values), NOW)
+    assert result.setting == section and result.message == f"ayar eksik: {section}"
+    broken: dict[str, Any] = document()
+    broken[section] = "metin"
+    result = load_config(with_backtest(broken), NOW)
+    assert result.setting == section and result.message == f"ayar geçersiz: {section}"
+
+
+def test_only_backtest_misses_bot() -> None:
+    """0026 PB-3: botun bölümleri `[backtest]`'ten önce denetlenir."""
+    result = load_config({"backtest": {"mode": "live"}}, NOW)
+    assert result.config is None and result.setting == "bot"
+    assert result.message == "ayar eksik: bot"
+
+
+def test_first_problem_in_file_order_is_named_beside_backtest() -> None:
+    """0026 PB-3 (0022/AC-3)."""
+    values = document(**{"turn.fee": "x", "risk.max_drawdown": "x", "strategy.k": None})
+    assert setting_of(with_backtest(values)) == "turn.fee"
