@@ -35,7 +35,7 @@ uv run python -m crytobot backtest       # veri dosyasıyla backtest koşar, rap
   kayıt dosyasına dokunmaz, çalışan bir botla birlikte koşabilir. Dönemin her tur anında paper
   turunun aynısı simüle saatle atılır; fiyat, tur anında açılan mumun açılışıdır. Rapor örneklem
   içi, örneklem dışı ve tüm koşu için metrikleri ve varsayımları taşır, konsola ve rapor
-  dosyasına aynı baytlarla yazılır; geçti/kaldı demez (BR-10 kapısı ayrı spec'tedir). Var olan
+  dosyasına aynı metinle yazılır; geçti/kaldı demez (BR-10 kapısı ayrı spec'tedir). Var olan
   rapor dosyasının üzerine yazmaz; durursa rapor bırakmaz (spec 0025). Veri dosyası bütünüyle
   belleğe alınır: 1h × 12 ay × 30 çift sığar, 1m × 12 ay × 30 çift sığmaz ("beklenmeyen hata:
   MemoryError"). 30 çift, 1h, 12 ay, `candle_count` 200 ile koşu bu makinede 60 dakikanın
