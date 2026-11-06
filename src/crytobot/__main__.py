@@ -1,12 +1,15 @@
-"""Giriş noktası: `python -m crytobot prepare|start` (spec 0022; plan Risk 1, 5, 6, 13).
+"""Giriş noktası: `python -m crytobot prepare|start|download` (spec 0022, 0023).
 
 Karar içermez: kararların hepsi `app`'tedir. Burada yalnız gerçek etkiler bağlanır: ayar dosyası
 (`tomllib`, çalışma dizinindeki `crytobot.toml`), gerçek UTC saati, ≤1 s'lik parçalarla bekleme,
 sinyaller, tek süreç kilidi, konsol ve kayıt dosyası yazıcısı, piyasa okuması. Yalnız paper vardır;
 mod seçeneği, API anahtarı ve ortam değişkeni okunmaz.
 
-Çıkış kodları: 0 temiz durma ya da hazırlık tamam, 1 başlatma ya da hazırlık reddi, 2 okuma reddiyle
-durma, 3 kayıt dosyası yazılamıyor, 130 zorla durma.
+`download` (spec 0023) geçmiş veriyi aynı ayar dosyasının `[history]` bölümüne göre indirir. Kilit
+alınmaz, depo ve kayıt dosyası açılmaz: çıktı yalnız konsoladır, çalışan bir paper botu etkilenmez.
+
+Çıkış kodları: 0 temiz durma, hazırlık ya da indirme tamam, 1 başlatma, hazırlık ya da indirme reddi
+(ayarlar), 2 okuma reddiyle durma, 3 kayıt dosyası yazılamıyor, 4 indirme durdu, 130 zorla durma.
 """
 
 import signal
@@ -23,6 +26,8 @@ from typing import IO, TextIO
 from crytobot.app import (
     PREPARE_HINT,
     BotConfig,
+    DownloadConfig,
+    DownloadParts,
     ExitReason,
     ForcedStop,
     LogWriteError,
@@ -32,18 +37,29 @@ from crytobot.app import (
     StopRequest,
     line,
     load_config,
+    load_download_config,
     open_for_start,
     prepare_store,
+    run_download,
     run_loop,
 )
-from crytobot.market_data import MarketRead, ReadSettings, read_market_data
+from crytobot.market_data import (
+    HistoryRequest,
+    HistoryResult,
+    MarketRead,
+    ReadSettings,
+    download_history,
+    read_market_data,
+)
 
 CONFIG_FILE = "crytobot.toml"
-USAGE = "kullanım: python -m crytobot prepare|start"
+USAGE = "kullanım: python -m crytobot prepare|start|download"
+COMMANDS = (["prepare"], ["start"], ["download"])
 EXIT_OK = 0
 EXIT_REFUSED = 1
 EXIT_READ_REFUSED = 2
 EXIT_LOG_FAILED = 3
+EXIT_DOWNLOAD_STOPPED = 4
 EXIT_FORCED = 130
 _EXIT_CODES = {
     ExitReason.STOPPED: EXIT_OK,
@@ -56,6 +72,7 @@ _PIECE_S = 1.0
 
 Clock = Callable[[], datetime]
 Read = Callable[[tuple[str, ...], ReadSettings], MarketRead]
+Download = Callable[[HistoryRequest, Clock, Callable[[], bool]], HistoryResult]
 
 
 def utc_now() -> datetime:
@@ -189,16 +206,27 @@ def make_read(clock: Clock) -> Read:
     return read
 
 
-def _config(path: Path, output: Output, clock: Clock) -> BotConfig | None:
-    """R-2: dosya yoksa, okunamıyorsa ya da bir ayar geçersizse `None`; hiçbir şeye dokunmaz."""
+def _document(path: Path, output: Output, clock: Clock) -> dict[str, object] | None:
+    """Ayar dosyasının eşlemi; dosya yoksa ya da okunamıyorsa `None`, nedeni konsolda."""
     try:
         with open(path, "rb") as file:
-            document = tomllib.load(file)
+            return tomllib.load(file)
     except FileNotFoundError:
         output.say(line(clock(), "ayar", f"ayar dosyası yok: {path.name}"))
         return None
     except (OSError, ValueError, RecursionError):  # TOML, encoding and 4300-digit errors
         output.say(line(clock(), "ayar", f"ayar dosyası okunamıyor: {path.name}"))
+        return None
+
+
+def _same_file(first: str, second: str) -> bool:
+    return Path(first).resolve() == Path(second).resolve()
+
+
+def _config(path: Path, output: Output, clock: Clock) -> BotConfig | None:
+    """R-2: dosya yoksa, okunamıyorsa ya da bir ayar geçersizse `None`; hiçbir şeye dokunmaz."""
+    document = _document(path, output, clock)
+    if document is None:
         return None
     result = load_config(document, clock())
     if result.config is None:
@@ -206,10 +234,41 @@ def _config(path: Path, output: Output, clock: Clock) -> BotConfig | None:
         return None
     # `app` compares the paths as text only; another spelling of the store (`./bot.db`) is caught
     # here, resolved, before any line is written (review round 1 L-3, VERIFY 0022)
-    if Path(result.config.log_path).resolve() == Path(result.config.store_path).resolve():
+    if _same_file(result.config.log_path, result.config.store_path):
         output.say(line(clock(), "ayar", "bot başlamadı: ayar geçersiz: bot.log_path"))
         return None
     return result.config
+
+
+def _download_config(path: Path, output: Output, clock: Clock) -> DownloadConfig | None:
+    """Spec 0023 R-2: ayarlar ağa çıkmadan ve diske yazmadan önce; ilk sorun adıyla."""
+    document = _document(path, output, clock)
+    if document is None:
+        return None
+    result = load_download_config(document, clock())
+    if result.config is None:
+        output.say(line(clock(), "ayar", f"indirme başlamadı: {result.message}"))
+        return None
+    bot = result.config.bot
+    # R-1: the data file is never the store or the bot's log, however the path is spelled
+    if any(_same_file(result.config.data_path, other) for other in (bot.store_path, bot.log_path)):
+        output.say(line(clock(), "ayar", "indirme başlamadı: ayar geçersiz: history.data_path"))
+        return None
+    return result.config
+
+
+def _download(
+    config_path: Path, output: Output, clock: Clock, stop: StopRequest, download: Download
+) -> int:
+    """Kilit yok, depo ve kayıt dosyası yok: yalnız konsol (spec 0023 R-1)."""
+    config = _download_config(config_path, output, clock)
+    if config is None:
+        return EXIT_REFUSED
+    try:
+        exit_ = run_download(config, DownloadParts(clock, download, output.say, stop))
+    except ForcedStop:  # the second request: the line is written, `.part` is gone (R-8)
+        return EXIT_FORCED
+    return EXIT_OK if exit_.completed else EXIT_DOWNLOAD_STOPPED
 
 
 def _prepare(config: BotConfig, output: Output, clock: Clock) -> int:
@@ -239,14 +298,17 @@ def run(
     stop: StopRequest | None = None,
     read: Read | None = None,
     wait: Callable[[float], None] | None = None,
+    download: Download = download_history,
 ) -> int:
     """Komutu çalıştırır, çıkış kodunu döndürür. Ayar, kilit, depo sırası: borsaya ve depoya
     ayarlar denetlenmeden dokunulmaz (R-2); kilit depodan önce alınır (R-6)."""
     stop = StopRequest() if stop is None else stop
     output = Output(console)
-    if list(argv) not in (["prepare"], ["start"]):
+    if list(argv) not in COMMANDS:
         output.say(USAGE)
         return EXIT_REFUSED
+    if argv[0] == "download":
+        return _download(config_path, output, clock, stop, download)
     config = _config(config_path, output, clock)
     if config is None:
         return EXIT_REFUSED
