@@ -33,3 +33,7 @@ htmlcov/
 *.sqlite3-journal
 *.db-journal
 data/
+
+# Local bot settings (spec 0022) — the example is committed, the real file never
+crytobot.toml
+*.db.lock

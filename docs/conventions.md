@@ -108,6 +108,18 @@
 - `ccxt`'nin `timeout`'u soket süresidir, toplam değil: yavaş akan yanıt onu aşar. Her çağrı daemon iş parçacığında, bekleme `min(çağrı süresi, kalan bütçe)`; `ThreadPoolExecutor` çıkışta takılan işi bekler, kullanılmaz — from spec 0017, plan Risk 6
 - `Retry-After` çağrıya değil istemciye aittir; yeniden deneme döngüsünde uygulamak sonraki çağrıları korumaz. — from spec 0017, review round 1 F-1
 - `ccxt` `OperationFailed`, `NetworkError` değildir; Binance'in `-1000/-1001/-1006` kodları `NetworkError` süzgecinden kaçar. — from spec 0017, review round 1 F-2
+- Python sinyal işleyicisi ana iş parçacığı Python'a dönünce koşar: Windows'ta okumanın `join`'i sırasında gelen Ctrl+C en çok
+  `call_timeout` kadar gecikir. Bekleme ≤1 s'lik parçalarla yapılır (`make_wait`); ilk istek yalnız işaret koyar, ikincisi
+  `ForcedStop(BaseException)` fırlatır — `except Exception` onu yutmaz, depo yazımı atomiktir. Ctrl+Break yalnız kendi süreç grubu
+  olan sürece ulaşır (`CREATE_NEW_PROCESS_GROUP`) — from spec 0022, plan Risk 6
+- `app`'in import izin listesinde `typing` yok ve `.now()`/`.time()`/`.monotonic()` adlı her öznitelik çağrısı saat çağrısı
+  sayılır (kendi yönteminiz de): `collections.abc.Callable` ve dataclass kullanılır, `Protocol` kullanılmaz; saat `LoopParts`
+  ile gelir. Dosya, ortam ve sinyal işi `__main__`'dedir — from spec 0022, plan Risk 1, 11
+- Yönlendirilmiş (pipe) konsol Windows'ta yerel kod sayfasındadır (cp1254), UTF-8 değildir: alt sürecin çıktısını test eden
+  kayıt dosyasına (UTF-8) bakar; konsol `errors="replace"` ile yazar — from spec 0022, build (`tests/main/test_lock_process.py`)
+- mypy yalnız koştuğu makinenin platformunu denetler: Windows'ta yeşil olan kod CI'da (ubuntu) kırmızı olabilir. Platforma
+  özgü ad (`signal.SIGBREAK`, `msvcrt`, `fcntl`) koşullu ifadede değil, `if sys.platform == "win32":` bloğunda kullanılır; yerelde
+  `mypy --platform linux src tests tools` ile denenir — from spec 0022, ship PR CI (`tests/main/test_entry.py`, A-3)
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.

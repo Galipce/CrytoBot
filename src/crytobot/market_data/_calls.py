@@ -59,13 +59,21 @@ def _run_limited[T](request: Callable[[float], T], limit: float) -> T:
 
 
 class Caller:
-    """Bir okumanın çağrıları: bütçe okuma başına; yasak ve `Retry-After` okuma boyuncadır."""
+    """Bir okumanın çağrıları: bütçe okuma başına; yasak ve `Retry-After` okuma boyuncadır.
+
+    `banned` ve `ban_retry_after`: okumada görülen 418 ve onun `Retry-After`'ı (spec 0022 R-11).
+    """
 
     def __init__(self, call_timeout: float, read_budget: float) -> None:
         self._call_timeout = call_timeout
         self._deadline = time.monotonic() + read_budget
         self._banned = False
         self._not_before = 0.0
+        self.ban_retry_after: float | None = None
+
+    @property
+    def banned(self) -> bool:
+        return self._banned
 
     def _remaining(self) -> float:
         return self._deadline - time.monotonic()
@@ -98,6 +106,7 @@ class Caller:
         if error.failure is CallFailure.BANNED:
             # Requests during a ban extend it: nothing else is sent in this read (plan Risk 7)
             self._banned = True
+            self.ban_retry_after = error.retry_after
         final = _FINAL.get(error.failure)
         if final is not None:
             raise CallFailed(final) from None
