@@ -245,3 +245,107 @@ def test_first_problem_in_file_order_is_named() -> None:
 def test_zero_ages_are_accepted() -> None:
     values = document(**{"turn.max_candle_age": 0, "turn.max_price_age": 0})
     assert setting_of(values) is None
+
+
+# Spec 0024: `[history]` indirmenin bölümüdür (0023); bot yükleyicisi adını tanır, içine bakmaz.
+HISTORY_VALUES: list[object] = [
+    {},
+    {"mode": "live"},
+    {"start": "dün", "pairs": 5},
+    {"alt": {"x": 1}},
+    "metin",
+    5,
+    [1, 2],
+]
+NEAR_NAMES = ["History", "HISTORY", "histroy", "historyy", "history_"]
+
+
+def with_history(values: object, value: object = None) -> dict[str, Any]:
+    """`history` eşlemin başına konur: dosya sırası sonucu değiştirmemeli (plan Risk 3)."""
+    assert isinstance(values, dict)
+    return {"history": {} if value is None else value, **values}
+
+
+@pytest.mark.parametrize("value", HISTORY_VALUES)
+def test_history_section_is_passed_unread(value: object) -> None:
+    """CB-1, CB-2: sonuç `[history]` yokken verilenle aynıdır; değeri mesaja ve ayarlara girmez."""
+    plain = load_config(document(), NOW)
+    result = load_config(with_history(document(), value), NOW)
+    assert result.config is not None and result.setting is None
+    assert result.config == plain.config
+    assert result.message == plain.message == "ayarlar geçerli"
+
+
+@pytest.mark.parametrize("name", NEAR_NAMES)
+def test_only_the_exact_history_name_is_passed(name: str) -> None:
+    """CB-3: büyük/küçük harf ya da benzer ad tanınmaz."""
+    values: dict[str, Any] = document()
+    values[name] = {}
+    result = load_config(values, NOW)
+    assert result.config is None and result.setting == name
+    assert result.message == f"bilinmeyen ayar: {name}"
+
+
+@pytest.mark.parametrize("history", [False, True])
+@pytest.mark.parametrize("section", list(BASE))
+def test_unknown_key_in_each_section_is_refused(section: str, history: bool) -> None:
+    """PB-1: beş bot bölümünde bilinmeyen anahtar, `[history]` olsun olmasın."""
+    values: dict[str, Any] = document()
+    values[section]["mode"] = "live"
+    if history:
+        values = with_history(values)
+    result = load_config(values, NOW)
+    assert result.config is None and result.setting == f"{section}.mode"
+    assert result.message == f"bilinmeyen ayar: {section}.mode"
+
+
+@pytest.mark.parametrize("name", ["live", "histroy"])
+def test_unknown_section_beside_history_is_refused(name: str) -> None:
+    """PB-2."""
+    values: dict[str, Any] = document()
+    values[name] = {}
+    result = load_config(with_history(values), NOW)
+    assert result.config is None and result.setting == name
+    assert result.message == f"bilinmeyen ayar: {name}"
+
+
+@pytest.mark.parametrize("name", SETTING_NAMES)
+def test_each_missing_setting_is_named_beside_history(name: str) -> None:
+    """PB-3."""
+    result = load_config(with_history(document(**{name: None})), NOW)
+    assert result.config is None and result.setting == name
+    assert result.message == f"ayar eksik: {name}"
+
+
+@pytest.mark.parametrize(("name", "value"), INVALID)
+def test_each_invalid_setting_is_named_beside_history(name: str, value: object) -> None:
+    """PB-3."""
+    result = load_config(with_history(document(**{name: value})), NOW)
+    assert result.config is None and result.setting == name
+    assert result.message == f"ayar geçersiz: {name}"
+
+
+@pytest.mark.parametrize("section", list(BASE))
+def test_missing_or_broken_section_is_named_beside_history(section: str) -> None:
+    """PB-3."""
+    values = document()
+    del values[section]
+    result = load_config(with_history(values), NOW)
+    assert result.setting == section and result.message == f"ayar eksik: {section}"
+    broken: dict[str, Any] = document()
+    broken[section] = "metin"
+    result = load_config(with_history(broken), NOW)
+    assert result.setting == section and result.message == f"ayar geçersiz: {section}"
+
+
+def test_only_history_misses_bot() -> None:
+    """PB-3: botun bölümleri `[history]`'den önce denetlenir."""
+    result = load_config({"history": {"mode": "live"}}, NOW)
+    assert result.config is None and result.setting == "bot"
+    assert result.message == "ayar eksik: bot"
+
+
+def test_first_problem_in_file_order_is_named_beside_history() -> None:
+    """PB-3 (0022/AC-3)."""
+    values = document(**{"turn.fee": "x", "risk.max_drawdown": "x", "strategy.k": None})
+    assert setting_of(with_history(values)) == "turn.fee"
