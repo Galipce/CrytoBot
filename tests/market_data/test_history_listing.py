@@ -94,6 +94,37 @@ def test_gaps_stay_unfilled_and_are_counted(
     assert summary.last_open == at(expected[-1])
 
 
+@pytest.mark.parametrize(
+    ("missing_hour", "gaps"),
+    [
+        (None, 0),
+        (4, 1),  # 04:00-08:00 closes inside the period that starts at 06:00
+        (0, 0),  # 00:00-04:00 closes before the start: warm-up only
+    ],
+)
+def test_start_between_candle_boundaries_counts_the_candle_it_cuts(
+    tmp_path: Path, missing_hour: int | None, gaps: int
+) -> None:
+    """AC-6, plan A-2: başlangıç mum sınırında değilken dönem içinde kapanan eksik mum boşluktur."""
+    interval = 4 * HOUR_MS
+    rows = rows_between(START_MS - 3 * interval, START_MS + 36 * HOUR_MS, interval)
+    if missing_hour is not None:
+        rows = [row for row in rows if row[0] != START_MS + missing_hour * HOUR_MS]
+    path = tmp_path / "h.jsonl"
+    request = make_request(
+        path,
+        pairs=(BTC,),
+        start=START + timedelta(hours=6),
+        days=1,
+        candle_interval=timedelta(hours=4),
+    )
+
+    result = run_download(request, FakeHistoryExchange({BTC: rows}))
+
+    assert result.stop is None, result.stop
+    assert result.summaries[0].gaps == gaps
+
+
 def test_missing_warm_up_is_not_a_gap(tmp_path: Path) -> None:
     """Çift dönem başında listelendiyse ısınma mumu yoktur; bu boşluk değildir."""
     summary, opens = btc_summary(tmp_path, rows_between(START_MS, END_MS))

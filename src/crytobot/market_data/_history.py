@@ -287,10 +287,9 @@ class _Download:
                 into.last = open_ms
                 if open_ms < window.last_slot:
                     into.gaps += 1  # the end of the period is missing
-            elif (
-                later - open_ms > window.interval_ms and later - window.interval_ms >= window.start
-            ):
-                into.gaps += 1  # missing candles inside the period, not before it (plan Risk 6)
+            elif later - open_ms > window.interval_ms and later > window.start:
+                # the newest missing candle closes at `later`: inside the period (plan Risk 6, A-2)
+                into.gaps += 1
             later = open_ms
             into.count += 1
             into.in_period += open_ms >= window.start
