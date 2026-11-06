@@ -58,6 +58,8 @@ type = "forbidden"
 source_modules = [
     "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.analysis",
     "crytobot.strategy", "crytobot.portfolio", "crytobot.control", "crytobot.reporting",
+    # the entry point only wires real effects: the paper simulator comes from app (spec 0022)
+    "crytobot.__main__",
 ]
 forbidden_modules = ["crytobot.execution"]
 allow_indirect_imports = true
@@ -80,6 +82,8 @@ source_modules = [
     "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.analysis",
     "crytobot.strategy", "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest",
     "crytobot.control", "crytobot.reporting",
+    # the store is reached only through app's gates (spec 0022)
+    "crytobot.__main__",
 ]
 forbidden_modules = ["crytobot.persistence"]
 allow_indirect_imports = true
