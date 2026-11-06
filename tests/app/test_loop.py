@@ -133,6 +133,27 @@ def test_loop_error_is_logged_by_type_and_loop_goes_on(tmp_path: Path) -> None:
     assert bot.read_times() == [START, NOW + HOUR]
 
 
+def test_missed_boundaries_survive_a_failed_turn(tmp_path: Path) -> None:
+    """R-8 (review L-1): uykudan sonra okuma hata verirse kaçan sınırlar sonraki özete girer."""
+
+    def sleep(bot: Any) -> None:
+        bot.clock.advance(3 * 3600)  # NOW+1h and NOW+2h are never seen
+
+    bot = harness(
+        opened_store(tmp_path / "s.db"),
+        stop_after=2,
+        wait_hooks={0: sleep},
+        answers={1: RuntimeError("x")},
+    )
+    bot.run()
+    woke, after = bot.read_times()[1:]
+    assert NOW + 3 * HOUR < woke < NOW + 4 * HOUR and after == NOW + 4 * HOUR
+    assert len(bot.events("hata")) == 1
+    first, second = bot.events("tur")
+    assert "kaçan_sınır=0" in first
+    assert "kaçan_sınır=2" in second
+
+
 def test_error_text_and_secrets_never_logged(tmp_path: Path) -> None:
     """R-15: saat, bekleme ve okuma hatalarının metni hiçbir satırda yoktur."""
     bot = harness(opened_store(tmp_path / "s.db"), stop_after=2, answers={0: ValueError(SECRET)})

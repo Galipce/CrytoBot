@@ -183,6 +183,7 @@ class _Loop:
     def turn(self, target: Due) -> ExitReason | None:
         now = self.moment()
         if now is None:
+            self.missed += target.missed  # R-8: carried to the next summary
             return None
         banned = self.banned(now)
         if banned:
@@ -190,7 +191,10 @@ class _Loop:
             at = now
         else:
             read = self.read(now)
-            if read is None or isinstance(read, ExitReason):
+            if read is None:
+                self.missed += target.missed  # R-8: carried to the next summary
+                return None
+            if isinstance(read, ExitReason):
                 return read
             market, at = read
         result = run_turn(
