@@ -1,5 +1,6 @@
 # CrytoBot ayar dosyası örneği (spec 0022). Kopyala: crytobot.toml (çalışma dizininde, git'e girmez).
 # Hiçbir ayarın varsayılanı yoktur: her anahtar zorunludur, bilinmeyen anahtar reddedilir.
+# [history] bölümünü bot okumaz; içini `python -m crytobot download` denetler (spec 0023).
 # Para ve oranlar metin olarak yazılır ("0.01" = %1); ondalık sayı (0.01) kabul edilmez.
 # Süreler saniyedir. Aralıklar Binance metnidir: 1m 3m 5m 15m 30m 1h 2h 4h 6h 8h 12h 1d.
 # API anahtarı yoktur ve okunmaz: bot yalnız paper modda çalışır.
@@ -40,3 +41,12 @@ rsi_threshold = "70"
 atr_period = 14
 k = "2"
 r = "2"
+
+# Geçmiş veri indirme (`python -m crytobot download`, spec 0023): beyaz listedeki çiftlerin kapanmış
+# mumları, ısınma için `candle_count` kadar önceki mumlarla, herkese açık veriden anahtarsız indirilir.
+# Mum aralığı, çiftler ve çağrı süresi yukarıdaki ayarlardır. Var olan dosyanın üzerine yazılmaz.
+# Dönemin varsayılanı yoktur: indirmeden önce aşağıdaki satırların başındaki "# " kaldırılır.
+# [history]
+# data_path = "crytobot-history.jsonl"   # veri dosyası; deponun ve kayıt dosyasının yolu olamaz
+# start = 2025-11-01T00:00:00Z           # dönem başı, UTC, tur aralığı sınırında
+# end = 2025-12-01T00:00:00Z             # dönem sonu (hariç); başlangıçtan sonra, indirme anından önce

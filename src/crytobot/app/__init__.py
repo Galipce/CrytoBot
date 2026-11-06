@@ -13,9 +13,22 @@ Gerçek etkiler (saat, bekleme, piyasa okuması, çıktı, durdurma isteği) `Lo
 `app` saat çağırmaz, borsaya kendi başına çıkmaz, yalnız kendisine verilen okumayı çağırır. Borsa
 yasağı süresince okuma yapılmaz. Her başlatma bir deneme koşusudur (`TRIAL_MARK`, BR-10). Giriş
 noktası `python -m crytobot`'tur.
+
+İndirme (spec 0023): `load_download_config` aynı ayar dosyasından botun ayarlarını ve `[history]`
+bölümünü (veri dosyası yolu, dönem) denetler; `run_download` geçmiş veri indirmesini `DownloadParts`
+ile verilen saat, indirme işlevi, çıktı ve durdurma isteğiyle yapar. Depoya, kilide ve kayıt
+dosyasına dokunmaz.
 """
 
 from crytobot.app._config import SETTING_NAMES, BotConfig, ConfigResult, load_config
+from crytobot.app._download import (
+    DownloadConfig,
+    DownloadConfigResult,
+    DownloadExit,
+    DownloadParts,
+    load_download_config,
+    run_download,
+)
 from crytobot.app._events import TRIAL_MARK, line
 from crytobot.app._inputs import PairMarket, TurnSettings
 from crytobot.app._loop import (
@@ -51,6 +64,10 @@ __all__: list[str] = [
     "BotConfig",
     "BuyHalt",
     "ConfigResult",
+    "DownloadConfig",
+    "DownloadConfigResult",
+    "DownloadExit",
+    "DownloadParts",
     "ExitReason",
     "ForcedStop",
     "LogWriteError",
@@ -72,9 +89,11 @@ __all__: list[str] = [
     "TurnSettings",
     "line",
     "load_config",
+    "load_download_config",
     "open_for_start",
     "prepare_store",
     "read_pairs",
+    "run_download",
     "run_loop",
     "run_turn",
     "to_turn_market",

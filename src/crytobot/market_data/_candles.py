@@ -77,6 +77,21 @@ def _check_times(candles: Sequence[MarketCandle], interval: timedelta) -> None:
         previous = candle.open_time
 
 
+def parse_rows(
+    rows: Sequence[object], interval: timedelta
+) -> tuple[MarketCandle, ...] | IssueReason:
+    """Satırların her biri ve zaman sırası denetlenir; ilk bozukluğun adı döner, seri onarılmaz.
+
+    Okuma (0017) ve geçmiş indirme (0023) aynı denetimi kullanır: biri gevşerse ikisi gevşer.
+    """
+    try:
+        candles = tuple(_candle(row) for row in rows)
+        _check_times(candles, interval)
+    except _BadSeries as bad:
+        return bad.reason
+    return candles
+
+
 def _after_last_gap(
     candles: Sequence[MarketCandle], interval: timedelta
 ) -> tuple[tuple[MarketCandle, ...], bool]:
@@ -95,11 +110,9 @@ def parse_series(
         return CandleSeries(None, IssueReason.MALFORMED_RESPONSE)
     if len(response) > requested:
         return CandleSeries(None, IssueReason.TOO_MANY_CANDLES)
-    try:
-        candles = [_candle(row) for row in response]
-        _check_times(candles, interval)
-    except _BadSeries as bad:
-        return CandleSeries(None, bad.reason)
+    candles = parse_rows(response, interval)
+    if isinstance(candles, IssueReason):
+        return CandleSeries(None, candles)
     try:
         closed = [candle for candle in candles if candle.open_time + interval <= now]
     except OverflowError:  # a stamp at the end of the calendar
