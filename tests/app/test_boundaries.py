@@ -5,6 +5,8 @@ burada, kaynak kod üzerinde izin listesiyle sınanır (0015 plan Risk 10'un ayn
 
 Spec 0019: `market_data`'nın yalnız kökü import edilir, alt modülleri edilmez (CB-1, PB-2). Okuma
 işlevi hiçbir biçimde kullanılamaz, adı `app` kaynağında geçemez (CB-2, CB-3): `app` borsaya çıkmaz.
+
+Spec 0026: `backtest`'in de yalnız kökü import edilir (CB-4, R-3d); alt modülleri ve `*` edilmez.
 """
 
 import ast
@@ -37,7 +39,7 @@ ALLOWED_MODULES = {
     "crytobot.risk",
     "crytobot.strategy",
 }
-ROOT_ONLY_MODULES = {"crytobot.market_data"}
+ROOT_ONLY_MODULES = {"crytobot.market_data", "crytobot.backtest"}
 MARKET_READER = "read_market_data"
 CLOCK_CALLS = {"now", "utcnow", "today", "time", "monotonic"}
 
@@ -224,3 +226,33 @@ def test_reader_name_scan_covers_every_python_file(
     path.write_text(content, encoding="utf-8")
 
     assert files_naming_reader(tmp_path) == [relative]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import crytobot.backtest",
+        "from crytobot.backtest import BacktestRun",
+        "from crytobot.backtest import x",
+    ],
+)
+def test_import_guard_accepts_backtest_root(source: str) -> None:
+    """0026 CB-4: `backtest` kökü `app`'e açıktır; paket var olmasa da kaynak metni sınanır."""
+    assert forbidden_imports(source) == []
+
+
+@pytest.mark.parametrize(
+    ("source", "finding"),
+    [
+        ("import crytobot.backtest._metrics", None),
+        ("from crytobot.backtest._metrics import x", None),
+        ("from crytobot.backtest import *", "from crytobot.backtest import *"),
+        ("from crytobot import backtest", None),
+    ],
+)
+def test_import_guard_rejects_backtest_internals(source: str, finding: str | None) -> None:
+    """0026 CB-4 (R-3d): kök kuralı önek kuralı değildir, alt modül yolu ve `*` geçmez."""
+    found = forbidden_imports(source)
+    assert found != []
+    if finding is not None:
+        assert found == [finding]
