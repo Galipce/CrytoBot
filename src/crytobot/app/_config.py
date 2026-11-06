@@ -1,7 +1,9 @@
 """Ayar dosyasının eşlemi → `BotConfig` (spec 0022 R-2, R-3, R-7; plan Risk 4).
 
-Hiçbir ayarın varsayılanı yoktur, bilinmeyen anahtar reddedilir. Sorun ayarın `bölüm.anahtar`
-adıyla söylenir; ham değer mesaja yazılmaz. Önce her ayarın varlığı ve biçimi, sonra anlamı
+Hiçbir ayarın varsayılanı yoktur, bilinmeyen anahtar ve bölüm reddedilir. Tek istisna
+`[history]` bölümüdür (spec 0024): adı tam olarak tanınır ve değerine bakılmadan geçilir, içini
+indirme yükleyicisi denetler (0023). Sorun ayarın `bölüm.anahtar` adıyla söylenir; ham değer
+mesaja yazılmaz. Önce her ayarın varlığı ve biçimi, sonra anlamı
 denetlenir, ikisi de dosya sırasıyla. Para ve oranlar metin (`"0.01"`) ya da tam sayıdır, `float`
 kabul edilmez; süreler saniye, aralıklar Binance metni (`"1h"`). Limit alanları sabit bir
 iskeletin içinde tek tek denenir: iskelet yalnız denetim içindir, değer olarak kullanılmaz. Sonra
@@ -25,6 +27,8 @@ _PROBE_PAIR = "PROBE/USDT"
 _PROBE_STRATEGY = StrategySettings(1, 2, 2, Decimal(70), 2, Decimal(2), Decimal(2))
 _INTERVALS_BY_TEXT = {text: interval for interval, text in CANDLE_INTERVALS.items()}
 _DIGITS = frozenset("0123456789")
+# Spec 0024: its contents are judged by the download loader (0023), the bot never reads them
+_PASSED_SECTION = "history"
 
 
 @dataclass(frozen=True)
@@ -205,6 +209,8 @@ def _parse(document: object) -> dict[str, object]:
             if key not in known:
                 raise _Problem(f"{section}.{key}", f"bilinmeyen ayar: {section}.{key}")
     for section in document:
+        if section == _PASSED_SECTION:
+            continue
         if section not in {name for name, _ in _SCHEMA}:
             raise _Problem(str(section), f"bilinmeyen ayar: {section}")
     return values
