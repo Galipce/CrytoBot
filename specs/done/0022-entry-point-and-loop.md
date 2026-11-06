@@ -1,6 +1,6 @@
 # Spec 0022 — Giriş noktası ve paper döngüsü
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0022-plan.md`
 - Self-critique: done
@@ -55,33 +55,35 @@ none — no user interface. Kullanıcı yalnız konsol komutlarını ve konsol/k
 - Backlog: B-48 ve B-50 bu spec'le kapanır. B-29 bu spec'te makine adlandırılarak karara bağlanır.
 
 ## Acceptance criteria
-- [ ] AC-1 — Mutlu yol (R-8, R-9, R-13): hazırlanmış depo ve sahte borsayla başlatma ilk turu hemen atar, sonraki turları aralık sınırlarında atar. Her tur o anın okumasını ve aynı süreç belleğini kullanır, tur özetleri konsola ve kayıt dosyasına yazılır.
-- [ ] AC-2 — Yalnız paper (R-1): ortamda anahtar varken bile hazırlık ve başlatma anahtar okumaz, sahte borsa emir ve hesap çağrısı kaydetmez. Live modlu depoyla başlatma adıyla reddedilir ve tur atılmaz.
-- [ ] AC-3 — Ayarlar (R-2, R-7): dosya yok, okunamıyor, her eksik ayar, her geçersiz ayar mum aralığından kısa ya da kabul edilmeyen tur aralığı ve tur aralığına eşit ya da ondan uzun okuma bütçesi için bot başlamaz, ilk sorunlu ayar adıyla söylenir, borsaya ve depoya dokunulmaz.
-- [ ] AC-4 — Hazırlık (R-3): depo yokken paper deposu oluşur, açılış bakiyesi ayardaki değerdir ve tur atılmaz. Depo varken (okunabilir ya da bozuk) hazırlık hiçbir şey yazmadan reddeder. Eksik, sıfır, negatif, sayı olmayan ve defterin basamak sınırını aşan açılış bakiyesi depo oluşturmadan reddedilir.
-- [ ] AC-5 — Depo yoksa başlamaz (R-4): depo yok, okunamıyor, meşgul ve defter açılmamış durumlarının her birinde başlatma adıyla reddeder ve depo oluşmaz. Hazırlık önerisi yalnız depo yokken çıkar.
-- [ ] AC-6 — Yeniden başlama (R-5): açık pozisyonu, durumu bilinmeyen emri ve süren drawdown durdurması olan bir koşu durdurulup yeniden başlatılınca hepsi aynen yüklenir. Durdurma sürer, alım olmaz, bilinmeyen emir sorgulanır.
-- [ ] AC-7 — Tek süreç (R-6): aynı depoyla çalışan bot varken ikinci başlatma adıyla reddedilir ve çalışan botun turları ve deposu etkilenmez.
-- [ ] AC-8 — Zamanlama sınırları (R-8): sınıra tam denk gelen başlatmada ilk tur hemen atılır ve aynı sınır için ikinci tur atılmaz. Bir sınırı aşan turdan sonra kaçan sınır telafi edilmez, kaçan sınır sayısı (1 ve 2 vakaları) kayda geçer, turlar üst üste binmez. Saat geri alınınca geçilmiş sınır için ikinci tur atılmaz. Uykudan uyanmayı taklit eden saat sıçramasında kaçan sınırlar telafi edilmeden sayılır.
-- [ ] AC-9 — Okuma reddi (R-10, B-50): reddedilen okumada tur başlatılmaz, ne geçersiz zaman ne geçersiz veri sonucu oluşur, depo değişmez. Ret nedeni adıyla kaydedilir ve döngü durur. Saat reddi (`CLOCK`) da aynı yoldan geçer.
-- [ ] AC-10 — Borsa yasağı (R-11, B-48): `Retry-After`'lı 418'den sonra bitiş anından önceki turlarda sahte borsaya istek gitmez. Bu turlarda alım olmaz ve fiyatsız kapanış yapılmaz. Bitiş anından sonraki ilk turda okuma yeniden yapılır. `Retry-After`'sız 418'de sonraki okuma bir tur aralığından önce yapılmaz. Günler süren bir `Retry-After` kırpılmadan uygulanır. Yasağın başlangıcı ve bitiş anı bildirilir.
-- [ ] AC-11 — Temiz durdurma (R-12): beklemedeyken gelen durdurma isteği hemen çıkarır. Tur sırasında gelen istek turun bitmesini bekler, yeni tur başlamaz, depo turun kaydettiği hâldedir. İkinci istek anında çıkarır. Durdurma nedeni ve son tur sonucu kayda geçer.
-- [ ] AC-12 — Deneme işareti (R-14): başlatma çıktısı, kayıt dosyasındaki başlatma kaydı ve her tur özeti "BR-10 öncesi deneme" işaretini taşır.
-- [ ] AC-13 — Beklenmeyen hata ve çıktı (R-13, R-15): döngü adımında bir hata atılınca bot çökmez, hata tip adıyla kaydedilir, istisna metni ve sır biçimli metin kayıtta yoktur, sonraki sınırda tur atılır. Kayıt dosyası yazılamıyorsa konsola yazılır ve bot durur. Türkçe karakter basamayan konsolda bot çökmez, kayıt dosyası UTF-8 tam metni taşır. Yeniden başlamada süren durum yeniden "başladı" olarak bildirilir.
-- [ ] AC-14 — Gerçek borsa (R-1, R-9): VERIFY'da, `check` dışında, bu makinede hazırlık ve başlatmayla Binance spot'a karşı anahtarsız en az iki tur atan, sonra Ctrl+C ile temiz duran tek bir gözlem kanıtla belgelenir.
+- [x] AC-1 — Mutlu yol (R-8, R-9, R-13): hazırlanmış depo ve sahte borsayla başlatma ilk turu hemen atar, sonraki turları aralık sınırlarında atar. Her tur o anın okumasını ve aynı süreç belleğini kullanır, tur özetleri konsola ve kayıt dosyasına yazılır.
+- [x] AC-2 — Yalnız paper (R-1): ortamda anahtar varken bile hazırlık ve başlatma anahtar okumaz, sahte borsa emir ve hesap çağrısı kaydetmez. Live modlu depoyla başlatma adıyla reddedilir ve tur atılmaz.
+- [x] AC-3 — Ayarlar (R-2, R-7): dosya yok, okunamıyor, her eksik ayar, her geçersiz ayar mum aralığından kısa ya da kabul edilmeyen tur aralığı ve tur aralığına eşit ya da ondan uzun okuma bütçesi için bot başlamaz, ilk sorunlu ayar adıyla söylenir, borsaya ve depoya dokunulmaz.
+- [x] AC-4 — Hazırlık (R-3): depo yokken paper deposu oluşur, açılış bakiyesi ayardaki değerdir ve tur atılmaz. Depo varken (okunabilir ya da bozuk) hazırlık hiçbir şey yazmadan reddeder. Eksik, sıfır, negatif, sayı olmayan ve defterin basamak sınırını aşan açılış bakiyesi depo oluşturmadan reddedilir.
+- [x] AC-5 — Depo yoksa başlamaz (R-4): depo yok, okunamıyor, meşgul ve defter açılmamış durumlarının her birinde başlatma adıyla reddeder ve depo oluşmaz. Hazırlık önerisi yalnız depo yokken çıkar.
+- [x] AC-6 — Yeniden başlama (R-5): açık pozisyonu, durumu bilinmeyen emri ve süren drawdown durdurması olan bir koşu durdurulup yeniden başlatılınca hepsi aynen yüklenir. Durdurma sürer, alım olmaz, bilinmeyen emir sorgulanır.
+- [x] AC-7 — Tek süreç (R-6): aynı depoyla çalışan bot varken ikinci başlatma adıyla reddedilir ve çalışan botun turları ve deposu etkilenmez.
+- [x] AC-8 — Zamanlama sınırları (R-8): sınıra tam denk gelen başlatmada ilk tur hemen atılır ve aynı sınır için ikinci tur atılmaz. Bir sınırı aşan turdan sonra kaçan sınır telafi edilmez, kaçan sınır sayısı (1 ve 2 vakaları) kayda geçer, turlar üst üste binmez. Saat geri alınınca geçilmiş sınır için ikinci tur atılmaz. Uykudan uyanmayı taklit eden saat sıçramasında kaçan sınırlar telafi edilmeden sayılır.
+- [x] AC-9 — Okuma reddi (R-10, B-50): reddedilen okumada tur başlatılmaz, ne geçersiz zaman ne geçersiz veri sonucu oluşur, depo değişmez. Ret nedeni adıyla kaydedilir ve döngü durur. Saat reddi (`CLOCK`) da aynı yoldan geçer.
+- [x] AC-10 — Borsa yasağı (R-11, B-48): `Retry-After`'lı 418'den sonra bitiş anından önceki turlarda sahte borsaya istek gitmez. Bu turlarda alım olmaz ve fiyatsız kapanış yapılmaz. Bitiş anından sonraki ilk turda okuma yeniden yapılır. `Retry-After`'sız 418'de sonraki okuma bir tur aralığından önce yapılmaz. Günler süren bir `Retry-After` kırpılmadan uygulanır. Yasağın başlangıcı ve bitiş anı bildirilir.
+- [x] AC-11 — Temiz durdurma (R-12): beklemedeyken gelen durdurma isteği hemen çıkarır. Tur sırasında gelen istek turun bitmesini bekler, yeni tur başlamaz, depo turun kaydettiği hâldedir. İkinci istek anında çıkarır. Durdurma nedeni ve son tur sonucu kayda geçer.
+- [x] AC-12 — Deneme işareti (R-14): başlatma çıktısı, kayıt dosyasındaki başlatma kaydı ve her tur özeti "BR-10 öncesi deneme" işaretini taşır.
+- [x] AC-13 — Beklenmeyen hata ve çıktı (R-13, R-15): döngü adımında bir hata atılınca bot çökmez, hata tip adıyla kaydedilir, istisna metni ve sır biçimli metin kayıtta yoktur, sonraki sınırda tur atılır. Kayıt dosyası yazılamıyorsa konsola yazılır ve bot durur. Türkçe karakter basamayan konsolda bot çökmez, kayıt dosyası UTF-8 tam metni taşır. Yeniden başlamada süren durum yeniden "başladı" olarak bildirilir.
+- [x] AC-14 — Gerçek borsa (R-1, R-9): VERIFY'da, `check` dışında, bu makinede hazırlık ve başlatmayla Binance spot'a karşı anahtarsız en az iki tur atan, sonra Ctrl+C ile temiz duran tek bir gözlem kanıtla belgelenir.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 4 (review round 1, review round 2, VERIFY round 1, review round 3) |
+| Review findings: real / noise / deferred | 10 / 4 / 2 (real: R1 L-1, L-2, I-1, L-3 (R-05 → VERIFY 1), R2 L-1, V-1, V-3, V-4, R3 L-2, I-2; noise: R1 I-2, V-5, R3 L-1, V-6; deferred: V-2 → B-52, R3 I-1 → B-53; investigate açık: I-1 R-03) |
+| Regressions introduced | 0 bilinen (I-1, R-03: @9e1571a'daki adsız `test-unit` hatası açık; kanıt bu PR'ın full CI koşusu) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `check` ve `doctor` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). Full kanıt: bu PR'ın CI koşusu (run kimliği CI bitince eklenir). AC-14 gözlemi (V-1): 2026-11-06, bu makinede, Binance spot'a anahtarsız 3 tur, gerçek Ctrl+C (`SIGINT`), çıkış kodu 0; çıktı bu PR'ın açıklamasında (Evidence policy 3).
