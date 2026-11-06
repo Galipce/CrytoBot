@@ -1,6 +1,6 @@
 # Spec 0024 — Bot ayar yükleyicisinin `[history]` bölümünü tanıması (mini)
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0024-plan.md`
 - Self-critique: done
@@ -14,17 +14,17 @@ içine bakmadan geçer, botun kendi ayarlarının denetimi aynen kalır, başka 
 ayarlarını denetlemez, indirme kodu yazmaz, turun davranışını değiştirmez.
 
 ## Changed behavior
-- [ ] CB-1 — `[history]` bölümü bulunan, botun ayarları geçerli bir ayar eşlemiyle bot ayar yükleyicisi geçerli sonuç verir ve ayarlar `[history]` yokken verilenle aynıdır; mesaj bugünkü gibi `ayarlar geçerli` olur. Bölüm isteğe bağlıdır: yokken de sonuç bugünkü gibidir.
-- [ ] CB-2 — Bot ayar yükleyicisi `[history]`'nin değerine bakmaz: boş tablo, bilinmeyen anahtarlar (`mode = "live"` dahil), biçimi geçersiz değerler, alt tablo ve tablo olmayan bir değer (metin, sayı, liste) ayarları reddettirmez. Bu değerler sonucun mesajında geçmez ve ayarlara taşınmaz.
-- [ ] CB-3 — Yalnız tam olarak `history` adı tanınır. `History`, `HISTORY`, `histroy`, `historyy`, `history_` adlı bölümler bugünkü gibi `bilinmeyen ayar: <ad>` ile, o adla reddedilir.
-- [ ] CB-4 — Giriş noktası: `[history]` bölümü eklenmiş bir ayar dosyasıyla hazırlık depoyu oluşturur, başlatma da sahte borsayla tur atar. Hiçbiri "bilinmeyen ayar" demez.
+- [x] CB-1 — `[history]` bölümü bulunan, botun ayarları geçerli bir ayar eşlemiyle bot ayar yükleyicisi geçerli sonuç verir ve ayarlar `[history]` yokken verilenle aynıdır; mesaj bugünkü gibi `ayarlar geçerli` olur. Bölüm isteğe bağlıdır: yokken de sonuç bugünkü gibidir.
+- [x] CB-2 — Bot ayar yükleyicisi `[history]`'nin değerine bakmaz: boş tablo, bilinmeyen anahtarlar (`mode = "live"` dahil), biçimi geçersiz değerler, alt tablo ve tablo olmayan bir değer (metin, sayı, liste) ayarları reddettirmez. Bu değerler sonucun mesajında geçmez ve ayarlara taşınmaz.
+- [x] CB-3 — Yalnız tam olarak `history` adı tanınır. `History`, `HISTORY`, `histroy`, `historyy`, `history_` adlı bölümler bugünkü gibi `bilinmeyen ayar: <ad>` ile, o adla reddedilir.
+- [x] CB-4 — Giriş noktası: `[history]` bölümü eklenmiş bir ayar dosyasıyla hazırlık depoyu oluşturur, başlatma da sahte borsayla tur atar. Hiçbiri "bilinmeyen ayar" demez.
 
 ## Preserved behavior
-- [ ] PB-1 — `test_unknown_setting_is_refused`'ın bugünkü örnekleri aynen reddedilir (`bot.mode`, `risk.api_key`, `live` bölümü) ve mesajları değişmez. Beş bölümün (`bot`, `market`, `turn`, `risk`, `strategy`) her birinde bilinmeyen anahtar `bilinmeyen ayar: <bölüm>.<anahtar>` ile reddedilir.
-- [ ] PB-2 — `[history]` varken de bilinmeyen başka bir bölüm, o bölümün adıyla reddedilir.
-- [ ] PB-3 — `[history]` varken de botun her eksik ve geçersiz ayarı, her eksik ya da bozuk bölüm ve tablo olmayan bir ayar eşlemi bugünkü adla ve mesajla reddedilir. Yalnız `[history]` bulunan bir eşlem `ayar eksik: bot` ile reddedilir. İlk sorun dosya sırasıyla söylenir (0022/AC-3).
-- [ ] PB-4 — `SETTING_NAMES` ve `BotConfig`'in alanları değişmez. `tests/app/test_config.py`'nin geri kalan testleri ve assert'leri aynen kalır.
-- [ ] PB-5 — `_config.py` dışındaki `src/` kodu, `crytobot.example.toml`, `scripts/check.conf` ve `.github/` değişmez; turun davranışı değişmez. `./scripts/doctor --strict` geçer.
+- [x] PB-1 — `test_unknown_setting_is_refused`'ın bugünkü örnekleri aynen reddedilir (`bot.mode`, `risk.api_key`, `live` bölümü) ve mesajları değişmez. Beş bölümün (`bot`, `market`, `turn`, `risk`, `strategy`) her birinde bilinmeyen anahtar `bilinmeyen ayar: <bölüm>.<anahtar>` ile reddedilir.
+- [x] PB-2 — `[history]` varken de bilinmeyen başka bir bölüm, o bölümün adıyla reddedilir.
+- [x] PB-3 — `[history]` varken de botun her eksik ve geçersiz ayarı, her eksik ya da bozuk bölüm ve tablo olmayan bir ayar eşlemi bugünkü adla ve mesajla reddedilir. Yalnız `[history]` bulunan bir eşlem `ayar eksik: bot` ile reddedilir. İlk sorun dosya sırasıyla söylenir (0022/AC-3).
+- [x] PB-4 — `SETTING_NAMES` ve `BotConfig`'in alanları değişmez. `tests/app/test_config.py`'nin geri kalan testleri ve assert'leri aynen kalır.
+- [x] PB-5 — `_config.py` dışındaki `src/` kodu, `crytobot.example.toml`, `scripts/check.conf` ve `.github/` değişmez; turun davranışı değişmez. `./scripts/doctor --strict` geçer.
 
 ## Constraints
 - Sensitive area: doğrudan yok. Paper ↔ live mod anahtarına (`docs/domain.md`) dolaylı olarak değiyor: bugünkü bilinmeyen anahtar reddi `bot.mode`'u da yakalıyor. `history.mode` CB-2 gereği geçilir. Botta mod alanı olmadığı (0022 R-1) ve bot `[history]`'nin değerini okumadığı için hiçbir davranışı değiştiremez. Beş bot bölümündeki ret PB-1 ile korunur. `[history]`'nin içini indirme yükleyicisi denetler (0023 R-2, AC-3). Karar: Galip Badem, 2026-11-06 (clarify 4).
@@ -41,6 +41,6 @@ ayarlarını denetlemez, indirme kodu yazmaz, turun davranışını değiştirme
 
 ## Definition of Done
 - [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Criterion ↔ evidence table complete for CB-* **and** PB-*
-- [ ] Spec moved to `specs/done/` (immutable there)
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Criterion ↔ evidence table complete for CB-* **and** PB-*
+- [x] Spec moved to `specs/done/` (immutable there)
