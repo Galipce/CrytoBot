@@ -26,7 +26,13 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | `control` | CLI ve Telegram komutları, yetkilendirme (chat ID, TOTP, teyit), audit log | Audit log, mod/aşama durumu |
 | `reporting` | Günlük rapor, metrikler (günlük hedef dahil), bildirim gönderimi | Rapor kayıtları |
 | `persistence` | Defter, emirler ve risk durumunu tek SQLite deposunda korumak; okunamayan depoda durumu reddetmek | Depo dosyası, biçim sürümü, depo modu |
-| `app` | Bileşim kökü (composition root): modülleri bağlar, zamanlayıcı/döngü | — |
+| `app` | Bileşim kökü (composition root): modülleri bağlar, ayarları denetler, zamanlayıcı/döngü | — (depo hazırlığı ve başlatma kapıları; gerçek etkiler enjekte edilir) |
+
+**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start`, spec 0022) bir modül
+değildir, paket olmadığı için tabloda yer almaz. Karar içermez: ayar dosyasını (`crytobot.toml`) okur,
+gerçek saati, ≤1 s'lik beklemeyi, sinyalleri, tek süreç kilidini (`<depo>.lock`), konsol ve kayıt
+dosyası yazıcısını ve piyasa okumasını `app`'e verir. Kararların, zamanlamanın ve depo kapılarının
+hepsi `app`'tedir; `app` saat çağırmaz ve okuma işlevini import etmez, yalnız kendisine verileni çağırır.
 
 ## Communication rules
 - Modüller birbirini yalnızca **public arayüz** (`<module>/__init__.py` ile dışa açılanlar) üzerinden çağırır.
@@ -42,6 +48,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 - `strategy`, `analysis`, `news`, `research`, `llm` hiçbir zaman `execution`'ı import etmez.
 - `execution`'ı yalnızca `risk`, `app`, `backtest` ve `persistence` import eder.
 - `persistence`'ı yalnızca `app` import eder; `persistence` diğer modüllerin yalnız public arayüzünü kullanır (ADR 0001).
+- Giriş noktası (`crytobot.__main__`) `execution`'ı ve `persistence`'ı import etmez: paper simülatörü ve depo yalnız `app`'in kapılarından geçer (spec 0022).
 - `analysis` hiçbir proje modülünü ve hiçbir I/O kütüphanesini import etmez (saf hesap).
 - Hiçbir modül başka bir modülün iç alt modülünü (`<module>._*` / `<module>.internal`) import etmez.
 - Telegram kütüphanesi yalnızca `control` ve `reporting` tarafından import edilir.

@@ -11,6 +11,28 @@ uv sync --locked          # Python 3.12 + kilitli geliştirme araçları, paket 
 ./scripts/check           # tam doğrulama (tek kanıt): + yavaş testler ve coverage kapısı
 ```
 
+## Çalıştırma (yalnız paper)
+
+Bot yalnız paper modda çalışır; API anahtarı yoktur ve okunmaz, borsadan yalnız herkese açık veri
+okunur (spec 0022). Ayarlar çalışma dizinindeki `crytobot.toml`'dadır; hiçbirinin varsayılanı yoktur.
+
+```sh
+cp crytobot.example.toml crytobot.toml   # düzenle: çiftler, limitler, strateji, yollar
+uv run python -m crytobot prepare        # bir kez: paper deposunu açılış bakiyesiyle oluşturur
+uv run python -m crytobot start          # turları UTC aralık sınırlarında atar
+```
+
+- **Hazırlık** depo yoksa onu oluşturur; depo varsa hiçbir şey yazmadan reddeder. **Başlatma** depoyu
+  asla oluşturmaz: depo yoksa hazırlığı önerir. Yeniden başlatma defteri, emirleri ve risk durumunu
+  (süren drawdown durdurması dahil) depodan aynen yükler. Aynı depoyla ikinci bot reddedilir.
+- **Durdurma:** Ctrl+C (Windows'ta Ctrl+Break da, Unix'te SIGTERM da). Beklemedeyse hemen çıkar, tur
+  sürüyorsa tur biter; ikinci istek anında çıkarır.
+- Çıktı konsola ve ayardaki kayıt dosyasına (UTF-8, yalnız sona eklenir) yazılır. Çıkış kodları: 0
+  temiz durma, 1 başlatma/hazırlık reddi, 2 okuma reddiyle durma, 3 kayıt dosyası yazılamıyor, 130
+  zorla durma.
+- **BR-10:** backtest olmadan yapılan her koşu bir denemedir; çıktı "BR-10 öncesi deneme, strateji
+  kanıtı değil" işaretini taşır. Sonuçlar strateji kanıtı sayılmaz.
+
 ---
 
 # ANEW — AI Native Engineering Workspace
