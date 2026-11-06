@@ -336,7 +336,10 @@ def test_platform_signals_reach_the_loop() -> None:
     """AC-11, R-12: Ctrl+C her yerde, Windows'ta Ctrl+Break, Unix'te SIGTERM; ikincisi zorlar."""
     import sys
 
-    expected = {signal.SIGINT, signal.SIGBREAK if sys.platform == "win32" else signal.SIGTERM}
+    if sys.platform == "win32":  # an if block: mypy narrows the platform here, not in a ternary
+        expected = {signal.SIGINT, signal.SIGBREAK}
+    else:
+        expected = {signal.SIGINT, signal.SIGTERM}
     assert set(stop_signals()) == expected
     for sig in stop_signals():
         stop = StopRequest()
