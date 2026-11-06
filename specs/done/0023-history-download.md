@@ -1,6 +1,6 @@
 # Spec 0023 — Backtest için geçmiş veri indirme
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0023-plan.md`
 - Self-critique: done
@@ -55,27 +55,29 @@ none — no user interface. Kullanıcı yalnız konsol komutunu ve konsol çıkt
 - Backlog: B-51 bu spec'te değişmez; 0025 raporunda varsayım olarak yazılacak.
 
 ## Acceptance criteria
-- [ ] AC-1 — Mutlu yol (R-3): birden çok sayfa gerektiren dönemde sahte borsayla indirme, her çift için ısınma mumları dahil dönemi kapsayan kapanmış mumları borsanın değerleriyle birebir yazar. Dosya çift kurallarını, fiyat adımını, mum aralığını, istenen dönemi ve indirme anını taşır. Kapanmamış mum dosyada yoktur. İndirme özeti her çift için doğru ilk ve son mumu, mum sayısını ve boşluk sayısını gösterir.
-- [ ] AC-2 — Yalnız herkese açık veri (R-1): ortamda anahtar varken anahtar okunmaz. Sahte borsada yalnız mum ve çift kuralı çağrıları kaydedilir, emir ve hesap çağrısı yoktur. Paper deposu ve kayıt dosyası bayt bayt değişmez.
-- [ ] AC-3 — Ayarlar (R-2): ayar dosyası yok, okunamıyor, her eksik ayar, her geçersiz ayar, başlangıçtan önce ya da ona eşit bitiş, tur aralığı sınırına denk gelmeyen başlangıç ya da bitiş ve indirme anından sonraki bitiş için ağa çıkılmaz, dosya yazılmaz ve ilk sorunlu ayar adıyla söylenir.
-- [ ] AC-4 — Dosya varsa (R-4): okunabilir bir veri dosyası ya da bozuk bir dosya varken indirme ağa çıkmadan reddeder ve dosya bayt bayt değişmez.
-- [ ] AC-5 — Güvenilmeyen veri (R-5): okumanın güvenilmez saydığı mum, tekrarlanan mum, sırası bozuk mum ve kuralları eksik çiftin her birinde indirme durur, nedeni adıyla söylenir ve tamamlanmış görünen dosya kalmaz.
-- [ ] AC-6 — Geç listelenen çift ve boşluklar (R-6): dönem içinde listelenen çift hatasız indirilir ve ilk mumundan başlar. Mum boşluğu doldurulmaz, özette doğru sayılır. Dönem boyunca hiç mumu olmayan çift ve borsada olmayan çift için indirme durur, çift adıyla söylenir, tamamlanmış görünen dosya kalmaz.
-- [ ] AC-7 — Hata, borsa sınırı ve yarım dosya (R-7, R-8): ağ hatası, çağrı süresinin aşılması, 429, `Retry-After`'lı 418 ve `Retry-After`'sız 418'in her birinde indirme durur ve nedeni adıyla söylenir. 429 ve 418'den sonra sahte borsaya yeni istek gitmez. Yasağın bitiş anı biliniyorsa söylenir. İndirme ortasındaki durdurma isteğinde ve beklenmeyen hatada tamamlanmış görünen dosya kalmaz. Beklenmeyen hata tip adıyla yazılır, istisna metni ve sır biçimli metin çıktıda yoktur.
-- [ ] AC-8 — Gerçek borsa (R-1, R-3): VERIFY'da, `check` dışında, bu makinede Binance spot'tan anahtarsız en az iki çift ve bir aylık dönem indirilir. Dosya ve indirme özeti oluşur. Gözlem kanıtla belgelenir.
+- [x] AC-1 — Mutlu yol (R-3): birden çok sayfa gerektiren dönemde sahte borsayla indirme, her çift için ısınma mumları dahil dönemi kapsayan kapanmış mumları borsanın değerleriyle birebir yazar. Dosya çift kurallarını, fiyat adımını, mum aralığını, istenen dönemi ve indirme anını taşır. Kapanmamış mum dosyada yoktur. İndirme özeti her çift için doğru ilk ve son mumu, mum sayısını ve boşluk sayısını gösterir.
+- [x] AC-2 — Yalnız herkese açık veri (R-1): ortamda anahtar varken anahtar okunmaz. Sahte borsada yalnız mum ve çift kuralı çağrıları kaydedilir, emir ve hesap çağrısı yoktur. Paper deposu ve kayıt dosyası bayt bayt değişmez.
+- [x] AC-3 — Ayarlar (R-2): ayar dosyası yok, okunamıyor, her eksik ayar, her geçersiz ayar, başlangıçtan önce ya da ona eşit bitiş, tur aralığı sınırına denk gelmeyen başlangıç ya da bitiş ve indirme anından sonraki bitiş için ağa çıkılmaz, dosya yazılmaz ve ilk sorunlu ayar adıyla söylenir.
+- [x] AC-4 — Dosya varsa (R-4): okunabilir bir veri dosyası ya da bozuk bir dosya varken indirme ağa çıkmadan reddeder ve dosya bayt bayt değişmez.
+- [x] AC-5 — Güvenilmeyen veri (R-5): okumanın güvenilmez saydığı mum, tekrarlanan mum, sırası bozuk mum ve kuralları eksik çiftin her birinde indirme durur, nedeni adıyla söylenir ve tamamlanmış görünen dosya kalmaz.
+- [x] AC-6 — Geç listelenen çift ve boşluklar (R-6): dönem içinde listelenen çift hatasız indirilir ve ilk mumundan başlar. Mum boşluğu doldurulmaz, özette doğru sayılır. Dönem boyunca hiç mumu olmayan çift ve borsada olmayan çift için indirme durur, çift adıyla söylenir, tamamlanmış görünen dosya kalmaz.
+- [x] AC-7 — Hata, borsa sınırı ve yarım dosya (R-7, R-8): ağ hatası, çağrı süresinin aşılması, 429, `Retry-After`'lı 418 ve `Retry-After`'sız 418'in her birinde indirme durur ve nedeni adıyla söylenir. 429 ve 418'den sonra sahte borsaya yeni istek gitmez. Yasağın bitiş anı biliniyorsa söylenir. İndirme ortasındaki durdurma isteğinde ve beklenmeyen hatada tamamlanmış görünen dosya kalmaz. Beklenmeyen hata tip adıyla yazılır, istisna metni ve sır biçimli metin çıktıda yoktur.
+- [x] AC-8 — Gerçek borsa (R-1, R-3): VERIFY'da, `check` dışında, bu makinede Binance spot'tan anahtarsız en az iki çift ve bir aylık dönem indirilir. Dosya ve indirme özeti oluşur. Gözlem kanıtla belgelenir.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 1 (A-1: 0024/0025 göndermeleri 0025/0026 oldu; kapsam ve kriterler değişmedi) |
+| Fix rounds | 1 (review round 1: M-1, L-1; round 2 clean) |
+| Review findings: real / noise / deferred | 2 / 3 / 1 (real: R1 M-1, L-1; noise: R1 I-1, I-3, VERIFY I-1; deferred: R1 I-2 → B-53) |
+| Regressions introduced | 0 bilinen (kanıt bu PR'ın full CI koşusu) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `check` ve `doctor` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). VERIFY @`9ad773c`: adı geçen testler hızlı profilde yeşil, 6 kasıtlı bozmanın 6'sı kırmızı; full kanıt bu PR'ın CI koşusudur. AC-8 gözlemi: 2026-11-06 14:30 UTC, bu makinede anahtarsız Binance spot, BTC/USDT + ETH/USDT, 2026-10-01..2026-11-01, çift başına 944 mum, 0 boşluk; ayrıntı PR açıklamasında.
