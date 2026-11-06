@@ -444,6 +444,17 @@ def test_log_path_naming_the_store_another_way_never_writes_into_the_store(bot: 
         assert TRIAL_MARK.encode() not in data  # start's line and every turn summary
 
 
+@pytest.mark.parametrize("command", ["prepare", "start"])
+def test_log_path_naming_the_store_another_way_is_refused(bot: Bot, command: str) -> None:
+    """Review round 3 L-2: `./bot.db` names the store; the setting is refused before anything is
+    touched — no store, no `.lock`, no log file, only the console line."""
+    bot.write_config(log_path=f'"{bot.root.as_posix()}/./bot.db"')
+    code, console = bot.run(command)
+    assert code == EXIT_REFUSED
+    assert "bot başlamadı: ayar geçersiz: bot.log_path" in console
+    assert sorted(path.name for path in bot.root.iterdir()) == ["crytobot.toml"]
+
+
 def test_output_without_log_writes_only_the_console() -> None:
     out = io.StringIO()
     Output(out)("satır")
