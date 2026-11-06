@@ -20,6 +20,11 @@ ile verilen saat, indirme işlevi, çıktı ve durdurma isteğiyle yapar. Depoya
 dosyasına dokunmaz.
 """
 
+from crytobot.app._backtest_config import (
+    BacktestConfig,
+    BacktestConfigResult,
+    load_backtest_config,
+)
 from crytobot.app._config import SETTING_NAMES, BotConfig, ConfigResult, load_config
 from crytobot.app._download import (
     DownloadConfig,
@@ -61,6 +66,8 @@ __all__: list[str] = [
     "PREPARE_HINT",
     "SETTING_NAMES",
     "TRIAL_MARK",
+    "BacktestConfig",
+    "BacktestConfigResult",
     "BotConfig",
     "BuyHalt",
     "ConfigResult",
@@ -88,6 +95,7 @@ __all__: list[str] = [
     "TurnResult",
     "TurnSettings",
     "line",
+    "load_backtest_config",
     "load_config",
     "load_download_config",
     "open_for_start",
