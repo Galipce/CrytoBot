@@ -3,7 +3,8 @@
 # another tool (or a new session) can resume from files (spec 0027, Req. 7).
 # Derived only from files and git: stdin (the turn's transcript) is never read. Untracked
 # (.claude/.gitignore). Written to a temp file and moved into place. Any failure is silent and
-# never blocks the turn: every path exits 0. settings.json caps it at 2 s ("timeout": 2).
+# never blocks the turn: every path exits 0. The note is written in the background (below); settings.json still caps
+# the hook itself at 2 s ("timeout": 2).
 
 write_note() {
   root=${CLAUDE_PROJECT_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
@@ -64,5 +65,11 @@ write_note() {
   [ ! -d "$note" ] && mv -f "$tmp" "$note" 2>/dev/null || { rm -f "$tmp"; return 1; }
 }
 
-write_note >/dev/null 2>&1 < /dev/null
+# The turn never waits for git: the hook starts the writer (this script's own --write entry) in the
+# background and returns at once, so the 2 s cap can no longer cut a slow write (VERIFY F-1).
+if [ "${1:-}" = --write ]; then
+  write_note >/dev/null 2>&1 < /dev/null
+else
+  sh "$0" --write >/dev/null 2>&1 < /dev/null &
+fi
 exit 0

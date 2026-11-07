@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -56,11 +57,18 @@ def _git(repo: Path, *args: str) -> str:
     return result.stdout
 
 
-def _hook(project_dir: Path, cwd: Path) -> subprocess.CompletedProcess[str]:
-    """Şablondaki hook'u Claude Code gibi çalıştırır: proje dizini ortamda, tur verisi stdin'de."""
+def _hook(
+    project_dir: Path, cwd: Path, *args: str, wait: bool = True
+) -> subprocess.CompletedProcess[str]:
+    """Şablondaki hook'u Claude Code gibi çalıştırır: proje dizini ortamda, tur verisi stdin'de.
+
+    Hook notu arka planda yazar ve hemen döner; wait=True iken not yeniden yazılana dek beklenir.
+    """
     env = {**os.environ, "CLAUDE_PROJECT_DIR": str(project_dir)}
-    return subprocess.run(
-        [_sh(), str(HOOK)],
+    note = project_dir / ".claude" / "handoff.local.md"
+    before = _stamp(note)
+    result = subprocess.run(
+        [_sh(), str(HOOK), *args],
         cwd=cwd,
         env=env,
         input=json.dumps({"hook_event_name": "Stop", "transcript": CHAT}),
@@ -71,6 +79,27 @@ def _hook(project_dir: Path, cwd: Path) -> subprocess.CompletedProcess[str]:
         timeout=TIMEOUT_S,
         check=False,
     )
+    if wait and not args:
+        _wait_for_note(note, before)
+    return result
+
+
+def _stamp(note: Path) -> int | None:
+    try:
+        return note.stat().st_mtime_ns if note.is_file() else None
+    except OSError:
+        return None
+
+
+def _wait_for_note(note: Path, before: int | None) -> None:
+    """The background writer replaces the note atomically (mv); wait until it has."""
+    deadline = time.monotonic() + TIMEOUT_S
+    while time.monotonic() < deadline:
+        stamp = _stamp(note)
+        if stamp is not None and stamp != before:
+            return
+        time.sleep(0.05)
+    raise AssertionError(f"the background writer did not write {note} in {TIMEOUT_S} s")
 
 
 @pytest.fixture
@@ -180,16 +209,49 @@ def test_branch_without_plan(repo: Path, tmp_path: Path) -> None:
     assert "- (no plan matches the branch number)\n" in note
 
 
-def test_unwritable_note_never_fails_the_turn(repo: Path, tmp_path: Path) -> None:
-    """AC-9: when the note cannot be written, the hook still exits 0, silently, leaving nothing."""
+@pytest.mark.parametrize("args", [(), ("--write",)], ids=["hook", "writer"])
+def test_unwritable_note_never_fails_the_turn(
+    repo: Path, tmp_path: Path, args: tuple[str, ...]
+) -> None:
+    """AC-9: when the note cannot be written, the hook still exits 0, silently, leaving nothing.
+
+    The writer is run in the foreground too, so "leaving nothing" is checked after it finished.
+    """
     (repo / ".claude" / "handoff.local.md").mkdir()
 
-    result = _hook(repo, cwd=tmp_path)
+    result = _hook(repo, tmp_path, *args, wait=False)
 
     assert result.returncode == 0
     assert result.stdout == "" and result.stderr == ""
-    assert list((repo / ".claude" / "handoff.local.md").iterdir()) == []
-    assert not list((repo / ".claude").glob("handoff.local.md.tmp.*"))
+    if args:
+        assert list((repo / ".claude" / "handoff.local.md").iterdir()) == []
+        assert not list((repo / ".claude").glob("handoff.local.md.tmp.*"))
+
+
+def test_writer_in_the_foreground_writes_the_same_note(repo: Path, tmp_path: Path) -> None:
+    """The hook's background job is the script's own --write entry: same note, synchronously."""
+    result = _hook(repo, tmp_path, "--write")
+
+    assert result.returncode == 0
+    assert result.stdout == "" and result.stderr == ""
+    assert "- First unfinished step: 2. İkinci adım.\n" in _note(repo)
+
+
+def test_hook_leaves_the_writing_to_a_background_job() -> None:
+    """AC-9 / VERIFY F-1: the turn never waits for git; the 2 s cap can no longer cut the note.
+
+    Structural, not wall-clock (Risk 3): the hook's last commands start the writer with &,
+    then exit 0.
+    """
+    lines = [
+        line.strip()
+        for line in HOOK.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    tail = lines[lines.index('if [ "${1:-}" = --write ]; then') :]
+
+    assert tail[-1] == "exit 0"
+    assert any(line.endswith("&") and "--write" in line for line in tail), tail
 
 
 @pytest.mark.parametrize("broken", ["no project dir", ".claude is a file"])
@@ -199,10 +261,11 @@ def test_missing_place_never_fails_the_turn(tmp_path: Path, broken: str) -> None
         project.mkdir()
         (project / ".claude").write_text("not a directory\n", encoding="utf-8")
 
-    result = _hook(project, cwd=tmp_path)
+    for args in [(), ("--write",)]:
+        result = _hook(project, tmp_path, *args, wait=False)
 
-    assert result.returncode == 0
-    assert result.stdout == "" and result.stderr == ""
+        assert result.returncode == 0
+        assert result.stdout == "" and result.stderr == ""
 
 
 @pytest.mark.parametrize(
