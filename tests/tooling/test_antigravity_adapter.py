@@ -228,3 +228,58 @@ def test_doctor_ignores_phrase_outside_description(core: Path) -> None:
     result = _doctor(core)
 
     assert "FAIL  adapter parity: antigravity skill anew-plan is not explicit-only" in result.stdout
+
+
+SIGNATURE = "Co-Authored-By: Gemini (Antigravity) <noreply@google.com>"
+
+
+def _text(relative: str) -> str:
+    return (ROOT / relative).read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
+def test_gemini_signature_lives_in_git_md_only() -> None:
+    """AC-11: docs/git.md defines the signature; the adapter points at it and never copies it."""
+    assert f"`{SIGNATURE}`" in _text("docs/git.md")
+    readme = _text("adapters/antigravity/README.md")
+    assert "`docs/git.md` (Commits)" in readme
+    assert "Co-Authored-By" not in readme
+    for name in SKILLS:
+        assert "Co-Authored-By" not in _text(f"adapters/antigravity/skills/{name}/SKILL.md")
+
+
+@pytest.mark.parametrize("relative", ["README.md", "adapters/README.md", "docs/commands.md"])
+def test_tool_lists_name_antigravity(relative: str) -> None:
+    """AC-12: the tool lists name Antigravity next to the other tools."""
+    text = _text(relative)
+    assert re.search(r"Codex,? and Antigravity|Codex, Antigravity|`antigravity/?`", text), relative
+
+
+def test_rule_table_has_antigravity_column() -> None:
+    """AC-12: README's rule table has a column for Antigravity in every row."""
+    rows = [line for line in _text("README.md").splitlines() if line.startswith("| Rule |")]
+    assert rows == [
+        "| Rule | Claude Code | GitHub Copilot | Cursor | Codex | Antigravity | Other tools |"
+    ]
+
+
+def test_adapter_readme_covers_switch_gap_and_sharing() -> None:
+    """AC-12: manual switch flow, explicit-only gap, sharing the folder with Codex."""
+    readme = _text("adapters/antigravity/README.md")
+    for heading in (
+        "## The explicit-only gap",
+        "## Sharing `.agents/skills/` with Codex",
+        "## Resuming Claude's work in Gemini (manual switch)",
+    ):
+        assert heading in readme
+    assert r"scripts\gemini-devam.ps1" in readme
+    assert ".claude/handoff.local.md" in readme
+
+
+def test_changelog_records_the_work() -> None:
+    """AC-12: CHANGELOG has an entry above the ANEW versions."""
+    text = _text("CHANGELOG.md")
+    unreleased = text.index("## Unreleased — CrytoBot (yerel)")
+    assert unreleased < text.index("## How to upgrade") < text.index("## v")
+    entry = text[unreleased : text.index("## How to upgrade")]
+    for needed in ("Antigravity", "scripts/gemini-devam.ps1", "handoff.local.md", "docs/git.md"):
+        assert needed in entry
