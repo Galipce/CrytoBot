@@ -1,6 +1,6 @@
 # Spec 0027 — Antigravity adaptörü ve Gemini ile devam
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0027-plan.md`
 - Self-critique: done
@@ -87,31 +87,31 @@ Arayüz yok — komut satırı akışı.
   kuruluysa ilk kurulanın dosyaları korunur (Req. 1).
 
 ## Acceptance criteria
-- [ ] AC-1 — Boş bir kopyada `./scripts/init antigravity` her komut için `.agents/skills/<ad>/SKILL.md` oluşturur; aynı komut ikinci kez çalışınca hiçbir dosya değişmez ve her biri "kept" olarak bildirilir; `--force` ile üzerine yazılır; yardım metninde `antigravity` satırı vardır.
-- [ ] AC-2 — Claude Code adaptöründeki her komutun `adapters/antigravity/` içinde karşılığı vardır; PLAN'ın karşılığı `anew-plan`'dır (Req. 2); bir tanesi silinince `scripts/doctor` `adapter parity: <ad> missing in antigravity` ile başarısız olur; geri gelince temizdir (selftest senaryosu).
-- [ ] AC-3 — Her Antigravity komutunun açıklaması yalnızca `/ad` ile açık çağrıda çalışacağını söyler; bu ifade silinince `scripts/doctor` başarısız olur (selftest senaryosu).
-- [ ] AC-4 — Hiçbir Antigravity komut dosyası kural metni içermez: gövdesi, aynı komutun Codex karşılığıyla çağrı biçimi (`$ad` ↔ `/ad`, `$plan` ↔ `/anew-plan`) ve araç adı dışında aynıdır.
-- [ ] AC-5 — `scripts/gemini-devam.ps1`, `agy` PATH'te yokken `%USERPROFILE%\.gemini\bin\agy.exe`'yi bulup Gemini'yi depo kökünde varsayılan izin moduyla açar; depo dışındaki bir klasörden çalıştırıldığında da depo kökünde açar; komut satırında izinleri otomatik geçen seçenek yoktur.
-- [ ] AC-6 — `agy` iki konumda da yoksa başlatıcı Gemini'yi açmaz, aranan iki konumu ve kurulum ipucunu Türkçe yazar, sıfır olmayan kodla çıkar.
-- [ ] AC-7 — Aktif bir spec ve onaylı planı olan bir branch'te başlatıldığında (`specs/active/`'de ikinci bir spec de varken) Gemini iki spec'i `Status`'larıyla listeler, branch'le eşleşeni ana iş sayar ve onun `Status`'unu, bitmemiş ilk plan adımını ve sıradaki segment komutunu söyler; onay gelmeden hiçbir dosya değişmez (`git status` öncesi ve sonrası aynı).
-- [ ] AC-8 — Aktif spec yokken ve çalışma ağacı temizken Gemini "aktif iş yok" der ve `/analyze` önerir; hiçbir şey başlatmaz.
-- [ ] AC-9 — Claude'da bir tur bittikten sonra devir notu Req. 7'deki alanların hepsini güncel değerlerle taşır; sohbet metni içermez; `git status` notu göstermez (izlenmiyor); not yazılamadığında Claude turu hatasız biter; not yazma turu 2 saniyeden fazla uzatmaz (Req. 7; not arka planda yazılır, A-3); aynı davranış `adapters/claude-code/` şablonunda da vardır.
-- [ ] AC-10 — Devir notu yoksa ya da eskiyse (kayıtlı branch veya commit o anki branch/HEAD'den farklı) Gemini bunu açıkça söyler ve durumu dosyalardan çıkarır.
-- [ ] AC-11 — `docs/git.md` Gemini commit imzası satırını tanımlar; Antigravity adaptör belgesi ona işaret eder, satırı kopyalamaz.
-- [ ] AC-12 — README, `adapters/README.md` ve `docs/commands.md` Antigravity'yi listeler; adaptör belgesi elle geçiş akışını, açık-çağrı boşluğunu ve Codex ile klasör paylaşımını anlatır; `CHANGELOG.md` kaydı vardır; `scripts/check` yeşildir.
+- [x] AC-1 — Boş bir kopyada `./scripts/init antigravity` her komut için `.agents/skills/<ad>/SKILL.md` oluşturur; aynı komut ikinci kez çalışınca hiçbir dosya değişmez ve her biri "kept" olarak bildirilir; `--force` ile üzerine yazılır; yardım metninde `antigravity` satırı vardır.
+- [x] AC-2 — Claude Code adaptöründeki her komutun `adapters/antigravity/` içinde karşılığı vardır; PLAN'ın karşılığı `anew-plan`'dır (Req. 2); bir tanesi silinince `scripts/doctor` `adapter parity: <ad> missing in antigravity` ile başarısız olur; geri gelince temizdir (selftest senaryosu).
+- [x] AC-3 — Her Antigravity komutunun açıklaması yalnızca `/ad` ile açık çağrıda çalışacağını söyler; bu ifade silinince `scripts/doctor` başarısız olur (selftest senaryosu).
+- [x] AC-4 — Hiçbir Antigravity komut dosyası kural metni içermez: gövdesi, aynı komutun Codex karşılığıyla çağrı biçimi (`$ad` ↔ `/ad`, `$plan` ↔ `/anew-plan`) ve araç adı dışında aynıdır.
+- [x] AC-5 — `scripts/gemini-devam.ps1`, `agy` PATH'te yokken `%USERPROFILE%\.gemini\bin\agy.exe`'yi bulup Gemini'yi depo kökünde varsayılan izin moduyla açar; depo dışındaki bir klasörden çalıştırıldığında da depo kökünde açar; komut satırında izinleri otomatik geçen seçenek yoktur.
+- [x] AC-6 — `agy` iki konumda da yoksa başlatıcı Gemini'yi açmaz, aranan iki konumu ve kurulum ipucunu Türkçe yazar, sıfır olmayan kodla çıkar.
+- [x] AC-7 — Aktif bir spec ve onaylı planı olan bir branch'te başlatıldığında (`specs/active/`'de ikinci bir spec de varken) Gemini iki spec'i `Status`'larıyla listeler, branch'le eşleşeni ana iş sayar ve onun `Status`'unu, bitmemiş ilk plan adımını ve sıradaki segment komutunu söyler; onay gelmeden hiçbir dosya değişmez (`git status` öncesi ve sonrası aynı).
+- [x] AC-8 — Aktif spec yokken ve çalışma ağacı temizken Gemini "aktif iş yok" der ve `/analyze` önerir; hiçbir şey başlatmaz.
+- [x] AC-9 — Claude'da bir tur bittikten sonra devir notu Req. 7'deki alanların hepsini güncel değerlerle taşır; sohbet metni içermez; `git status` notu göstermez (izlenmiyor); not yazılamadığında Claude turu hatasız biter; not yazma turu 2 saniyeden fazla uzatmaz (Req. 7; not arka planda yazılır, A-3); aynı davranış `adapters/claude-code/` şablonunda da vardır.
+- [x] AC-10 — Devir notu yoksa ya da eskiyse (kayıtlı branch veya commit o anki branch/HEAD'den farklı) Gemini bunu açıkça söyler ve durumu dosyalardan çıkarır.
+- [x] AC-11 — `docs/git.md` Gemini commit imzası satırını tanımlar; Antigravity adaptör belgesi ona işaret eder, satırı kopyalamaz.
+- [x] AC-12 — README, `adapters/README.md` ve `docs/commands.md` Antigravity'yi listeler; adaptör belgesi elle geçiş akışını, açık-çağrı boşluğunu ve Codex ile klasör paylaşımını anlatır; `CHANGELOG.md` kaydı vardır; `scripts/check` yeşildir.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation) — VERIFY round 3: AC-1…4, 6, 9, 11, 12 named tests (76 passed @0e08b02, deliberate breaks B1–B6 red); AC-5, 7, 8, 10 observations in throwaway clones (PR description)
 - [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 2 (A-1 PLAN → `/anew-plan`, A-3 AC-9 cümlesi) |
+| Fix rounds | 1 (fix-1) |
+| Review findings: real / noise / deferred | 8 / 6 / 2 (B-54 fix-1'de kapandı, B-55) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
