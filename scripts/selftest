@@ -611,6 +611,11 @@ if [ -f "$W/adapters/cursor/commands/plan.md" ]; then
   reset; rm -f "$W/adapters/codex/skills/plan/agents/openai.yaml"
   doctor;          has "FAIL  adapter parity: codex skill plan is not explicit-only" "a codex skill Codex could start by itself is a failure"
   reset; doctor;   hasnt "missing in codex" "restored codex adapter is clean"
+  reset; rm -r "$W/adapters/antigravity/skills/anew-plan"
+  doctor;          exits 1 "antigravity parity broken"; has "FAIL  adapter parity: anew-plan missing in antigravity" "missing antigravity skill is a failure"
+  reset; sed 's/ Run only when the user types \/anew-plan explicitly\.//' "$W/adapters/antigravity/skills/anew-plan/SKILL.md" > "$W/plan.tmp" && mv "$W/plan.tmp" "$W/adapters/antigravity/skills/anew-plan/SKILL.md"
+  doctor;          exits 1 "antigravity explicit-only phrase removed"; has "FAIL  adapter parity: antigravity skill anew-plan is not explicit-only" "an antigravity skill without the explicit-only phrase is a failure"
+  reset; doctor;   hasnt "in antigravity" "restored antigravity adapter is clean"; hasnt "antigravity skill" "… and every antigravity skill is explicit-only again"
 else
   echo "skip  adapter parity (no adapters/ in this repo)"
 fi
