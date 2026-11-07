@@ -102,7 +102,7 @@ Arayüz yok — komut satırı akışı.
 
 ## Definition of Done
 - [x] Every acceptance criterion mapped to proof (test or reproducible observation) — VERIFY round 3: AC-1…4, 6, 9, 11, 12 named tests (76 passed @0e08b02, deliberate breaks B1–B6 red); AC-5, 7, 8, 10 observations in throwaway clones (PR description)
-- [ ] `scripts/check` green
+- [x] `scripts/check` green — `CHECK GREEN (full, 7 steps, 575 s)`, CI run 42426761034 @`9c8cb6b`
 - [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
 - [x] Docs / ADRs updated if behavior or architecture changed
 - [x] Spec moved to `specs/done/` (it becomes immutable there)
