@@ -1,0 +1,4 @@
+# Machine-local files of the Claude Code adapter — never committed.
+# Handoff note written by hooks/handoff-note.sh at the end of every turn (and its temp file).
+handoff.local.md
+handoff.local.md.tmp.*
