@@ -14,6 +14,7 @@ the core and point at it.
 | `github-copilot/` | Pointer `copilot-instructions.md` + every command as a prompt file (segments, `/new-feature`, `/change`, bootstrap, fix-bug, refactor, adr, recover) + read-only `reviewer` custom agent + an immutability instruction for `specs/done/`. |
 | `cursor/` | Pointer rule file + every command (`.cursor/commands/`) + an immutability rule for `specs/done/`. Review runs in a fresh chat. |
 | `codex/` | No pointer needed — Codex reads `AGENTS.md` natively. Every command as a project-level skill (`.agents/skills/`, invoked `$analyze` …), explicit only. Review runs in a fresh session. |
+| `antigravity/` | No pointer needed — Antigravity (`agy`) reads `AGENTS.md` natively. Every command as a project-level skill in the same `.agents/skills/` folder, invoked `/analyze` … (PLAN is `/anew-plan`: the built-in `/plan` shadows it); explicit only by description, since Antigravity cannot switch implicit invocation off. Review runs in a fresh session. `scripts/gemini-devam.ps1` resumes Claude's work in Gemini. |
 | `generic/` | Instructions for wiring any other agent, incl. a paste-by-hand table for the segments. |
 
 All adapters expose the same five segments, `/change` for change requests, and the same chainer rule from `workflows/segments.md`

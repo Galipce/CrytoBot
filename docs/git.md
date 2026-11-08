@@ -25,6 +25,9 @@
   alone: `./scripts/check > check.log 2>&1 && git commit …` (then show `check.log`).
 - Commit named paths only: `git commit -- <paths>`, never `git add -A`, `git add .` or
   `commit -a`. Another session or tool may have written or staged files in the same tree.
+- Gemini (Antigravity) imzası: Gemini'nin hazırladığı her commit mesajı şu satırla biter (spec 0027):
+  `Co-Authored-By: Gemini (Antigravity) <noreply@google.com>`. Satır yalnızca burada tanımlanır;
+  adaptör belgesi buraya işaret eder.
 
 ## Forbidden
 - Direct commits to the default branch.
