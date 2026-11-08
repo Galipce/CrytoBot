@@ -95,6 +95,19 @@ def test_start_line_and_every_summary_carry_the_trial_mark(tmp_path: Path) -> No
     assert all(TRIAL_MARK in text for text in bot.events("tur"))
 
 
+def test_confirmed_run_carries_approval_and_no_trial_mark(tmp_path: Path) -> None:
+    """Spec 0028 R-6, R-7: kanıtlı başlatmada onay bilgisi yer alır, TRIAL_MARK kalkar."""
+    bot = harness(opened_store(tmp_path / "s.db"), stop_after=2)
+    bot.run(trial=False, approved_by="Galip Badem", report_path="backtest-report.txt")
+    (start,) = bot.events("başlatma")
+    assert TRIAL_MARK not in start
+    assert "onaylı: onaylayan=Galip Badem rapor=backtest-report.txt" in start
+    assert "mod=paper" in start
+    summaries = bot.events("tur")
+    assert len(summaries) == 2
+    assert all(TRIAL_MARK not in text for text in summaries)
+
+
 REFUSALS = [*InputProblem]
 
 

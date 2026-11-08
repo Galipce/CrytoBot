@@ -27,19 +27,33 @@ from crytobot.backtest._report import (
     report_text,
 )
 from crytobot.backtest._report_file import PART_SUFFIX, report_exists, write_report
+from crytobot.backtest._report_read import (
+    CandidateMetrics,
+    ParsedReport,
+    ReportRead,
+    ReportReadProblem,
+    parse_report,
+    read_report,
+)
 
 __all__: list[str] = [
     "ASSUMPTIONS",
     "CANDIDATE_MARK",
     "PART_SUFFIX",
+    "CandidateMetrics",
+    "ParsedReport",
     "PartMetrics",
     "ReportFacts",
+    "ReportRead",
+    "ReportReadProblem",
     "RunMetrics",
     "TurnRecord",
     "money",
+    "parse_report",
     "part_metrics",
     "percent",
     "ratio",
+    "read_report",
     "report_exists",
     "report_text",
     "run_metrics",

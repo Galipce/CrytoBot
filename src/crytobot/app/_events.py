@@ -24,19 +24,38 @@ def line(at: object, event: str, text: str) -> str:
     return f"{stamp(at)} {event} {text}"
 
 
-def start_text(interval: timedelta, store_path: str, whitelist: tuple[str, ...]) -> str:
+def start_text(
+    interval: timedelta,
+    store_path: str,
+    whitelist: tuple[str, ...],
+    *,
+    trial: bool = True,
+    approved_by: str | None = None,
+    report_path: str | None = None,
+) -> str:
     every = CANDLE_INTERVALS.get(interval, "?")
     pairs = ",".join(whitelist)
-    return f"başladı: mod=paper aralık={every} depo={store_path} çiftler={pairs} — {TRIAL_MARK}"
+    prefix = f"başladı: mod=paper aralık={every} depo={store_path} çiftler={pairs}"
+    if trial or approved_by is None or report_path is None:
+        return f"{prefix} — {TRIAL_MARK}"
+    return f"{prefix} onaylı: onaylayan={approved_by} rapor={report_path}"
 
 
-def turn_text(result: TurnResult, at: object, missed: int, banned: bool) -> str:
+def turn_text(
+    result: TurnResult,
+    at: object,
+    missed: int,
+    banned: bool,
+    *,
+    trial: bool = True,
+) -> str:
     halts = ",".join(halt.value for halt in result.halts) or "-"
     data = " veri=yasak" if banned else ""
+    suffix = f" — {TRIAL_MARK}" if trial else ""
     return (
         f"tur: an={stamp(at)} sonuç={result.outcome.value} kaçan_sınır={missed}"
         f" alım={len(result.buys)} kapanış={len(result.closes)} durdurma={halts}{data}"
-        f" ({result.message}) — {TRIAL_MARK}"
+        f" ({result.message}){suffix}"
     )
 
 

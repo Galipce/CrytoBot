@@ -19,7 +19,8 @@ okunur (spec 0022). Ayarlar çalışma dizinindeki `crytobot.toml`'dadır; hiçb
 ```sh
 cp crytobot.example.toml crytobot.toml   # düzenle: çiftler, limitler, strateji, yollar
 uv run python -m crytobot prepare        # bir kez: paper deposunu açılış bakiyesiyle oluşturur
-uv run python -m crytobot start          # turları UTC aralık sınırlarında atar
+uv run python -m crytobot start          # [stage] onayıyla kanıtlı başlatma (UTC sınırlarında)
+uv run python -m crytobot start --trial  # deneme modu: BR-10 kapısını atlar, deneme işaretiyle
 uv run python -m crytobot download       # backtest için geçmiş mumları veri dosyasına indirir
 uv run python -m crytobot backtest       # veri dosyasıyla backtest koşar, raporu yazar
 ```
@@ -46,8 +47,12 @@ uv run python -m crytobot backtest       # veri dosyasıyla backtest koşar, rap
   temiz durma ya da tamam, 1 başlatma/hazırlık/indirme/backtest reddi, 2 okuma reddiyle durma, 3 kayıt
   dosyası yazılamıyor, 4 indirme durdu, 5 backtest durdu, 6 backtest tamam ama rapor dosyası
   yazılamadı (rapor konsolda), 130 zorla durma. Backtest kayıt dosyasına yazmaz, yalnız konsola.
-- **BR-10:** backtest olmadan yapılan her koşu bir denemedir; çıktı "BR-10 öncesi deneme, strateji
-  kanıtı değil" işaretini taşır. Sonuçlar strateji kanıtı sayılmaz.
+- **Aşama onayı ve BR-10 kapısı (spec 0028):** `crytobot start` varsayılan olarak `[stage]` onayı ve geçerli
+  bir backtest raporu arar. Rapor örneklem dışı aday işaretini (`BR-10 kanıtı adayı`) taşımalı, net kârı
+  pozitif olmalı, drawdown ve işlem sayısı eşiklerini karşılamalı, botun ayarlarıyla birebir uyuşmalıdır;
+  aksi halde bot başlamaz. `--trial` bayrağı ile kapı atlanarak deneme modunda çalıştırılabilir; bu
+  durumda çıktı "BR-10 öncesi deneme, strateji kanıtı değil" (`TRIAL_MARK`) taşır. Kanıtlı koşuda ise onay
+  bilgisi yazılır ve deneme işareti kalkar.
 
 ---
 

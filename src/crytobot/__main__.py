@@ -25,9 +25,10 @@ import sys
 import tempfile
 import time
 import tomllib
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from types import FrameType
 from typing import IO, TextIO
@@ -47,17 +48,19 @@ from crytobot.app import (
     PrepareOutcome,
     StartOutcome,
     StopRequest,
+    check_stage_gate,
     line,
     load_backtest_config,
     load_config,
     load_download_config,
+    load_stage_config,
     open_for_start,
     prepare_store,
     run_backtest,
     run_download,
     run_loop,
 )
-from crytobot.backtest import report_exists, write_report
+from crytobot.backtest import read_report, report_exists, write_report
 from crytobot.market_data import (
     HistoryRequest,
     HistoryResult,
@@ -70,7 +73,7 @@ from crytobot.market_data import (
 
 CONFIG_FILE = "crytobot.toml"
 USAGE = "kullanım: python -m crytobot prepare|start|download|backtest"
-COMMANDS = (["prepare"], ["start"], ["download"], ["backtest"])
+COMMANDS = (["prepare"], ["start"], ["start", "--trial"], ["download"], ["backtest"])
 EXIT_OK = 0
 EXIT_REFUSED = 1
 EXIT_READ_REFUSED = 2
@@ -355,13 +358,61 @@ def _prepare(config: BotConfig, output: Output, clock: Clock) -> int:
     return EXIT_OK if result.outcome is PrepareOutcome.PREPARED else EXIT_REFUSED
 
 
-def _start(config: BotConfig, output: Output, parts: LoopParts) -> int:
+def _stage_gate(
+    config_path: Path, bot: BotConfig, output: Output, clock: Clock
+) -> tuple[bool, str | None, str | None]:
+    """BR-10 aşama kapısı: kilit alınmadan, depo açılmadan ve ağa gitmeden önce denetlenir.
+
+    Döndürür: (geçti_mi, onaylayan_adı, rapor_yolu).
+    """
+    document = _load_toml(config_path)
+    if isinstance(document, str):
+        output.say(line(clock(), "başlatma", f"başlatma reddedildi: {document}"))
+        return False, None, None
+
+    stage_res = load_stage_config(document)
+    if stage_res.config is None:
+        output.say(line(clock(), "başlatma", f"başlatma reddedildi: {stage_res.message}"))
+        return False, None, None
+
+    stage = stage_res.config
+    report_read = read_report(stage.report_path)
+    expected_spread: Decimal | None = None
+    backtest_tbl = document.get("backtest")
+    if isinstance(backtest_tbl, Mapping) and "spread" in backtest_tbl:
+        raw_spread = backtest_tbl["spread"]
+        if isinstance(raw_spread, (str, int, Decimal)):
+            expected_spread = Decimal(str(raw_spread))
+
+    gate_res = check_stage_gate(stage, bot, report_read, expected_spread=expected_spread)
+    if not gate_res.passed:
+        output.say(line(clock(), "başlatma", f"başlatma reddedildi: {gate_res.message}"))
+        return False, None, None
+
+    return True, stage.approved_by, stage.report_path
+
+
+def _start(
+    config: BotConfig,
+    output: Output,
+    parts: LoopParts,
+    *,
+    trial: bool = True,
+    approved_by: str | None = None,
+    report_path: str | None = None,
+) -> int:
     check = open_for_start(config.store_path)
     if check.outcome is not StartOutcome.READY:
         hint = f"; {PREPARE_HINT}" if check.hint is not None else ""
         output(line(parts.clock(), "başlatma", f"{check.message}{hint}"))
         return EXIT_REFUSED
-    exit_ = run_loop(config, parts)
+    exit_ = run_loop(
+        config,
+        parts,
+        trial=trial,
+        approved_by=approved_by,
+        report_path=report_path,
+    )
     if exit_.reason is ExitReason.LOG_FAILED:
         output.say(line(parts.clock(), "durdurma", _LOG_FAILED))
     return _EXIT_CODES[exit_.reason]
@@ -392,6 +443,16 @@ def run(
     config = _config(config_path, output, clock)
     if config is None:
         return EXIT_REFUSED
+
+    trial = len(argv) > 1 and argv[1] == "--trial"
+    approved_by: str | None = None
+    report_path: str | None = None
+
+    if argv[0] == "start" and not trial:
+        passed, approved_by, report_path = _stage_gate(config_path, config, output, clock)
+        if not passed:
+            return EXIT_REFUSED
+
     output = Output(console, config.log_path)
     lock = StoreLock(config.store_path)
     try:
@@ -408,7 +469,14 @@ def run(
             output,
             stop,
         )
-        return _start(config, output, parts)
+        return _start(
+            config,
+            output,
+            parts,
+            trial=trial,
+            approved_by=approved_by,
+            report_path=report_path,
+        )
     except LogWriteError:
         output.say(line(clock(), "durdurma", _LOG_FAILED))
         return EXIT_LOG_FAILED

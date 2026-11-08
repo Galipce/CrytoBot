@@ -142,8 +142,22 @@ class Harness:
     def parts(self) -> LoopParts:
         return LoopParts(self.clock, self.wait, self.read, self.write, self.stop)
 
-    def run(self, exchange: PaperExchange | None = None) -> LoopExit:
-        return run_loop(self.config, self.parts(), exchange=exchange)
+    def run(
+        self,
+        exchange: PaperExchange | None = None,
+        *,
+        trial: bool = True,
+        approved_by: str | None = None,
+        report_path: str | None = None,
+    ) -> LoopExit:
+        return run_loop(
+            self.config,
+            self.parts(),
+            exchange=exchange,
+            trial=trial,
+            approved_by=approved_by,
+            report_path=report_path,
+        )
 
     def events(self, event: str) -> list[str]:
         return [text for text in self.lines if text.split(" ", 2)[1] == event]

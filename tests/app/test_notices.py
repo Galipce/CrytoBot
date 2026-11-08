@@ -254,3 +254,48 @@ def test_unexpected_error_mid_turn_keeps_what_was_done(
     assert result.outcome is TurnOutcome.UNEXPECTED_ERROR
     assert [o.pair for o in result.closes] == [BTC]
     assert SECRET not in repr(result)
+
+
+def test_start_text_trial_and_confirmed() -> None:
+    from datetime import timedelta
+
+    from crytobot.app import TRIAL_MARK
+    from crytobot.app._events import start_text
+
+    # Deneme modu
+    trial = start_text(timedelta(hours=1), "bot.db", ("BTC/USDT",), trial=True)
+    assert TRIAL_MARK in trial
+    assert "onaylı:" not in trial
+
+    # Eksik onay bilgisiyle kanıtlı istenirse yine TRIAL_MARK taşır
+    fallback = start_text(timedelta(hours=1), "bot.db", ("BTC/USDT",), trial=False)
+    assert TRIAL_MARK in fallback
+
+    # Kanıtlı mod
+    confirmed = start_text(
+        timedelta(hours=1),
+        "bot.db",
+        ("BTC/USDT",),
+        trial=False,
+        approved_by="Galip Badem",
+        report_path="report.txt",
+    )
+    assert TRIAL_MARK not in confirmed
+    assert "onaylı: onaylayan=Galip Badem rapor=report.txt" in confirmed
+
+
+def test_turn_text_trial_and_confirmed() -> None:
+    from crytobot.app import TRIAL_MARK
+    from crytobot.app._events import turn_text
+    from crytobot.app._result import TurnResult
+
+    res = TurnResult(TurnOutcome.COMPLETED, (), (), (), (), (), "tamamlandı")
+
+    # Deneme
+    t_trial = turn_text(res, LATER, missed=0, banned=False, trial=True)
+    assert TRIAL_MARK in t_trial
+
+    # Kanıtlı
+    t_confirmed = turn_text(res, LATER, missed=0, banned=False, trial=False)
+    assert TRIAL_MARK not in t_confirmed
+    assert t_confirmed.endswith("(tamamlandı)")

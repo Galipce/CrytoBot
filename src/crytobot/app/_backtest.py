@@ -259,6 +259,15 @@ class _Run:
         config, data, bot = self.config, self.data, self.config.bot
         pairs = tuple(bot.turn.whitelist)
         metrics = run_metrics(bot.opening_balance, self.records, config.split_at, pairs)
+        strategy = {
+            "fast_period": bot.turn.strategy.fast_period,
+            "slow_period": bot.turn.strategy.slow_period,
+            "rsi_period": bot.turn.strategy.rsi_period,
+            "rsi_threshold": bot.turn.strategy.rsi_threshold,
+            "atr_period": bot.turn.strategy.atr_period,
+            "k": bot.turn.strategy.k,
+            "r": bot.turn.strategy.r,
+        }
         facts = ReportFacts(
             data.start,
             data.end,
@@ -269,6 +278,7 @@ class _Run:
             data.downloaded_at,
             bot.read.candle_count,
             config.spread,
+            strategy,
         )
         return report_text(facts, metrics)
 
