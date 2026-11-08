@@ -1,6 +1,6 @@
 # Spec 0029 — Telegram Bildirimleri ve Raporlama
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0029-plan.md`
 - Self-critique: done
@@ -57,27 +57,29 @@ none — no user interface. Kullanıcı Telegram istemcisinde bota abone olan ch
 - Self-critique kararları G-1–G-5 (Galip Badem, 2026-11-08) R-3, R-4, R-6, R-7 ve AC-3, AC-4, AC-6, AC-7'ye işlendi.
 
 ## Acceptance criteria
-- [ ] AC-1 — Yapılandırma ve devre dışı başlangıç (R-1): `enabled = false` veya token / chat ID eksik olduğunda bot hata vermeden başlar; Telegram'a hiçbir ağ çağrısı yapılmaz; bildirimler konsol ve log çıktısına yönlendirilir.
-- [ ] AC-2 — Sır güvenliği ve redaksiyon (R-2): Telegram token'ı veya diğer sırlar loglara, hata kayıtlarına veya gönderilen bildirim mesajlarına sızmaz; redaksiyon testle kanıtlanır.
-- [ ] AC-3 — Sistem durum bildirimleri ve kaçış güvenliği (R-3): `TurnNotice` olayları için durum başladığında tek bir giriş bildirimi, durum bittiğinde tek bir çıkış bildirimi iletilir; durum süresince mükerrer bildirim gitmez; ayrıştırma hatasında düz metin iletimi güvencesi sağlanır.
-- [ ] AC-4 — Kasa ve risk durdurma bildirimleri (B-42, R-4): Kasa drawdown limitine ulaştığında (`HALTED`) ve günlük zarar limiti aşıldığında öneri olup olmamasına bakılmaksızın derhal bildirim iletilir; durum `risk` modülünün public sorgusuyla okunur; günlük zarar limiti sıfırlandığında çıkış bildirimi gider.
-- [ ] AC-5 — İşlem olay bildirimleri (R-5): Onaylı alım emri dolduğunda çift, miktar, fiyat ve stop seviyesi; pozisyon kapandığında ise çift, kapanış türü (stop/hedef) ve net gerçekleşen kâr/zarar tutar ve oranıyla bildirim iletilir.
-- [ ] AC-6 — Günlük özet raporu (R-6): Yeni UTC gününün ilk tamamlanan turunda gün başı/sonu kasa, net PnL, BR-1 günlük kâr metriği (%20–25 hedef kıyaslaması), açık pozisyon sayısı ve işlem adedini içeren tek bir özet rapor iletilir; aynı gün mükerrer rapor üretilmez.
-- [ ] AC-7 — Ağ hatası izolasyonu ve kuyruk dayanıklılığı (B-45, R-7): Telegram API çağrısı zaman aşımına uğradığında veya hata verdiğinde ana döngü kesintiye uğramaz; iletilemeyen mesajlar en fazla 10 mesajlık kuyrukta saklanıp sonraki turlarda denenir; kuyruk taşarsa en eski mesaj atılır; hatalı kimlikte Telegram devre dışı bırakılır.
-- [ ] AC-8 — Modül sınırları ve import kuralı (R-8): Telegram gönderimini yalnızca `reporting` modülü yönetir; diğer modüller doğrudan Telegram veya HTTP çağrısı yapamaz; `scripts/check` import-linter sözleşmeleri yeşil kalır.
+- [x] AC-1 — Yapılandırma ve devre dışı başlangıç (R-1): `enabled = false` veya token / chat ID eksik olduğunda bot hata vermeden başlar; Telegram'a hiçbir ağ çağrısı yapılmaz; bildirimler konsol ve log çıktısına yönlendirilir.
+- [x] AC-2 — Sır güvenliği ve redaksiyon (R-2): Telegram token'ı veya diğer sırlar loglara, hata kayıtlarına veya gönderilen bildirim mesajlarına sızmaz; redaksiyon testle kanıtlanır.
+- [x] AC-3 — Sistem durum bildirimleri ve kaçış güvenliği (R-3): `TurnNotice` olayları için durum başladığında tek bir giriş bildirimi, durum bittiğinde tek bir çıkış bildirimi iletilir; durum süresince mükerrer bildirim gitmez; ayrıştırma hatasında düz metin iletimi güvencesi sağlanır.
+- [x] AC-4 — Kasa ve risk durdurma bildirimleri (B-42, R-4): Kasa drawdown limitine ulaştığında (`HALTED`) ve günlük zarar limiti aşıldığında öneri olup olmamasına bakılmaksızın derhal bildirim iletilir; durum `risk` modülünün public sorgusuyla okunur; günlük zarar limiti sıfırlandığında çıkış bildirimi gider.
+- [x] AC-5 — İşlem olay bildirimleri (R-5): Onaylı alım emri dolduğunda çift, miktar, fiyat ve stop seviyesi; pozisyon kapandığında ise çift, kapanış türü (stop/hedef) ve net gerçekleşen kâr/zarar tutar ve oranıyla bildirim iletilir.
+- [x] AC-6 — Günlük özet raporu (R-6): Yeni UTC gününün ilk tamamlanan turunda gün başı/sonu kasa, net PnL, BR-1 günlük kâr metriği (%20–25 hedef kıyaslaması), açık pozisyon sayısı ve işlem adedini içeren tek bir özet rapor iletilir; aynı gün mükerrer rapor üretilmez.
+- [x] AC-7 — Ağ hatası izolasyonu ve kuyruk dayanıklılığı (B-45, R-7): Telegram API çağrısı zaman aşımına uğradığında veya hata verdiğinde ana döngü kesintiye uğramaz; iletilemeyen mesajlar en fazla 10 mesajlık kuyrukta saklanıp sonraki turlarda denenir; kuyruk taşarsa en eski mesaj atılır; hatalı kimlikte Telegram devre dışı bırakılır.
+- [x] AC-8 — Modül sınırları ve import kuralı (R-8): Telegram gönderimini yalnızca `reporting` modülü yönetir; diğer modüller doğrudan Telegram veya HTTP çağrısı yapamaz; `scripts/check` import-linter sözleşmeleri yeşil kalır.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 2 (fix-1: F-01, F-02, F-06; fix-2: F-08) |
+| Review findings: real / noise / deferred | 4 / 1 / 3 (F-01, F-02, F-06, F-08 real; F-05 noise; F-03 B-57, F-04 B-58, F-07 B-59 deferred) |
+| Regressions introduced | 0 (kanıt bu PR'ın full CI koşusu) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `check` ve `doctor` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). VERIFY @`8001153`: adı geçen testler hızlı profilde yeşil, 6 kasıtlı bozmanın 6'sı kırmızı; full kanıt bu PR'ın CI koşusudur.
