@@ -119,8 +119,10 @@ def test_dispatch_avoids_redundant_network_call_when_queue_not_drained() -> None
     assert len(service.queue) == 2
 
     # Sıranın FIFO kaldığı doğrulanır:
-    assert service.queue.pop().text == "Message 1"
-    assert service.queue.pop().text == "Message 2"
+    msg1 = service.queue.pop()
+    assert msg1 is not None and msg1.text == "Message 1"
+    msg2 = service.queue.pop()
+    assert msg2 is not None and msg2.text == "Message 2"
 
 
 def test_service_disabled_config_is_noop() -> None:
