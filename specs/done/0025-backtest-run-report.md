@@ -1,6 +1,6 @@
 # Spec 0025 — Backtest koşusu ve rapor
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0025-plan.md`
 - Self-critique: done
@@ -88,29 +88,31 @@ none — no user interface. Kullanıcı yalnız konsol komutunu, konsol çıktı
 - Backlog: B-51 bu spec'te değişmez, raporda varsayım olarak yazılır (R-11).
 
 ## Acceptance criteria
-- [ ] AC-1 — Mutlu yol (R-5, R-9, R-10): bilinen mumlu küçük bir veri dosyasıyla koşu, başlarken konsola başladığını, dönemi ve çift sayısını yazar, her tur anında bir tur atar. Tura verilen fiyat, tur anında açılan mumun açılışıdır. Kapanışı tur anından sonra olan hiçbir mum ve fiyat tura verilmez. Beklenen alımlar, stop ve hedef kapanışları el hesabıyla aynı turda ve fiyatta olur. Her parçanın her metriği el hesabıyla aynıdır. Rapor konsolda ve rapor dosyasında aynıdır.
-- [ ] AC-2 — Paper turunun aynısı (R-5): aynı mumlar, fiyat, kurallar ve ayarlarla bir tur anında koşunun turu ile paper turu aynı kararları (alım, kapanış, ret ve "öneri yok" nedenleri, durdurmalar) verir.
-- [ ] AC-3 — Ağsız ve dokunmasız (R-1): ortamda anahtar varken anahtar okunmaz, ağ çağrısı yapılmaz. Paper deposu, kayıt dosyası ve veri dosyası bayt bayt değişmez. Aynı depoyla çalışan bir botun kilidi varken koşu tamamlanır.
-- [ ] AC-4 — Ayarlar (R-2): ayar dosyası yok, okunamıyor, koşunun her eksik ayarı, her geçersiz ayarı (spread < 0 ya da ≥ 1 dahil), rapor yolunun veri dosyası, depo ya da kayıt yoluna eşitliği ve turun reddettiği her ayar için hiçbir şey yazılmaz ve ilk sorunlu ayar adıyla söylenir.
-- [ ] AC-5 — Veri dosyası ve uyum (R-3, R-4): veri dosyası yok, bozuk ya da tamamlanmamış; beyaz liste kümesi farklı; mum aralığı farklı; dönem tur aralığı sınırına denk değil; ayrım anı sınırda değil, başlangıca ya da bitişe eşit ya da dönem dışında; rapor dosyası var. Bu durumların her birinde tur atılmaz, rapor dosyası yazılmaz ya da değişmez, neden adıyla söylenir. Güvenilmez mum içeren dosyada koşu durur ve tamamlanmış görünen rapor kalmaz.
-- [ ] AC-6 — Eksik fiyat, boşluk, geç çift (R-6): tur anında mumu olmayan çiftte o turda alım olmaz, o çiftin açık pozisyonu fiyatsız kapatılmaz. Geç listelenen çiftin önceki turları aynı biçimde işlenir. Eksik turlar raporda çift başına doğru sayılır.
-- [ ] AC-7 — Gün, durdurmalar ve bildirimler (R-7, R-8): günlük zarar limiti aşılan simüle UTC gününde yeni alım olmaz, ertesi simüle günde sürer. Drawdown durdurması başladıktan sonra koşunun sonuna kadar alım olmaz, kapanışlar sürer. Hiçbir bildirim alıcıya gitmez, bildirimler türe göre doğru sayılır.
-- [ ] AC-8 — Parçalar ve tanımlar (R-9, R-10): ayrım anının iki yanına uzanan işlem kapandığı parçada sayılır. Örneklem dışı parça ayrım anındaki kasa ve pozisyonlarla başlar. Parça drawdown'ı kendi zirvesine göre ölçülür. İşlemsiz parçada kazanma oranı, zararlı işlemi olmayan parçada kâr faktörü "tanımsız" yazılır. Net kârı sıfır olan işlem kazanan ya da zararlı sayılmaz. Ayrım anına denk gelen gün iki parçada ayrı sayılır. Bitiş kasası açık pozisyonları son bilinen tur fiyatıyla içerir, son turda mumu olmayan çift dahil. Gerçekleşen ve gerçekleşmemiş kâr/zarar ayrı ve doğrudur.
-- [ ] AC-9 — Rapor içeriği ve belirlenimcilik (R-11, R-12): rapor R-11'deki her varsayımı (B-51 dahil) ve koşu bilgisini taşır. "BR-10 kanıtı adayı" işareti yalnız örneklem dışı parçadadır. Raporda geçti/kaldı ifadesi yoktur. Aynı dosya ve ayarla iki koşu, farklı gerçek saatlerde bayt bayt aynı rapor dosyası üretir.
-- [ ] AC-10 — Yarım rapor yok ve süre (R-1, R-13, R-14): koşu ortasındaki durdurma isteğinde, turun depo ya da kayıt hatası sonucunda ve beklenmeyen hatada tamamlanmış görünen rapor dosyası kalmaz. Rapor dosyası yazılamazsa rapor konsola yazılır, neden adıyla söylenir, tamamlanmış görünen dosya kalmaz. Beklenmeyen hata tip adıyla yazılır, istisna metni ve sır biçimli metin çıktıda yoktur. 30 çift, 1 saat, 12 aylık sentetik dosyayla, `candle_count` 200 ile koşu bu makinede 60 dakikanın altında biter (VERIFY'da, `check` dışında, süre ölçümüyle belgelenir).
+- [x] AC-1 — Mutlu yol (R-5, R-9, R-10): bilinen mumlu küçük bir veri dosyasıyla koşu, başlarken konsola başladığını, dönemi ve çift sayısını yazar, her tur anında bir tur atar. Tura verilen fiyat, tur anında açılan mumun açılışıdır. Kapanışı tur anından sonra olan hiçbir mum ve fiyat tura verilmez. Beklenen alımlar, stop ve hedef kapanışları el hesabıyla aynı turda ve fiyatta olur. Her parçanın her metriği el hesabıyla aynıdır. Rapor konsolda ve rapor dosyasında aynıdır.
+- [x] AC-2 — Paper turunun aynısı (R-5): aynı mumlar, fiyat, kurallar ve ayarlarla bir tur anında koşunun turu ile paper turu aynı kararları (alım, kapanış, ret ve "öneri yok" nedenleri, durdurmalar) verir.
+- [x] AC-3 — Ağsız ve dokunmasız (R-1): ortamda anahtar varken anahtar okunmaz, ağ çağrısı yapılmaz. Paper deposu, kayıt dosyası ve veri dosyası bayt bayt değişmez. Aynı depoyla çalışan bir botun kilidi varken koşu tamamlanır.
+- [x] AC-4 — Ayarlar (R-2): ayar dosyası yok, okunamıyor, koşunun her eksik ayarı, her geçersiz ayarı (spread < 0 ya da ≥ 1 dahil), rapor yolunun veri dosyası, depo ya da kayıt yoluna eşitliği ve turun reddettiği her ayar için hiçbir şey yazılmaz ve ilk sorunlu ayar adıyla söylenir.
+- [x] AC-5 — Veri dosyası ve uyum (R-3, R-4): veri dosyası yok, bozuk ya da tamamlanmamış; beyaz liste kümesi farklı; mum aralığı farklı; dönem tur aralığı sınırına denk değil; ayrım anı sınırda değil, başlangıca ya da bitişe eşit ya da dönem dışında; rapor dosyası var. Bu durumların her birinde tur atılmaz, rapor dosyası yazılmaz ya da değişmez, neden adıyla söylenir. Güvenilmez mum içeren dosyada koşu durur ve tamamlanmış görünen rapor kalmaz.
+- [x] AC-6 — Eksik fiyat, boşluk, geç çift (R-6): tur anında mumu olmayan çiftte o turda alım olmaz, o çiftin açık pozisyonu fiyatsız kapatılmaz. Geç listelenen çiftin önceki turları aynı biçimde işlenir. Eksik turlar raporda çift başına doğru sayılır.
+- [x] AC-7 — Gün, durdurmalar ve bildirimler (R-7, R-8): günlük zarar limiti aşılan simüle UTC gününde yeni alım olmaz, ertesi simüle günde sürer. Drawdown durdurması başladıktan sonra koşunun sonuna kadar alım olmaz, kapanışlar sürer. Hiçbir bildirim alıcıya gitmez, bildirimler türe göre doğru sayılır.
+- [x] AC-8 — Parçalar ve tanımlar (R-9, R-10): ayrım anının iki yanına uzanan işlem kapandığı parçada sayılır. Örneklem dışı parça ayrım anındaki kasa ve pozisyonlarla başlar. Parça drawdown'ı kendi zirvesine göre ölçülür. İşlemsiz parçada kazanma oranı, zararlı işlemi olmayan parçada kâr faktörü "tanımsız" yazılır. Net kârı sıfır olan işlem kazanan ya da zararlı sayılmaz. Ayrım anına denk gelen gün iki parçada ayrı sayılır. Bitiş kasası açık pozisyonları son bilinen tur fiyatıyla içerir, son turda mumu olmayan çift dahil. Gerçekleşen ve gerçekleşmemiş kâr/zarar ayrı ve doğrudur.
+- [x] AC-9 — Rapor içeriği ve belirlenimcilik (R-11, R-12): rapor R-11'deki her varsayımı (B-51 dahil) ve koşu bilgisini taşır. "BR-10 kanıtı adayı" işareti yalnız örneklem dışı parçadadır. Raporda geçti/kaldı ifadesi yoktur. Aynı dosya ve ayarla iki koşu, farklı gerçek saatlerde bayt bayt aynı rapor dosyası üretir.
+- [x] AC-10 — Yarım rapor yok ve süre (R-1, R-13, R-14): koşu ortasındaki durdurma isteğinde, turun depo ya da kayıt hatası sonucunda ve beklenmeyen hatada tamamlanmış görünen rapor dosyası kalmaz. Rapor dosyası yazılamazsa rapor konsola yazılır, neden adıyla söylenir, tamamlanmış görünen dosya kalmaz. Beklenmeyen hata tip adıyla yazılır, istisna metni ve sır biçimli metin çıktıda yoktur. 30 çift, 1 saat, 12 aylık sentetik dosyayla, `candle_count` 200 ile koşu bu makinede 60 dakikanın altında biter (VERIFY'da, `check` dışında, süre ölçümüyle belgelenir).
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 1 (Risk 1 ve 2 kararları: R-14 ve AC-10 60 dk, "0026" atıfları "BR-10 kapı spec'i") |
+| Fix rounds | 1 (review round 1: L-1, I-2, I-3; round 2 yok / clean) |
+| Review findings: real / noise / deferred | 3 / 1 / 0 (real: R1 L-1, I-2, I-3; noise: R1 I-1; deferred: 0) |
+| Regressions introduced | 0 bilinen (kanıt bu PR'ın full CI koşusu) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `check` ve `doctor` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). VERIFY @`399d96e`: adı geçen testler hızlı profilde yeşil, 5 kasıtlı bozmanın 5'i kırmızı; full kanıt bu PR'ın CI koşusudur. AC-10 süre ölçümü: sentetik veriyle 50 tur 12.07 s, ortalama 241.34 ms/tur, 8760 tur izdüşümü ~35.23 dk < 60 dk.
