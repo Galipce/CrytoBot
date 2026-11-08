@@ -7,6 +7,12 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
+- **Telegram bildirimleri ve raporlama** (spec 0029): Telegram üzerinden botun tek yönlü durum bildirimleri,
+  risk ve kasa durdurma bildirimleri (B-42), işlem dolumu ve pozisyon kapanış bildirimleri ile UTC 00:00 gün
+  dönümünde BR-1 kâr metriğini (%20-25 hedef) içeren günlük özet raporu desteği eklendi. Yapılandırma opt-in
+  (`[reporting.telegram]`, `TELEGRAM_BOT_TOKEN`); sır sızdırmaz redaksiyon ve katı HTML kaçışı/düz metin fallback;
+  10 mesajlık bellek içi kuyruk (drop-oldest), ağ hatası izolasyonu ve 401 yetkisiz kimlikte otomatik devre dışı
+  kalarak bot döngüsünü konsolla aksatmadan sürdürme güvencesi (B-45, fail-safe).
 - **BR-10 paper başlatma kapısı ve aşama onayı** (spec 0028): `crytobot start` varsayılan olarak `[stage]`
   onayı ve geçerli backtest raporu arar. Rapor metrikleri (net > 0, drawdown ≤ limit ve ≤ %25, min_trades,
   min_profit_factor) ve ayar uyumu (`whitelist`, aralıklar, `spread`, strateji parametreleri) denetlenir;

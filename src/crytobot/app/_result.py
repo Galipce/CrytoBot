@@ -1,9 +1,11 @@
 """Turun adı konmuş sonucu (spec 0016 R-11): tur istisna fırlatmaz, ne olduğunu burada söyler."""
 
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import Enum
 
 from crytobot.execution import CloseOrder, Order, OrderOutcome
+from crytobot.portfolio import Closure
 from crytobot.risk import ApprovalReason
 from crytobot.strategy import NoProposalReason
 
@@ -65,3 +67,5 @@ class TurnResult:
     halts: tuple[BuyHalt, ...]
     notice_errors: tuple[str, ...]
     message: str
+    closures: tuple[Closure, ...] = ()
+    equity: Decimal | None = None

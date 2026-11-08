@@ -12,7 +12,8 @@ yazımı atomiktir (spec 0011). Beklenmeyen hata döngüyü düşürmez: tip ad�
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from enum import Enum
 
 from crytobot.app._config import BotConfig
@@ -28,14 +29,16 @@ from crytobot.app._events import (
     turn_text,
 )
 from crytobot.app._market import to_turn_market
-from crytobot.app._notices import TurnMemory, TurnNotice
-from crytobot.app._result import TurnResult
+from crytobot.app._notices import NoticeKind, TurnMemory, TurnNotice
+from crytobot.app._result import BuyHalt, TurnOutcome, TurnResult
 from crytobot.app._schedule import Due, after_turn, boundary_at_or_before, due, seconds_until
 from crytobot.app._session import AppError
 from crytobot.app._start import read_pairs
 from crytobot.app._turn import run_turn
-from crytobot.execution import PaperExchange
+from crytobot.execution import PAPER, OrderStatus, PaperExchange
 from crytobot.market_data import MarketRead, ReadSettings
+from crytobot.persistence import load_store
+from crytobot.risk import daily_loss_reached
 
 # The clock is read again at least this often while waiting: a sleep or a clock jump is seen
 MAX_WAIT_S = 60.0
@@ -108,6 +111,7 @@ class _Loop:
         trial: bool = True,
         approved_by: str | None = None,
         report_path: str | None = None,
+        reporter: object | None = None,
     ) -> None:
         self.config = config
         self.parts = parts
@@ -115,6 +119,7 @@ class _Loop:
         self.trial = trial
         self.approved_by = approved_by
         self.report_path = report_path
+        self.reporter = reporter
         self.memory = TurnMemory()  # process memory: a new process announces again (R-13)
         self.last: TurnResult | None = None
         self.turns = 0
@@ -122,6 +127,12 @@ class _Loop:
         self.ban_until: datetime | None = None  # process only, never stored (R-11)
         self.missed = 0
         self.failing: set[str] = set()
+        self.current_day: date | None = None
+        self.day_start_equity: Decimal | None = None
+        self.last_reported_date: date | None = None
+        self.day_closures: list[object] = []
+        self._drawdown_halted: bool = False
+        self._daily_loss_halted: bool = False
 
     # --- output -----------------------------------------------------------------------------
     def emit(self, at: object, event: str, text: str) -> None:
@@ -147,6 +158,17 @@ class _Loop:
 
     def notice(self, notice: TurnNotice) -> None:
         self.emit(notice.at, "durum", notice_text(notice))
+        if self.reporter is not None and getattr(self.reporter, "is_active", False):
+            send = getattr(self.reporter, "send_turn_notice", None)
+            if callable(send):
+                err = send(
+                    notice.kind.value,
+                    notice.subject,
+                    notice.entering,
+                    notice.message,
+                )
+                if err:
+                    self.emit(notice.at, "hata", f"telegram bildirimi iletilemedi ({err})")
 
     # --- effects with the loop's error net ----------------------------------------------------
     def moment(self) -> datetime | None:
@@ -227,6 +249,108 @@ class _Loop:
         )
         self.last = result
         self.turns += 1
+
+        # R-4: Kasa ve risk durdurma bildirimleri
+        if self.reporter is not None and getattr(self.reporter, "is_active", False):
+            send_notice = getattr(self.reporter, "send_turn_notice", None)
+            send_fill = getattr(self.reporter, "send_fill_notice", None)
+            send_close = getattr(self.reporter, "send_close_notice", None)
+
+            if callable(send_notice):
+                is_drawdown = BuyHalt.DRAWDOWN in result.halts
+                if is_drawdown and not self._drawdown_halted:
+                    self._drawdown_halted = True
+                    err = send_notice(
+                        kind=NoticeKind.DRAWDOWN_HALT.value,
+                        subject="",
+                        entering=True,
+                        message="drawdown limiti aşıldı",
+                    )
+                    if err:
+                        self.emit(
+                            at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
+                        )
+                elif not is_drawdown and self._drawdown_halted:
+                    self._drawdown_halted = False
+                    err = send_notice(
+                        kind=NoticeKind.DRAWDOWN_HALT.value,
+                        subject="",
+                        entering=False,
+                        message="drawdown durdurması kalktı",
+                    )
+                    if err:
+                        self.emit(
+                            at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
+                        )
+
+                loaded_risk = load_store(self.config.store_path, PAPER)
+                is_daily_loss = False
+                if loaded_risk.state is not None:
+                    is_daily_loss = daily_loss_reached(
+                        loaded_risk.state.risk, self.config.turn.limits
+                    )
+                if is_daily_loss and not self._daily_loss_halted:
+                    self._daily_loss_halted = True
+                    err = send_notice(
+                        kind=NoticeKind.DAILY_LOSS_LIMIT.value,
+                        subject="",
+                        entering=True,
+                        message="günlük zarar limiti aşıldı",
+                    )
+                    if err:
+                        self.emit(
+                            at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
+                        )
+                elif not is_daily_loss and self._daily_loss_halted:
+                    self._daily_loss_halted = False
+                    err = send_notice(
+                        kind=NoticeKind.DAILY_LOSS_LIMIT.value,
+                        subject="",
+                        entering=False,
+                        message="günlük zarar limiti sıfırlandı",
+                    )
+                    if err:
+                        self.emit(
+                            at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
+                        )
+
+            # R-5: işlem olay bildirimleri (dolum ve kapanış)
+            if callable(send_fill):
+                for buy in result.buys:
+                    if buy.status is OrderStatus.FILLED:
+                        price = buy.fill_price if buy.fill_price is not None else buy.entry
+                        err = send_fill(
+                            pair=buy.pair,
+                            side=buy.side,
+                            amount=buy.amount,
+                            price=price,
+                            stop=buy.stop,
+                        )
+                        if err:
+                            self.emit(at, "hata", f"telegram dolum bildirimi iletilemedi ({err})")
+            if callable(send_close):
+                for closure in result.closures:
+                    err = send_close(closure)
+                    if err:
+                        self.emit(at, "hata", f"telegram kapanış bildirimi iletilemedi ({err})")
+
+        # R-6: UTC gün dönümü (00:00 UTC) günlük özet raporu
+        if result.outcome is TurnOutcome.COMPLETED:
+            turn_day = at.date() if isinstance(at, datetime) else None
+            if turn_day is not None:
+                if self.current_day is None:
+                    self.current_day = turn_day
+                    self.day_start_equity = result.equity
+                elif turn_day > self.current_day:
+                    day_to_report = self.current_day
+                    self._send_daily_summary(day_to_report, at, result)
+                    self.current_day = turn_day
+                    self.day_start_equity = result.equity
+                    self.day_closures = []
+
+                for closure in result.closures:
+                    self.day_closures.append(closure)
+
         self.emit(
             at,
             "tur",
@@ -240,6 +364,45 @@ class _Loop:
         )
         self.missed = 0
         return None
+
+    def _send_daily_summary(
+        self,
+        day_to_report: date,
+        at: object,
+        result: TurnResult,
+    ) -> None:
+        if self.last_reported_date == day_to_report:
+            return
+        if self.reporter is None or not getattr(self.reporter, "is_active", False):
+            return
+
+        loaded = load_store(self.config.store_path, PAPER)
+        start_eq = self.day_start_equity or self.config.opening_balance
+        end_eq = result.equity if result.equity is not None else start_eq
+        open_positions = 0
+        closures_to_report: list[object] = list(self.day_closures)
+
+        if loaded.state is not None:
+            ledger = loaded.state.ledger
+            open_positions = len(ledger.positions)
+            day_closures = [
+                c for c in ledger.closures.values() if c.closed_at.date() == day_to_report
+            ]
+            if day_closures:
+                closures_to_report = list(day_closures)
+
+        send_summary = getattr(self.reporter, "send_daily_summary", None)
+        if callable(send_summary):
+            err = send_summary(
+                day=day_to_report,
+                start_equity=start_eq,
+                end_equity=end_eq,
+                open_positions_count=open_positions,
+                closures=closures_to_report,
+            )
+            self.last_reported_date = day_to_report
+            if err:
+                self.emit(at, "hata", f"telegram günlük raporu iletilemedi ({err})")
 
     # --- the loop -----------------------------------------------------------------------------
     def finish(self, reason: ExitReason) -> LoopExit:
@@ -304,6 +467,7 @@ def run_loop(
     trial: bool = True,
     approved_by: str | None = None,
     report_path: str | None = None,
+    reporter: object | None = None,
 ) -> LoopExit:
     """R-8…R-15: hazırlanmış depoyla paper turlarını aralık sınırlarında atar; nedeniyle çıkar.
 
@@ -317,6 +481,7 @@ def run_loop(
         trial=trial,
         approved_by=approved_by,
         report_path=report_path,
+        reporter=reporter,
     )
     try:
         return loop.run()

@@ -337,6 +337,28 @@ def edge_clears(
         return False
 
 
+def daily_loss_reached(state: "RiskState", limits: RiskLimits) -> bool:
+    """Spec 0029 (R-4, AC-4, G-3): gün içi zarar limiti aşıldı mı sorgusu.
+
+    Kasanın gün başından bu yana kaybı `limits.daily_loss_limit` oranına ulaştıysa True döner.
+    Durum boşsa veya gerekli alanlar yoksa False döner.
+    """
+    if state.day_start_equity is None or state.last_equity is None:
+        return False
+    if not isinstance(state.day_start_equity, Decimal) or not isinstance(
+        state.last_equity, Decimal
+    ):
+        return False
+    if not state.day_start_equity.is_finite() or not state.last_equity.is_finite():
+        return False
+    if not isinstance(limits.daily_loss_limit, Decimal) or not limits.daily_loss_limit.is_finite():
+        return False
+    try:
+        return _reached(state.day_start_equity, state.last_equity, limits.daily_loss_limit)
+    except DecimalException:
+        return False
+
+
 def _size(
     intent: TradeIntent,
     entry: Decimal,

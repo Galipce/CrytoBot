@@ -149,6 +149,7 @@ class Harness:
         trial: bool = True,
         approved_by: str | None = None,
         report_path: str | None = None,
+        reporter: Any | None = None,
     ) -> LoopExit:
         return run_loop(
             self.config,
@@ -157,6 +158,7 @@ class Harness:
             trial=trial,
             approved_by=approved_by,
             report_path=report_path,
+            reporter=reporter,
         )
 
     def events(self, event: str) -> list[str]:

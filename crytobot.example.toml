@@ -43,6 +43,14 @@ atr_period = 14
 k = "2"
 r = "2"
 
+# Telegram bildirimleri ve raporlama (spec 0029):
+# Bot token ortam değişkeninden (`TELEGRAM_BOT_TOKEN`) veya .env dosyasından okunur;
+# chat_id ise aşağıdaki tablodan alınır. İsteğe bağlıdır (varsayılan: devre dışı).
+# Aktifleştirmek için aşağıdaki satırların başındaki "# " kaldırılır ve geçerli token/chat_id girilir.
+# [reporting.telegram]
+# enabled = false
+# chat_id = "123456789"
+
 # Backtest (`python -m crytobot backtest`, spec 0025): indirilen veri dosyasıyla, ağa çıkmadan,
 # dönemin her tur anında paper turunun aynısı simüle saatle atılır; rapor konsola ve rapor
 # dosyasına yazılır. Strateji, risk, çiftler, aralıklar ve açılış kasası yukarıdaki ayarlardır;

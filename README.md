@@ -53,6 +53,11 @@ uv run python -m crytobot backtest       # veri dosyasıyla backtest koşar, rap
   aksi halde bot başlamaz. `--trial` bayrağı ile kapı atlanarak deneme modunda çalıştırılabilir; bu
   durumda çıktı "BR-10 öncesi deneme, strateji kanıtı değil" (`TRIAL_MARK`) taşır. Kanıtlı koşuda ise onay
   bilgisi yazılır ve deneme işareti kalkar.
+- **Telegram bildirimleri ve raporlama (spec 0029):** İsteğe bağlı olarak `[reporting.telegram]` (`enabled = true`,
+  `chat_id = "..."`) ve `TELEGRAM_BOT_TOKEN` (ortam değişkeni veya `.env`) ile botun çalışma durumu (`TurnNotice`),
+  risk durdurmaları (`DRAWDOWN_HALT`, `DAILY_LOSS_LIMIT`), gerçekleşen alım/satım emir dolumları ve UTC 00:00 gün
+  dönümünde performans özet raporu tek yönlü olarak Telegram'a iletilir. Ağ kesintileri ve API hataları botun
+  çalışmasını engellemez, bildirimler bellek kuyruğuna alınır.
 
 ---
 

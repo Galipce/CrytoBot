@@ -23,6 +23,7 @@ from crytobot.risk._approval import (
     TradeApproval,
     TradeIntent,
     approve_trade,
+    daily_loss_reached,
     edge_clears,
 )
 from crytobot.risk._close import (
@@ -88,6 +89,7 @@ __all__: list[str] = [
     "approve_close",
     "approve_trade",
     "close_request_problems",
+    "daily_loss_reached",
     "decide_change",
     "edge_clears",
     "load_limits",

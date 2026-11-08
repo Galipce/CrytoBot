@@ -6,13 +6,14 @@ Süreç belleği dışında hiçbir şey turdan taşmaz; kaydedilmeyen durum bir
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 
 from crytobot.app._inputs import DataIssue, DataReport, TurnSettings
 from crytobot.app._notices import NoticeKind, Notices, TurnMemory
 from crytobot.app._result import BuyHalt, PairOutcome, TurnOutcome, TurnResult
 from crytobot.execution import CloseOrder, ExecutionState, Order, PaperExchange
 from crytobot.persistence import StoredState, StoreOutcome, save_store
-from crytobot.portfolio import Fill, Ledger, SnapshotOutcome, account_state
+from crytobot.portfolio import Closure, Fill, Ledger, SnapshotOutcome, account_state
 from crytobot.risk import RiskState, observe
 
 
@@ -60,6 +61,8 @@ class TurnRun:
     closes: list[CloseOrder] = field(default_factory=list)
     buys: list[Order] = field(default_factory=list)
     pairs: list[PairOutcome] = field(default_factory=list)
+    closures: list[Closure] = field(default_factory=list)
+    last_equity: Decimal | None = None
 
     @property
     def buying_stopped(self) -> bool:
@@ -88,6 +91,8 @@ class TurnRun:
     def note_drawdown(self) -> None:
         if self.state.risk.halted:
             self.halt(BuyHalt.DRAWDOWN)
+        else:
+            self.halts.pop(BuyHalt.DRAWDOWN, None)
 
     def save(
         self,
@@ -134,6 +139,7 @@ class TurnRun:
         if snapshot.snapshot is None:
             self._refuse_observation(snapshot.message)
             return
+        self.last_equity = snapshot.snapshot.equity
         self.notices.clear(NoticeKind.INVALID_DATA)  # the ledger priced every position
         update = observe(self.state.risk, self.now, snapshot.snapshot.equity, self.settings.limits)
         if not update.accepted:
@@ -172,4 +178,6 @@ class TurnRun:
             tuple(self.halts),
             tuple(self.notices.errors),
             message,
+            tuple(self.closures),
+            self.last_equity,
         )
