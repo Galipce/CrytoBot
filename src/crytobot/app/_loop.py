@@ -29,7 +29,7 @@ from crytobot.app._events import (
     turn_text,
 )
 from crytobot.app._market import to_turn_market
-from crytobot.app._notices import TurnMemory, TurnNotice
+from crytobot.app._notices import NoticeKind, TurnMemory, TurnNotice
 from crytobot.app._result import BuyHalt, TurnOutcome, TurnResult
 from crytobot.app._schedule import Due, after_turn, boundary_at_or_before, due, seconds_until
 from crytobot.app._session import AppError
@@ -260,20 +260,24 @@ class _Loop:
                 is_drawdown = BuyHalt.DRAWDOWN in result.halts
                 if is_drawdown and not self._drawdown_halted:
                     self._drawdown_halted = True
-                    send_notice(
-                        kind="drawdown_halt",
+                    err = send_notice(
+                        kind=NoticeKind.DRAWDOWN_HALT.value,
                         subject="",
                         entering=True,
                         message="drawdown limiti aşıldı",
                     )
+                    if err:
+                        self.emit(at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})")
                 elif not is_drawdown and self._drawdown_halted:
                     self._drawdown_halted = False
-                    send_notice(
-                        kind="drawdown_halt",
+                    err = send_notice(
+                        kind=NoticeKind.DRAWDOWN_HALT.value,
                         subject="",
                         entering=False,
                         message="drawdown durdurması kalktı",
                     )
+                    if err:
+                        self.emit(at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})")
 
                 loaded_risk = load_store(self.config.store_path, PAPER)
                 is_daily_loss = False
@@ -283,20 +287,24 @@ class _Loop:
                     )
                 if is_daily_loss and not self._daily_loss_halted:
                     self._daily_loss_halted = True
-                    send_notice(
-                        kind="daily_loss_limit",
+                    err = send_notice(
+                        kind=NoticeKind.DAILY_LOSS_LIMIT.value,
                         subject="",
                         entering=True,
                         message="günlük zarar limiti aşıldı",
                     )
+                    if err:
+                        self.emit(at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})")
                 elif not is_daily_loss and self._daily_loss_halted:
                     self._daily_loss_halted = False
-                    send_notice(
-                        kind="daily_loss_limit",
+                    err = send_notice(
+                        kind=NoticeKind.DAILY_LOSS_LIMIT.value,
                         subject="",
                         entering=False,
                         message="günlük zarar limiti sıfırlandı",
                     )
+                    if err:
+                        self.emit(at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})")
 
             # R-5: işlem olay bildirimleri (dolum ve kapanış)
             if callable(send_fill):

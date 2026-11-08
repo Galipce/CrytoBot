@@ -129,6 +129,56 @@ def test_risk_drawdown_and_daily_loss_notices(tmp_path: Path) -> None:
     assert len(notices_received) == 2
 
 
+def test_risk_halt_notice_dispatch_error_is_logged(tmp_path: Path) -> None:
+    # F-01: Risk durdurma bildirimi iletilemediğinde hata loga ve konsola yansıtılır
+    def failing_transport(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        return 0, "Network timeout"
+
+    reporter = ReportingService(CONFIG, transport=failing_transport)
+
+    limits = RiskLimits(
+        per_trade_risk=Decimal("0.01"),
+        daily_loss_limit=Decimal("0.03"),
+        max_drawdown=Decimal("0.05"),
+        max_open_positions=3,
+        profit_cost_multiple=Decimal("2.0"),
+    )
+    store = opened_store(tmp_path / "s.db", deposit=Decimal("9400"))
+    bot = harness(store, stop_after=1)
+    turn_settings = replace(bot.config.turn, limits=limits)
+    config = replace(bot.config, turn=turn_settings)
+    loop = _loop._Loop(config, bot.parts(), Exchange(), reporter=reporter)
+
+    from crytobot.persistence import load_store, save_store
+    from crytobot.risk import RiskState
+
+    state = load_store(str(tmp_path / "s.db"), "paper").state
+    assert state is not None
+    halted_risk = RiskState(
+        day=NOW.date(),
+        day_start_equity=Decimal("10000"),
+        peak_equity=Decimal("10000"),
+        last_time=NOW,
+        last_equity=Decimal("9400"),
+        halted=True,
+    )
+    halted_state = replace(state, risk=halted_risk)
+    save_store(
+        str(tmp_path / "s.db"),
+        state,
+        halted_state.ledger,
+        halted_state.execution,
+        halted_state.risk,
+    )
+
+    from crytobot.app._schedule import Due
+
+    loop.turn(Due(NOW, 0))
+
+    errors = bot.events("hata")
+    assert any("telegram risk durdurma bildirimi iletilemedi" in e for e in errors)
+
+
 def test_trade_event_notifications(tmp_path: Path) -> None:
     # AC-5: Alım dolumu ve kapanış olay bildirimleri
     events: list[dict[str, Any]] = []
