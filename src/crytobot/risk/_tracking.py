@@ -19,9 +19,10 @@ class RiskState:
     last_time: datetime | None
     last_equity: Decimal | None
     halted: bool
+    kill_switch: bool = False
 
 
-EMPTY_STATE = RiskState(None, None, None, None, None, False)
+EMPTY_STATE = RiskState(None, None, None, None, None, False, False)
 
 
 class TrackingReason(Enum):
@@ -58,6 +59,8 @@ def risk_state_problems(state: object) -> list[str]:
     )
     if type(state.halted) is not bool:
         return ["durdurma işareti doğru ya da yanlış olmalı"]
+    if type(state.kill_switch) is not bool:
+        return ["kill switch işareti doğru ya da yanlış olmalı"]
     if all(field is None for field in fields):
         return ["gözlem yokken durdurma olmaz"] if state.halted else []
     if any(field is None for field in fields):
@@ -107,18 +110,18 @@ def observe(state: RiskState, at: object, equity: object, limits: RiskLimits) ->
     day_start = number if new_day else state.day_start_equity
     peak = number if state.peak_equity is None else max(state.peak_equity, number)
     halted = state.halted or _reached(peak, number, limits.max_drawdown)
-    updated = RiskState(day, day_start, peak, at, number, halted)
+    updated = RiskState(day, day_start, peak, at, number, halted, state.kill_switch)
     note = " (drawdown durdurması)" if halted and not state.halted else ""
     return StateUpdate(updated, None, f"kasa {number} gözlendi{note}")
 
 
 def resume(state: RiskState, channel: str) -> StateUpdate:
-    """BR-6: drawdown durdurmasını yalnızca CLI kaldırır; zirve kasa son gözlenen kasa olur."""
+    """BR-6: drawdown durdurmasını ve kill switch'i yalnızca CLI kaldırır; zirve kasa son gözlenen kasa olur."""
 
     def reject(reason: TrackingReason, message: str) -> StateUpdate:
         return StateUpdate(state, reason, message)
 
-    if state.last_equity is None:
+    if state.last_equity is None and not (state.kill_switch or state.halted):
         return reject(TrackingReason.EMPTY_STATE, "risk durumu boş: önce kasa gözlenmeli")
     try:
         source = Channel(channel)
@@ -128,8 +131,17 @@ def resume(state: RiskState, channel: str) -> StateUpdate:
         return reject(
             TrackingReason.TELEGRAM_RESUME, "durdurma Telegram'dan kaldırılamaz; yalnızca CLI"
         )
-    if not state.halted:
+    if not state.halted and not state.kill_switch:
         return reject(TrackingReason.NOT_HALTED, "durdurma yok; durum değişmedi")
     # the peak restarts at the last equity, or the next observation would halt again at once
-    resumed = replace(state, halted=False, peak_equity=state.last_equity)
-    return StateUpdate(resumed, None, f"durdurma kaldırıldı; zirve kasa {state.last_equity}")
+    peak = state.last_equity if state.last_equity is not None else state.peak_equity
+    resumed = replace(state, halted=False, kill_switch=False, peak_equity=peak)
+    return StateUpdate(resumed, None, f"durdurma kaldırıldı; zirve kasa {peak}")
+
+
+def engage_kill_switch(state: RiskState) -> StateUpdate:
+    """Acil durdurma anahtarını devreye alır."""
+    if state.kill_switch:
+        return StateUpdate(state, None, "kill switch zaten devrede; durum değişmedi")
+    updated = replace(state, kill_switch=True)
+    return StateUpdate(updated, None, "kill switch devreye alındı")
