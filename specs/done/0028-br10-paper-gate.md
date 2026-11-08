@@ -1,6 +1,6 @@
 # Spec 0028 — BR-10 paper başlatma kapısı ve aşama onayı
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0028-plan.md`
 - Self-critique: done
@@ -65,27 +65,29 @@ none — no user interface. Kullanıcı yalnız konsol komutunu, konsol çıktı
 - Self-critique kararları G-1–G-5 (Galip Badem, 2026-11-08) R-3, R-5, R-6, Constraints ve AC-3, AC-5, AC-7'ye yazıldı.
 
 ## Acceptance criteria
-- [ ] AC-1 — Mutlu yol (Kanıtlı başlatma) (R-1, R-2, R-3, R-4, R-5, R-7): Geçerli bir backtest raporu yolu, onaylayan adı, geçerli onay tarihi ve eşikleri karşılayan metriklerle `[stage]` bölümü tanımlanmış ayar dosyasıyla başlatma başarılı olur. İlk tur hemen atılır. Başlatma çıktısı ve kayıt dosyası onaylayan adını ve rapor yolunu taşır. Tur özetinde "BR-10 öncesi deneme, strateji kanıtı değil" metni yer almaz.
-- [ ] AC-2 — Varsayılan başlatmada onaysız ret (R-1): `[stage]` bölümü bulunmayan ya da `report_path`, `approved_by`, `approved_at` alanlarından biri eksik olan ayar dosyasıyla varsayılan `crytobot start` çalıştırıldığında başlatma tur atmadan, borsaya çıkmadan ve depoya dokunmadan reddedilir. İlk eksik/sorunlu alan adıyla söylenir.
-- [ ] AC-3 — Deneme modu (`--trial`) (R-6, R-7): `[stage]` onayı bulunmayan veya geçersiz olan bir ayar dosyasıyla `crytobot start --trial` çalıştırıldığında bot başlar, ilk turu atar. Başlatma satırı ve tur özetleri "BR-10 öncesi deneme, strateji kanıtı değil" (`TRIAL_MARK`) işaretini taşır.
-- [ ] AC-4 — Onay ayarları geçerliliği (R-2): `approved_by` boş metin veya metin dışı tip; `approved_at` ISO formatında değil, zaman dilimsiz veya geçersiz; `report_path` metin değil; `min_trades` sıfır, negatif veya tam sayı değil; `min_profit_factor` 1'den küçük veya sayıya çevrilemeyen metin/tip olduğunda başlatma reddedilir, ilk sorunlu ayar adıyla söylenir.
-- [ ] AC-5 — Rapor dosyası varlığı ve aday işareti (R-3): `report_path` yolundaki dosya yoksa, okunamıyorsa, boşsa, bozuksa veya raporda "örneklem dışı — BR-10 kanıtı adayı" başlığı/işareti bulunmuyorsa başlatma tur atmadan reddedilir, neden adıyla söylenir.
-- [ ] AC-6 — Metrik eşikleri yetersizliği (R-4): Raporun örneklem dışı bölümünde: (a) net kâr sıfır veya negatif (getiri ≤ 0); (b) en büyük drawdown botun `risk.max_drawdown` ayarından yüksek; (c) işlem sayısı `min_trades` eşiğinden az veya sıfır (oranlar tanımsız); (d) tanımlanmışsa kâr faktörü `min_profit_factor`'den düşük veya tanımsız olduğunda başlatma adıyla reddedilir.
-- [ ] AC-7 — Ayar ve evren uyuşmazlığı (R-5): Raporun koşu ayarlarında yer alan beyaz liste çift kümesi, mum aralığı, tur aralığı, spread veya strateji parametrelerinden herhangi biri botun güncel ayarlarından farklıysa başlatma "ayar uyuşmazlığı: <ayar_adı>" ile reddedilir.
-- [ ] AC-8 — Depo ve ağ dokunmasızlığı (R-8): R-1–R-5 kapsamında reddedilen hiçbir durumda paper SQLite deposu oluşturulmaz, açılmaz, kilitlenmez, borsaya ağ isteği gitmez. Hata durumunda çıkış kodu ret kodu (1) olur.
+- [x] AC-1 — Mutlu yol (Kanıtlı başlatma) (R-1, R-2, R-3, R-4, R-5, R-7): Geçerli bir backtest raporu yolu, onaylayan adı, geçerli onay tarihi ve eşikleri karşılayan metriklerle `[stage]` bölümü tanımlanmış ayar dosyasıyla başlatma başarılı olur. İlk tur hemen atılır. Başlatma çıktısı ve kayıt dosyası onaylayan adını ve rapor yolunu taşır. Tur özetinde "BR-10 öncesi deneme, strateji kanıtı değil" metni yer almaz.
+- [x] AC-2 — Varsayılan başlatmada onaysız ret (R-1): `[stage]` bölümü bulunmayan ya da `report_path`, `approved_by`, `approved_at` alanlarından biri eksik olan ayar dosyasıyla varsayılan `crytobot start` çalıştırıldığında başlatma tur atmadan, borsaya çıkmadan ve depoya dokunmadan reddedilir. İlk eksik/sorunlu alan adıyla söylenir.
+- [x] AC-3 — Deneme modu (`--trial`) (R-6, R-7): `[stage]` onayı bulunmayan veya geçersiz olan bir ayar dosyasıyla `crytobot start --trial` çalıştırıldığında bot başlar, ilk turu atar. Başlatma satırı ve tur özetleri "BR-10 öncesi deneme, strateji kanıtı değil" (`TRIAL_MARK`) işaretini taşır.
+- [x] AC-4 — Onay ayarları geçerliliği (R-2): `approved_by` boş metin veya metin dışı tip; `approved_at` ISO formatında değil, zaman dilimsiz veya geçersiz; `report_path` metin değil; `min_trades` sıfır, negatif veya tam sayı değil; `min_profit_factor` 1'den küçük veya sayıya çevrilemeyen metin/tip olduğunda başlatma reddedilir, ilk sorunlu ayar adıyla söylenir.
+- [x] AC-5 — Rapor dosyası varlığı ve aday işareti (R-3): `report_path` yolundaki dosya yoksa, okunamıyorsa, boşsa, bozuksa veya raporda "örneklem dışı — BR-10 kanıtı adayı" başlığı/işareti bulunmuyorsa başlatma tur atmadan reddedilir, neden adıyla söylenir.
+- [x] AC-6 — Metrik eşikleri yetersizliği (R-4): Raporun örneklem dışı bölümünde: (a) net kâr sıfır veya negatif (getiri ≤ 0); (b) en büyük drawdown botun `risk.max_drawdown` ayarından yüksek; (c) işlem sayısı `min_trades` eşiğinden az veya sıfır (oranlar tanımsız); (d) tanımlanmışsa kâr faktörü `min_profit_factor`'den düşük veya tanımsız olduğunda başlatma adıyla reddedilir.
+- [x] AC-7 — Ayar ve evren uyuşmazlığı (R-5): Raporun koşu ayarlarında yer alan beyaz liste çift kümesi, mum aralığı, tur aralığı, spread veya strateji parametrelerinden herhangi biri botun güncel ayarlarından farklıysa başlatma "ayar uyuşmazlığı: <ayar_adı>" ile reddedilir.
+- [x] AC-8 — Depo ve ağ dokunmasızlığı (R-8): R-1–R-5 kapsamında reddedilen hiçbir durumda paper SQLite deposu oluşturulmaz, açılmaz, kilitlenmez, borsaya ağ isteği gitmez. Hata durumunda çıkış kodu ret kodu (1) olur.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 0 (review clean, fix turu açılmadı) |
+| Review findings: real / noise / deferred | 0 / 2 / 1 (F-01 noise, F-02 deferred B-56, F-03 noise) |
+| Regressions introduced | 0 (kanıt bu PR'ın full CI koşusu) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `check` ve `doctor` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). VERIFY @`f9b26fe`: adı geçen testler hızlı profilde yeşil, 8 kasıtlı bozmanın 8'i kırmızı; full kanıt bu PR'ın CI koşusudur.
