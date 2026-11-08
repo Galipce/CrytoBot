@@ -267,7 +267,9 @@ class _Loop:
                         message="drawdown limiti aşıldı",
                     )
                     if err:
-                        self.emit(at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})")
+                        self.emit(
+                            at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
+                        )
                 elif not is_drawdown and self._drawdown_halted:
                     self._drawdown_halted = False
                     err = send_notice(
@@ -277,7 +279,9 @@ class _Loop:
                         message="drawdown durdurması kalktı",
                     )
                     if err:
-                        self.emit(at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})")
+                        self.emit(
+                            at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
+                        )
 
                 loaded_risk = load_store(self.config.store_path, PAPER)
                 is_daily_loss = False
@@ -294,7 +298,9 @@ class _Loop:
                         message="günlük zarar limiti aşıldı",
                     )
                     if err:
-                        self.emit(at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})")
+                        self.emit(
+                            at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
+                        )
                 elif not is_daily_loss and self._daily_loss_halted:
                     self._daily_loss_halted = False
                     err = send_notice(
@@ -304,7 +310,9 @@ class _Loop:
                         message="günlük zarar limiti sıfırlandı",
                     )
                     if err:
-                        self.emit(at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})")
+                        self.emit(
+                            at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
+                        )
 
             # R-5: işlem olay bildirimleri (dolum ve kapanış)
             if callable(send_fill):
