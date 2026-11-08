@@ -43,7 +43,10 @@ def _record_close(run: TurnRun, order: CloseOrder) -> Ledger:
         CloseReason(order.reason),
         run.now,
     )
-    return close_position(run.state.ledger, close).ledger
+    res = close_position(run.state.ledger, close)
+    if res.closure is not None:
+        run.closures.append(res.closure)
+    return res.ledger
 
 
 def resolve_unknown(run: TurnRun) -> None:

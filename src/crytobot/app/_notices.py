@@ -22,6 +22,8 @@ class NoticeKind(Enum):
     OBSERVATION_REJECTED = "observation_rejected"
     CLOSE_REFUSED = "close_refused"
     UNEXPECTED_ERROR = "unexpected_error"
+    DRAWDOWN_HALT = "drawdown_halt"
+    DAILY_LOSS_LIMIT = "daily_loss_limit"
 
 
 # Absence ends only these: every completed turn evaluates them. Any other state ends with `clear`
