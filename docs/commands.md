@@ -29,7 +29,7 @@ Always available, outside the loop:
 
 | Group | Commands |
 |---|---|
-| Terminal scripts | `scripts/init` · `scripts/doctor` · `scripts/check` · `scripts/residue` · `scripts/selftest` |
+| Terminal scripts | `scripts/init` · `scripts/doctor` · `scripts/check` · `scripts/residue` · `scripts/selftest` · `scripts/gemini-devam.ps1` |
 | Request lanes | `/change` (existing behavior) · `/fix-bug` (broken behavior) · `/refactor` (structure only) |
 | Setup · record · recover | `/bootstrap` · `/adr` · `/recover` |
 
@@ -51,11 +51,12 @@ Mode is the `Mode:` line in `AGENTS.md`, set at bootstrap (`workflows/README.md`
 
 ### `scripts/init`
 - **What it does:** installs one AI tool adapter into the repo root: `claude-code`,
-  `github-copilot`, `cursor`, `codex` or `generic`.
+  `github-copilot`, `cursor`, `codex`, `antigravity` or `generic`.
 - **When to use it:** once, before `/bootstrap`; again to add or refresh an adapter.
 - **Reads / writes:** reads `adapters/<tool>/`; writes `CLAUDE.md` + `.claude/`, or `.github/`
   (`copilot-instructions.md`, `prompts/`, `agents/`, `instructions/`), or `.cursor/` (`rules/`,
-  `commands/`), or `.agents/skills/` (Codex). Existing files are kept unless `--force`; `generic`
+  `commands/`), or `.agents/skills/` (Codex or Antigravity — one shared folder: the first installed
+  wins, the other's same-named files are kept). Existing files are kept unless `--force`; `generic`
   writes nothing.
 - **Stops at:** no gate; it prints the next step (`Next: open Claude Code here and run /bootstrap`).
 - **Lite / Strict:** no difference — it runs before a mode exists.
@@ -136,6 +137,23 @@ Mode is the `Mode:` line in `AGENTS.md`, set at bootstrap (`workflows/README.md`
 - **Refusal:** none.
 - **Common mistake:** editing a script and the selftest together to make it pass — a red selftest
   means the script now differs from its documentation.
+
+### `scripts/gemini-devam.ps1`
+- **What it does:** proje betiği (spec 0027) — Claude'un hakkı bittiğinde işi Gemini (Antigravity
+  CLI, `agy`) ile sürdürür. `agy`'yi önce PATH'te, sonra `%USERPROFILE%\.gemini\bin\agy.exe`'de arar,
+  depo kökünde etkileşimli açar; açılış talimatı branch'i, aktif spec'leri ve `Status`'larını, planın
+  onay satırını ve bitmemiş ilk adımını, `git status`'u ve `.claude/handoff.local.md` devir notunu
+  okutur ve sıradaki segment komutunu önerir.
+- **When to use it:** Claude'un kullanım hakkı bittiğinde, PowerShell'de (herhangi bir klasörden):
+  `scripts\gemini-devam.ps1`. `-Prova` Gemini'yi açmadan bulunan yolu, klasörü ve argümanları yazar.
+- **Reads / writes:** kendisi okumaz, yazmaz, sır okumaz; Gemini'yi varsayılan izin modunda açar
+  (her işlem için onay sorar; `--dangerously-skip-permissions` ve `--mode` verilmez).
+- **Stops at:** Gemini'nin durum özeti ve önerisi; onay gelene kadar Gemini hiçbir şey başlatmaz.
+- **Lite / Strict:** fark yok — Gemini `AGENTS.md`'deki modu uygular.
+- **Refusal:** `agy` iki konumda da yoksa `Gemini (Antigravity CLI, agy) bulunamadı; Gemini
+  açılmadı.`, aranan iki konum ve kurulum ipucu (exit 1).
+- **Common mistake:** Gemini'de PLAN için `/plan` yazmak — yerleşik komuttur; `/anew-plan` kullanılır.
+  Yürütme ilkesi betiği engellerse: `powershell -ExecutionPolicy Bypass -File scripts\gemini-devam.ps1`.
 
 ## B — Start: `/bootstrap` and `/new-feature`
 
@@ -335,7 +353,8 @@ lives in [`prompts/recovery/README.md`](../prompts/recovery/README.md).
 2. **The four human gates — spec approval, plan approval, triage, ship — are never automated, in
    any mode.**
 
-The same commands exist in Claude Code, Cursor, GitHub Copilot and Codex (`./scripts/init <tool>`;
-in Codex they are skills, typed `$analyze` instead of `/analyze`); any other tool uses the generic
+The same commands exist in Claude Code, Cursor, GitHub Copilot, Codex and Antigravity
+(`./scripts/init <tool>`; in Codex they are skills, typed `$analyze` instead of `/analyze`; in
+Antigravity PLAN is `/anew-plan`); any other tool uses the generic
 adapter and pastes the prompts (`adapters/generic/README.md`). How strongly each rule holds per
 tool is the README's "How strongly is each rule held?" table.

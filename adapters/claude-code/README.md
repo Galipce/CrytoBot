@@ -26,5 +26,12 @@ What it adds on top of the core:
 - **Immutability hook** (`.claude/hooks/protect-shipped.sh`): Edit/Write/MultiEdit/NotebookEdit
   under `specs/done/` are physically rejected. A shell redirect is not caught — the CI gate
   (`scripts/doctor --strict`) and review are the backstop.
+- **Handoff note hook** (`.claude/hooks/handoff-note.sh`, `Stop`): at the end of every turn it
+  writes `.claude/handoff.local.md` — date-time, branch, last commit, active specs and their
+  `Status`, the matching plan's `Approved by / on` line and first unfinished step, uncommitted
+  changes. Derived from files and git only (never the conversation), untracked
+  (`.claude/.gitignore`), written by a background job so the turn waits only for its start (hook
+  capped at 2 s), and a failure never blocks the turn. Another tool resumes
+  from it (`adapters/antigravity/README.md`).
 
 All defaults are adjustable — see "Adapting it" in the root README.

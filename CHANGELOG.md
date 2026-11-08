@@ -3,6 +3,20 @@
 Template users: compare your copy against the version you started from and pull what you need —
 the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not migrations.
 
+## Unreleased — CrytoBot (yerel)
+
+Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
+
+- **Antigravity adaptörü** (spec 0027): `./scripts/init antigravity` on iki komutu Antigravity
+  skill'i olarak `.agents/skills/`'e kurar (Codex ile aynı klasör; PLAN `/anew-plan`, çünkü yerleşik
+  `/plan` aynı adlı skill'i gölgeler). `scripts/doctor` eşliğe Antigravity'yi katar: eksik komut ve
+  açık-çağrı ifadesi (`Run only when the user types /<ad> explicitly`) olmayan açıklama FAIL;
+  `scripts/selftest` üç senaryo ekler.
+- **Devir notu** (spec 0027): Claude Code adaptörünün `Stop` hook'u (`.claude/hooks/handoff-note.sh`)
+  her turun sonunda `.claude/handoff.local.md`'yi yazar; izlenmez, en çok 2 s, hata turu durdurmaz.
+- **`scripts/gemini-devam.ps1`** (spec 0027): Claude'un hakkı bitince işi Gemini ile sürdürür.
+- **Gemini commit imzası** `docs/git.md`'de (Commits).
+
 ## How to upgrade
 
 1. **Your base** is the version in `.anew-version` (doctor prints it). If it is missing, find the
