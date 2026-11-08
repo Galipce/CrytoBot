@@ -18,8 +18,20 @@ noktası `python -m crytobot`'tur.
 bölümünü (veri dosyası yolu, dönem) denetler; `run_download` geçmiş veri indirmesini `DownloadParts`
 ile verilen saat, indirme işlevi, çıktı ve durdurma isteğiyle yapar. Depoya, kilide ve kayıt
 dosyasına dokunmaz.
+
+Backtest (spec 0025): `load_backtest_config` botun ayarlarını ve `[backtest]` bölümünü (veri ve
+rapor dosyası yolu, ayrım anı, spread) denetler; `run_backtest` veri dosyasındaki dönemin her tur
+anında paper turunun aynısını simüle saatle atar ve raporu yazar. Okuma, rapor dosyası, konsol,
+durdurma isteği ve geçici depo yolu `BacktestParts` ile gelir; bot deposuna, kilide ve kayıt
+dosyasına dokunulmaz, ağa çıkılmaz.
 """
 
+from crytobot.app._backtest import BacktestExit, BacktestOutcome, BacktestParts, run_backtest
+from crytobot.app._backtest_config import (
+    BacktestConfig,
+    BacktestConfigResult,
+    load_backtest_config,
+)
 from crytobot.app._config import SETTING_NAMES, BotConfig, ConfigResult, load_config
 from crytobot.app._download import (
     DownloadConfig,
@@ -61,6 +73,11 @@ __all__: list[str] = [
     "PREPARE_HINT",
     "SETTING_NAMES",
     "TRIAL_MARK",
+    "BacktestConfig",
+    "BacktestConfigResult",
+    "BacktestExit",
+    "BacktestOutcome",
+    "BacktestParts",
     "BotConfig",
     "BuyHalt",
     "ConfigResult",
@@ -88,11 +105,13 @@ __all__: list[str] = [
     "TurnResult",
     "TurnSettings",
     "line",
+    "load_backtest_config",
     "load_config",
     "load_download_config",
     "open_for_start",
     "prepare_store",
     "read_pairs",
+    "run_backtest",
     "run_download",
     "run_loop",
     "run_turn",

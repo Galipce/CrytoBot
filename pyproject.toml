@@ -88,6 +88,15 @@ source_modules = [
 forbidden_modules = ["crytobot.persistence"]
 allow_indirect_imports = true
 
+# Spec 0025 (plan A-1): the backtest's results never reach back into the run or the reader. ccxt is
+# covered for the whole src by tests/market_data/test_ccxt_boundary.py (no include_external_packages).
+[[tool.importlinter.contracts]]
+name = "R-3f: backtest imports neither app nor market_data"
+type = "forbidden"
+source_modules = ["crytobot.backtest"]
+forbidden_modules = ["crytobot.app", "crytobot.market_data"]
+allow_indirect_imports = true
+
 [[tool.importlinter.contracts]]
 name = "R-3d: no module imports another module's internal submodules"
 type = "no_foreign_submodule_imports"

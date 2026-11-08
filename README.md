@@ -21,6 +21,7 @@ cp crytobot.example.toml crytobot.toml   # düzenle: çiftler, limitler, stratej
 uv run python -m crytobot prepare        # bir kez: paper deposunu açılış bakiyesiyle oluşturur
 uv run python -m crytobot start          # turları UTC aralık sınırlarında atar
 uv run python -m crytobot download       # backtest için geçmiş mumları veri dosyasına indirir
+uv run python -m crytobot backtest       # veri dosyasıyla backtest koşar, raporu yazar
 ```
 
 - **Hazırlık** depo yoksa onu oluşturur; depo varsa hiçbir şey yazmadan reddeder. **Başlatma** depoyu
@@ -29,11 +30,22 @@ uv run python -m crytobot download       # backtest için geçmiş mumları veri
 - **İndirme** botun ayarlarını ve `crytobot.toml`'daki `[history]` bölümünü (`data_path`, `start`, `end`;
   örnekte yorum satırı) kullanır; yalnız herkese açık mum ve kural okur, depoya ve kayıt dosyasına
   dokunmaz. Var olan veri dosyasının üzerine yazmaz; durursa yarım dosya bırakmaz (spec 0023).
+- **Backtest** botun ayarlarını ve `[backtest]` bölümünü (`data_path`, `report_path`, `split_at`,
+  `spread`; örnekte yorum satırı) kullanır. Ağa çıkmaz, anahtar okumaz; bot deposuna, kilide ve
+  kayıt dosyasına dokunmaz, çalışan bir botla birlikte koşabilir. Dönemin her tur anında paper
+  turunun aynısı simüle saatle atılır; fiyat, tur anında açılan mumun açılışıdır. Rapor örneklem
+  içi, örneklem dışı ve tüm koşu için metrikleri ve varsayımları taşır, konsola ve rapor
+  dosyasına aynı metinle yazılır; geçti/kaldı demez (BR-10 kapısı ayrı spec'tedir). Var olan
+  rapor dosyasının üzerine yazmaz; durursa rapor bırakmaz (spec 0025). Veri dosyası bütünüyle
+  belleğe alınır: 1h × 12 ay × 30 çift sığar, 1m × 12 ay × 30 çift sığmaz ("beklenmeyen hata:
+  MemoryError"). 30 çift, 1h, 12 ay, `candle_count` 200 ile koşu bu makinede 60 dakikanın
+  altındadır (hızlandırma B-54).
 - **Durdurma:** Ctrl+C (Windows'ta Ctrl+Break da, Unix'te SIGTERM da). Beklemedeyse hemen çıkar, tur
   sürüyorsa tur biter; ikinci istek anında çıkarır.
 - Çıktı konsola ve ayardaki kayıt dosyasına (UTF-8, yalnız sona eklenir) yazılır. Çıkış kodları: 0
-  temiz durma, 1 başlatma/hazırlık/indirme reddi, 2 okuma reddiyle durma, 3 kayıt dosyası yazılamıyor,
-  4 indirme durdu, 130 zorla durma.
+  temiz durma ya da tamam, 1 başlatma/hazırlık/indirme/backtest reddi, 2 okuma reddiyle durma, 3 kayıt
+  dosyası yazılamıyor, 4 indirme durdu, 5 backtest durdu, 6 backtest tamam ama rapor dosyası
+  yazılamadı (rapor konsolda), 130 zorla durma. Backtest kayıt dosyasına yazmaz, yalnız konsola.
 - **BR-10:** backtest olmadan yapılan her koşu bir denemedir; çıktı "BR-10 öncesi deneme, strateji
   kanıtı değil" işaretini taşır. Sonuçlar strateji kanıtı sayılmaz.
 

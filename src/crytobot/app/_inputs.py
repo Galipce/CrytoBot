@@ -179,6 +179,14 @@ def _candle_issue(
     except StrategyError:
         return DataIssue.INVALID
     assert candles is not None  # None is not a series: refused above
+    return candle_age_issue(candles, settings, now)
+
+
+def candle_age_issue(
+    candles: Sequence[Candle], settings: TurnSettings, now: datetime
+) -> DataIssue | None:
+    """Son kapanmış mumun yaşı; seri `propose`'un denetiminden geçmiştir (spec 0025 plan Risk 8:
+    backtest eksik turları aynı kuralla sayar, `propose`'u ikinci kez çağırmaz)."""
     if not candles:
         return DataIssue.INVALID  # missing data; a short series is INSUFFICIENT_HISTORY (Risk 7)
     try:
