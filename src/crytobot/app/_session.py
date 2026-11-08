@@ -14,7 +14,7 @@ from crytobot.app._result import BuyHalt, PairOutcome, TurnOutcome, TurnResult
 from crytobot.execution import CloseOrder, ExecutionState, Order, PaperExchange
 from crytobot.persistence import StoredState, StoreOutcome, save_store
 from crytobot.portfolio import Closure, Fill, Ledger, SnapshotOutcome, account_state
-from crytobot.risk import RiskState, daily_loss_reached, observe
+from crytobot.risk import RiskState, observe
 
 
 class AppError(Exception):
@@ -91,26 +91,8 @@ class TurnRun:
     def note_drawdown(self) -> None:
         if self.state.risk.halted:
             self.halt(BuyHalt.DRAWDOWN)
-            self.notices.enter(
-                NoticeKind.DRAWDOWN_HALT,
-                "",
-                f"drawdown durdurması: zirve {self.state.risk.peak_equity}, "
-                f"kasa {self.state.risk.last_equity}, limit {self.settings.limits.max_drawdown}",
-            )
         else:
             self.halts.pop(BuyHalt.DRAWDOWN, None)
-            self.notices.clear(NoticeKind.DRAWDOWN_HALT)
-
-        if daily_loss_reached(self.state.risk, self.settings.limits):
-            self.notices.enter(
-                NoticeKind.DAILY_LOSS_LIMIT,
-                "",
-                f"günlük zarar limiti: gün başı {self.state.risk.day_start_equity}, "
-                f"kasa {self.state.risk.last_equity}, "
-                f"limit {self.settings.limits.daily_loss_limit}",
-            )
-        else:
-            self.notices.clear(NoticeKind.DAILY_LOSS_LIMIT)
 
     def save(
         self,

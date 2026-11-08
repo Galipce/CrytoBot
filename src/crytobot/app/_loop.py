@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any
 
 from crytobot.app._config import BotConfig
 from crytobot.app._events import (
@@ -31,7 +30,7 @@ from crytobot.app._events import (
 )
 from crytobot.app._market import to_turn_market
 from crytobot.app._notices import TurnMemory, TurnNotice
-from crytobot.app._result import TurnOutcome, TurnResult
+from crytobot.app._result import BuyHalt, TurnOutcome, TurnResult
 from crytobot.app._schedule import Due, after_turn, boundary_at_or_before, due, seconds_until
 from crytobot.app._session import AppError
 from crytobot.app._start import read_pairs
@@ -39,6 +38,7 @@ from crytobot.app._turn import run_turn
 from crytobot.execution import PAPER, OrderStatus, PaperExchange
 from crytobot.market_data import MarketRead, ReadSettings
 from crytobot.persistence import load_store
+from crytobot.risk import daily_loss_reached
 
 # The clock is read again at least this often while waiting: a sleep or a clock jump is seen
 MAX_WAIT_S = 60.0
@@ -111,7 +111,7 @@ class _Loop:
         trial: bool = True,
         approved_by: str | None = None,
         report_path: str | None = None,
-        reporter: Any | None = None,
+        reporter: object | None = None,
     ) -> None:
         self.config = config
         self.parts = parts
@@ -130,8 +130,9 @@ class _Loop:
         self.current_day: date | None = None
         self.day_start_equity: Decimal | None = None
         self.last_reported_date: date | None = None
-        self.day_realized_pnl: Decimal = Decimal(0)
-        self.day_closures_count: int = 0
+        self.day_closures: list[object] = []
+        self._drawdown_halted: bool = False
+        self._daily_loss_halted: bool = False
 
     # --- output -----------------------------------------------------------------------------
     def emit(self, at: object, event: str, text: str) -> None:
@@ -158,14 +159,16 @@ class _Loop:
     def notice(self, notice: TurnNotice) -> None:
         self.emit(notice.at, "durum", notice_text(notice))
         if self.reporter is not None and getattr(self.reporter, "is_active", False):
-            err = self.reporter.send_turn_notice(
-                notice.kind.value,
-                notice.subject,
-                notice.entering,
-                notice.message,
-            )
-            if err:
-                self.emit(notice.at, "hata", f"telegram bildirimi iletilemedi ({err})")
+            send = getattr(self.reporter, "send_turn_notice", None)
+            if callable(send):
+                err = send(
+                    notice.kind.value,
+                    notice.subject,
+                    notice.entering,
+                    notice.message,
+                )
+                if err:
+                    self.emit(notice.at, "hata", f"telegram bildirimi iletilemedi ({err})")
 
     # --- effects with the loop's error net ----------------------------------------------------
     def moment(self) -> datetime | None:
@@ -247,36 +250,73 @@ class _Loop:
         self.last = result
         self.turns += 1
 
-        # R-5: işlem olay bildirimleri (dolum ve kapanış)
+        # R-4: Kasa ve risk durdurma bildirimleri
         if self.reporter is not None and getattr(self.reporter, "is_active", False):
-            for buy in result.buys:
-                if buy.status is OrderStatus.FILLED:
-                    price = buy.fill_price if buy.fill_price is not None else buy.entry
-                    err = self.reporter.send_fill_notice(
-                        pair=buy.pair,
-                        side=buy.side,
-                        amount=buy.amount,
-                        price=price,
-                        stop=buy.stop,
+            send_notice = getattr(self.reporter, "send_turn_notice", None)
+            send_fill = getattr(self.reporter, "send_fill_notice", None)
+            send_close = getattr(self.reporter, "send_close_notice", None)
+
+            if callable(send_notice):
+                is_drawdown = BuyHalt.DRAWDOWN in result.halts
+                if is_drawdown and not self._drawdown_halted:
+                    self._drawdown_halted = True
+                    send_notice(
+                        kind="drawdown_halt",
+                        subject="",
+                        entering=True,
+                        message="drawdown limiti aşıldı",
                     )
+                elif not is_drawdown and self._drawdown_halted:
+                    self._drawdown_halted = False
+                    send_notice(
+                        kind="drawdown_halt",
+                        subject="",
+                        entering=False,
+                        message="drawdown durdurması kalktı",
+                    )
+
+                loaded_risk = load_store(self.config.store_path, PAPER)
+                is_daily_loss = False
+                if loaded_risk.state is not None:
+                    is_daily_loss = daily_loss_reached(
+                        loaded_risk.state.risk, self.config.turn.limits
+                    )
+                if is_daily_loss and not self._daily_loss_halted:
+                    self._daily_loss_halted = True
+                    send_notice(
+                        kind="daily_loss_limit",
+                        subject="",
+                        entering=True,
+                        message="günlük zarar limiti aşıldı",
+                    )
+                elif not is_daily_loss and self._daily_loss_halted:
+                    self._daily_loss_halted = False
+                    send_notice(
+                        kind="daily_loss_limit",
+                        subject="",
+                        entering=False,
+                        message="günlük zarar limiti sıfırlandı",
+                    )
+
+            # R-5: işlem olay bildirimleri (dolum ve kapanış)
+            if callable(send_fill):
+                for buy in result.buys:
+                    if buy.status is OrderStatus.FILLED:
+                        price = buy.fill_price if buy.fill_price is not None else buy.entry
+                        err = send_fill(
+                            pair=buy.pair,
+                            side=buy.side,
+                            amount=buy.amount,
+                            price=price,
+                            stop=buy.stop,
+                        )
+                        if err:
+                            self.emit(at, "hata", f"telegram dolum bildirimi iletilemedi ({err})")
+            if callable(send_close):
+                for closure in result.closures:
+                    err = send_close(closure)
                     if err:
-                        self.emit(at, "hata", f"telegram dolum bildirimi iletilemedi ({err})")
-            for closure in result.closures:
-                pos = closure.position
-                cost = pos.amount * pos.cost_price + pos.fee
-                pnl_pct = (
-                    ((closure.realized / cost) * Decimal(100)).quantize(Decimal("0.01"))
-                    if cost > 0
-                    else Decimal(0)
-                )
-                err = self.reporter.send_close_notice(
-                    pair=closure.position.pair,
-                    reason=closure.reason.value,
-                    realized_pnl=closure.realized,
-                    pnl_pct=pnl_pct,
-                )
-                if err:
-                    self.emit(at, "hata", f"telegram kapanış bildirimi iletilemedi ({err})")
+                        self.emit(at, "hata", f"telegram kapanış bildirimi iletilemedi ({err})")
 
         # R-6: UTC gün dönümü (00:00 UTC) günlük özet raporu
         if result.outcome is TurnOutcome.COMPLETED:
@@ -290,12 +330,10 @@ class _Loop:
                     self._send_daily_summary(day_to_report, at, result)
                     self.current_day = turn_day
                     self.day_start_equity = result.equity
-                    self.day_realized_pnl = Decimal(0)
-                    self.day_closures_count = 0
+                    self.day_closures = []
 
                 for closure in result.closures:
-                    self.day_realized_pnl += closure.realized
-                    self.day_closures_count += 1
+                    self.day_closures.append(closure)
 
         self.emit(
             at,
@@ -325,9 +363,8 @@ class _Loop:
         loaded = load_store(self.config.store_path, PAPER)
         start_eq = self.day_start_equity or self.config.opening_balance
         end_eq = result.equity if result.equity is not None else start_eq
-        realized = self.day_realized_pnl
-        trades_count = self.day_closures_count
         open_positions = 0
+        closures_to_report: list[object] = list(self.day_closures)
 
         if loaded.state is not None:
             ledger = loaded.state.ledger
@@ -336,25 +373,20 @@ class _Loop:
                 c for c in ledger.closures.values() if c.closed_at.date() == day_to_report
             ]
             if day_closures:
-                trades_count = len(day_closures)
-                realized = sum((c.realized for c in day_closures), Decimal(0))
+                closures_to_report = list(day_closures)
 
-        pnl_pct = Decimal(0)
-        if start_eq > 0:
-            pnl_pct = (((end_eq - start_eq) / start_eq) * Decimal(100)).quantize(Decimal("0.01"))
-
-        err = self.reporter.send_daily_summary(
-            day=day_to_report,
-            start_equity=start_eq,
-            end_equity=end_eq,
-            realized_pnl=realized,
-            pnl_pct=pnl_pct,
-            open_positions_count=open_positions,
-            closed_trades_count=trades_count,
-        )
-        self.last_reported_date = day_to_report
-        if err:
-            self.emit(at, "hata", f"telegram günlük raporu iletilemedi ({err})")
+        send_summary = getattr(self.reporter, "send_daily_summary", None)
+        if callable(send_summary):
+            err = send_summary(
+                day=day_to_report,
+                start_equity=start_eq,
+                end_equity=end_eq,
+                open_positions_count=open_positions,
+                closures=closures_to_report,
+            )
+            self.last_reported_date = day_to_report
+            if err:
+                self.emit(at, "hata", f"telegram günlük raporu iletilemedi ({err})")
 
     # --- the loop -----------------------------------------------------------------------------
     def finish(self, reason: ExitReason) -> LoopExit:
@@ -419,7 +451,7 @@ def run_loop(
     trial: bool = True,
     approved_by: str | None = None,
     report_path: str | None = None,
-    reporter: Any | None = None,
+    reporter: object | None = None,
 ) -> LoopExit:
     """R-8…R-15: hazırlanmış depoyla paper turlarını aralık sınırlarında atar; nedeniyle çıkar.
 

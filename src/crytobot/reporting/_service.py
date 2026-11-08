@@ -113,13 +113,53 @@ class ReportingService:
 
     def send_close_notice(
         self,
-        pair: str,
-        reason: str,
-        realized_pnl: Decimal,
-        pnl_pct: Decimal,
+        closure_or_pair: Any = None,
+        reason: str = "",
+        realized_pnl: Decimal | None = None,
+        pnl_pct: Decimal | None = None,
+        *,
+        pair: str = "",
+        closure: Any = None,
     ) -> str | None:
-        """Pozisyon kapanış bildirimini gönderir veya kuyruğa alır."""
-        text = format_close_notice(pair, reason, realized_pnl, pnl_pct)
+        """Pozisyon kapanış bildirimini gönderir veya kuyruğa alır.
+
+        `closure` nesnesi verilebilir veya `pair, reason, realized_pnl, pnl_pct`
+        ayrı ayrı geçilebilir.
+        """
+        cl = (
+            closure
+            if closure is not None
+            else (
+                closure_or_pair
+                if closure_or_pair is not None and not isinstance(closure_or_pair, str)
+                else None
+            )
+        )
+        if cl is not None:
+            pos = getattr(cl, "position", None)
+            if pos is not None:
+                actual_pair = str(getattr(pos, "pair", ""))
+                amount = getattr(pos, "amount", Decimal(0))
+                cost_price = getattr(pos, "cost_price", Decimal(0))
+                fee = getattr(pos, "fee", Decimal(0))
+                cost = amount * cost_price + fee
+            else:
+                actual_pair = ""
+                cost = Decimal(0)
+            reason_obj = getattr(cl, "reason", None)
+            actual_reason = str(getattr(reason_obj, "value", reason_obj))
+            actual_realized = getattr(cl, "realized", Decimal(0))
+            if cost > 0:
+                actual_pnl_pct = ((actual_realized / cost) * Decimal(100)).quantize(Decimal("0.01"))
+            else:
+                actual_pnl_pct = Decimal(0)
+        else:
+            actual_pair = pair or (str(closure_or_pair) if closure_or_pair is not None else "")
+            actual_reason = reason
+            actual_realized = realized_pnl if realized_pnl is not None else Decimal(0)
+            actual_pnl_pct = pnl_pct if pnl_pct is not None else Decimal(0)
+
+        text = format_close_notice(actual_pair, actual_reason, actual_realized, actual_pnl_pct)
         return self.dispatch(text)
 
     def send_daily_summary(
@@ -127,19 +167,59 @@ class ReportingService:
         day: date,
         start_equity: Decimal,
         end_equity: Decimal,
-        realized_pnl: Decimal,
-        pnl_pct: Decimal,
-        open_positions_count: int,
-        closed_trades_count: int,
+        realized_pnl_or_open_positions: Decimal | int | None = None,
+        pnl_pct_or_closures: Decimal | tuple[Any, ...] | list[Any] | None = None,
+        open_positions_count: int | None = None,
+        closed_trades_count: int | None = None,
+        *,
+        closures: tuple[Any, ...] | list[Any] = (),
+        realized_pnl: Decimal | None = None,
+        pnl_pct: Decimal | None = None,
     ) -> str | None:
         """UTC gün dönümü özet raporunu gönderir veya kuyruğa alır."""
+        # 1. closure listesiyle çağrı durumu:
+        actual_closures: tuple[Any, ...] | list[Any] = closures
+        if isinstance(pnl_pct_or_closures, (tuple, list)):
+            actual_closures = pnl_pct_or_closures
+            open_pos = int(realized_pnl_or_open_positions or 0)
+        elif open_positions_count is not None:
+            open_pos = open_positions_count
+        else:
+            open_pos = 0
+
+        if actual_closures and realized_pnl is None:
+            realized_pnl = sum(
+                (getattr(c, "realized", Decimal(0)) for c in actual_closures), Decimal(0)
+            )
+        if actual_closures and closed_trades_count is None:
+            closed_trades_count = len(actual_closures)
+
+        if isinstance(realized_pnl_or_open_positions, Decimal):
+            actual_realized = realized_pnl_or_open_positions
+        else:
+            actual_realized = realized_pnl if realized_pnl is not None else Decimal(0)
+
+        if isinstance(pnl_pct_or_closures, Decimal):
+            actual_pnl_pct = pnl_pct_or_closures
+        elif pnl_pct is not None:
+            actual_pnl_pct = pnl_pct
+        else:
+            if start_equity > 0:
+                actual_pnl_pct = (
+                    ((end_equity - start_equity) / start_equity) * Decimal(100)
+                ).quantize(Decimal("0.01"))
+            else:
+                actual_pnl_pct = Decimal(0)
+
+        actual_closed_count = closed_trades_count if closed_trades_count is not None else 0
+
         text = format_daily_summary(
             day,
             start_equity,
             end_equity,
-            realized_pnl,
-            pnl_pct,
-            open_positions_count,
-            closed_trades_count,
+            actual_realized,
+            actual_pnl_pct,
+            open_pos,
+            actual_closed_count,
         )
         return self.dispatch(text)

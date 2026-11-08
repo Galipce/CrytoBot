@@ -13,7 +13,6 @@ from crytobot.app import (
     TurnResult,
     _loop,
 )
-from crytobot.app._session import TurnRun
 from crytobot.execution import Order, OrderStatus
 from crytobot.portfolio import CloseReason, Closure, Position
 from crytobot.reporting import (
@@ -22,7 +21,7 @@ from crytobot.reporting import (
     TelegramConfig,
 )
 from crytobot.risk import RiskLimits
-from tests.app.helpers import BTC, HOUR, NOW, Exchange, make_settings, opened_store
+from tests.app.helpers import BTC, HOUR, NOW, Exchange, opened_store
 from tests.app.loop_fakes import harness
 
 CONFIG = TelegramConfig(enabled=True, bot_token="token-123", chat_id="chat-456")
@@ -82,9 +81,11 @@ def test_risk_drawdown_and_daily_loss_notices(tmp_path: Path) -> None:
         max_open_positions=3,
         profit_cost_multiple=Decimal("2.0"),
     )
-    store = opened_store(tmp_path / "s.db")
+    store = opened_store(tmp_path / "s.db", deposit=Decimal("9400"))
     bot = harness(store, stop_after=1)
-    loop = _loop._Loop(bot.config, bot.parts(), Exchange(), reporter=reporter)
+    turn_settings = replace(bot.config.turn, limits=limits)
+    config = replace(bot.config, turn=turn_settings)
+    loop = _loop._Loop(config, bot.parts(), Exchange(), reporter=reporter)
 
     # Simüle edilmiş bir TurnRun içinde note_drawdown testi
     from crytobot.persistence import load_store
@@ -104,32 +105,27 @@ def test_risk_drawdown_and_daily_loss_notices(tmp_path: Path) -> None:
     )
     halted_state = replace(state, risk=halted_risk)
 
-    from crytobot.app._notices import Notices
+    from crytobot.app._schedule import Due
+    from crytobot.persistence import save_store
 
-    turn_settings = make_settings(limits=limits)
-
-    run = TurnRun(
-        store_path=str(tmp_path / "s.db"),
-        settings=turn_settings,
-        market={},
-        now=NOW,
-        exchange=Exchange(),
-        notices=Notices(loop.memory, loop.notice, NOW),
-        memory=loop.memory,
-        state=halted_state,
+    save_store(
+        str(tmp_path / "s.db"),
+        state,
+        halted_state.ledger,
+        halted_state.execution,
+        halted_state.risk,
     )
 
-    # note_drawdown çalıştır: hem DRAWDOWN_HALT hem DAILY_LOSS_LIMIT (9400 < 9700) girmeli
-    run.note_drawdown()
+    # 1. Tur: hem DRAWDOWN_HALT hem DAILY_LOSS_LIMIT bildirimleri iletilmeli
+    loop.turn(Due(NOW, 0))
 
     assert len(notices_received) == 2
-    # Biri drawdown, biri daily_loss
     texts = [msg["text"] for msg in notices_received]
-    assert any("Drawdown limiti aşıldı" in t for t in texts)
-    assert any("Günlük zarar limiti aşıldı" in t for t in texts)
+    assert any("drawdown" in t.lower() for t in texts)
+    assert any("günlük zarar" in t.lower() for t in texts)
 
-    # İkinci çağrıda süren durumlar için mükerrer gönderilmemeli
-    run.note_drawdown()
+    # 2. Tur: süren durumlar için mükerrer gönderilmemeli
+    loop.turn(Due(NOW, 0))
     assert len(notices_received) == 2
 
 
@@ -198,21 +194,14 @@ def test_trade_event_notifications(tmp_path: Path) -> None:
 
     # _loop.turn simülasyonu: result sonrası bildirim dağıtımı
     # Directly invoke the reporting logic on result
-    assert loop.reporter is not None
+    assert isinstance(loop.reporter, ReportingService)
     for buy in result.buys:
         if buy.status is OrderStatus.FILLED:
             loop.reporter.send_fill_notice(
                 buy.pair, buy.side, buy.amount, buy.fill_price or buy.entry, buy.stop
             )
     for cl in result.closures:
-        pos = cl.position
-        cost = pos.amount * pos.cost_price + pos.fee
-        pnl_pct = (
-            ((cl.realized / cost) * Decimal(100)).quantize(Decimal("0.01"))
-            if cost > 0
-            else Decimal(0)
-        )
-        loop.reporter.send_close_notice(cl.position.pair, cl.reason.value, cl.realized, pnl_pct)
+        loop.reporter.send_close_notice(cl)
 
     assert len(events) == 2
     # Alım dolumu bildirimi
@@ -257,8 +246,28 @@ def test_daily_summary_report_utc_midnight(tmp_path: Path) -> None:
     # İlk tur: current_day ayarlanır
     loop.current_day = day1_time.date()
     loop.day_start_equity = Decimal("10000")
-    loop.day_realized_pnl = Decimal("200")
-    loop.day_closures_count = 1
+    dummy_pos = Position(
+        client_order_id="buy-000",
+        pair=BTC,
+        amount=Decimal("0.1"),
+        cost_price=Decimal("50000"),
+        fee=Decimal("5"),
+        stop=Decimal("48000"),
+        target=Decimal("55000"),
+        opened_at=day1_time - timedelta(days=1),
+    )
+    cl = Closure(
+        client_order_id="close-001",
+        position=dummy_pos,
+        amount=Decimal("0.1"),
+        price=Decimal("55000"),
+        fee=Decimal("5.5"),
+        reason=CloseReason.TARGET,
+        closed_at=day1_time,
+        proceeds=Decimal("5500"),
+        realized=Decimal("200"),
+    )
+    loop.day_closures = [cl]
 
     # 2. Gün 2 (gece yarısını geçti): 2026-11-09 00:00 UTC
     day2_time = datetime(2026, 11, 9, 0, 0, tzinfo=UTC)
