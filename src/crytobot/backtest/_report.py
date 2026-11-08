@@ -6,7 +6,7 @@ saat, makine adı ve süre yazılmaz. Yalnız örneklem dışı parça "BR-10 ka
 taşır; rapor hiçbir parça için bir hüküm (eşik, sonuç) yazmaz.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
@@ -44,6 +44,7 @@ class ReportFacts:
     downloaded_at: datetime
     candle_count: int
     spread: Decimal
+    strategy: Mapping[str, int | Decimal | str] | None = None
 
 
 def _moment(at: datetime | None) -> str:
@@ -107,9 +108,20 @@ def _part(title: str, part: PartMetrics) -> list[str]:
     ]
 
 
+def _strategy_text(strategy: Mapping[str, int | Decimal | str]) -> str:
+    fast = strategy.get("fast", strategy.get("fast_period"))
+    slow = strategy.get("slow", strategy.get("slow_period"))
+    rsi = strategy.get("rsi", strategy.get("rsi_period"))
+    rsi_threshold = strategy.get("rsi_threshold")
+    atr = strategy.get("atr", strategy.get("atr_period"))
+    k = strategy.get("k")
+    r = strategy.get("r")
+    return f"fast={fast} slow={slow} rsi={rsi} rsi_threshold={rsi_threshold} atr={atr} k={k} r={r}"
+
+
 def report_text(facts: ReportFacts, metrics: RunMetrics) -> str:
     """R-10, R-11: raporun tamamı; son satır da `\\n` ile biter."""
-    lines = [
+    header = [
         "CrytoBot backtest raporu",
         f"dönem: {_moment(facts.start)} .. {_moment(facts.end)} (bitiş hariç)",
         f"mum aralığı: {facts.candle_interval}",
@@ -120,6 +132,11 @@ def report_text(facts: ReportFacts, metrics: RunMetrics) -> str:
         f"indirme anı: {_moment(facts.downloaded_at)}",
         f"ısınma mumu (candle_count): {facts.candle_count}",
         f"spread: {format(facts.spread, 'f')}",
+    ]
+    if facts.strategy is not None:
+        header.append(f"strateji: {_strategy_text(facts.strategy)}")
+    lines = [
+        *header,
         "",
         "varsayımlar:",
         *(f"- {assumption}" for assumption in ASSUMPTIONS),
