@@ -7,6 +7,11 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
+- **BR-10 paper başlatma kapısı ve aşama onayı** (spec 0028): `crytobot start` varsayılan olarak `[stage]`
+  onayı ve geçerli backtest raporu arar. Rapor metrikleri (net > 0, drawdown ≤ limit ve ≤ %25, min_trades,
+  min_profit_factor) ve ayar uyumu (`whitelist`, aralıklar, `spread`, strateji parametreleri) denetlenir;
+  ihlalde başlatma kilit/depo/ağ öncesi adıyla reddedilir. `start --trial` kapıyı atlar ve `TRIAL_MARK` taşır;
+  kanıtlı modda onaylayan/rapor bilgisi yazılır ve `TRIAL_MARK` kalkar.
 - **Antigravity adaptörü** (spec 0027): `./scripts/init antigravity` on iki komutu Antigravity
   skill'i olarak `.agents/skills/`'e kurar (Codex ile aynı klasör; PLAN `/anew-plan`, çünkü yerleşik
   `/plan` aynı adlı skill'i gölgeler). `scripts/doctor` eşliğe Antigravity'yi katar: eksik komut ve

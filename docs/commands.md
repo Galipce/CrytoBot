@@ -324,6 +324,14 @@ Ramps are safe returns to the loop, not alternatives to it — each carries its 
 rules. The agent names the ramp's code and asks the human to run it; the catalog, R-01…R-13,
 lives in [`prompts/recovery/README.md`](../prompts/recovery/README.md).
 
+## E — Application commands (CrytoBot CLI)
+
+- `python -m crytobot prepare` — paper deposunu açılış bakiyesiyle oluşturur.
+- `python -m crytobot start` — BR-10 aşama onayı ve geçerli backtest raporuyla kanıtlı başlatma.
+- `python -m crytobot start --trial` — BR-10 kapısını atlar; deneme işaretiyle (`TRIAL_MARK`) başlatır.
+- `python -m crytobot download` — geçmiş veriyi indirir (`[history]`).
+- `python -m crytobot backtest` — geçmiş veride stratejiyi koşturur ve raporu yazar (`[backtest]`).
+
 ## Quick reference
 
 | Command | One line | Stops at | Lite | Strict |
