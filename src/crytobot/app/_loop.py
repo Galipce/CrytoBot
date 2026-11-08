@@ -99,10 +99,22 @@ class LoopExit:
 
 
 class _Loop:
-    def __init__(self, config: BotConfig, parts: LoopParts, exchange: PaperExchange) -> None:
+    def __init__(
+        self,
+        config: BotConfig,
+        parts: LoopParts,
+        exchange: PaperExchange,
+        *,
+        trial: bool = True,
+        approved_by: str | None = None,
+        report_path: str | None = None,
+    ) -> None:
         self.config = config
         self.parts = parts
         self.exchange = exchange
+        self.trial = trial
+        self.approved_by = approved_by
+        self.report_path = report_path
         self.memory = TurnMemory()  # process memory: a new process announces again (R-13)
         self.last: TurnResult | None = None
         self.turns = 0
@@ -215,7 +227,17 @@ class _Loop:
         )
         self.last = result
         self.turns += 1
-        self.emit(at, "tur", turn_text(result, at, self.missed + target.missed, banned))
+        self.emit(
+            at,
+            "tur",
+            turn_text(
+                result,
+                at,
+                self.missed + target.missed,
+                banned,
+                trial=self.trial,
+            ),
+        )
         self.missed = 0
         return None
 
@@ -245,7 +267,14 @@ class _Loop:
         self.emit(
             self.moment(),
             "başlatma",
-            start_text(config.turn_interval, config.store_path, tuple(config.turn.whitelist)),
+            start_text(
+                config.turn_interval,
+                config.store_path,
+                tuple(config.turn.whitelist),
+                trial=self.trial,
+                approved_by=self.approved_by,
+                report_path=self.report_path,
+            ),
         )
         last: datetime | None = None
         while True:
@@ -268,14 +297,27 @@ class _Loop:
 
 
 def run_loop(
-    config: BotConfig, parts: LoopParts, *, exchange: PaperExchange | None = None
+    config: BotConfig,
+    parts: LoopParts,
+    *,
+    exchange: PaperExchange | None = None,
+    trial: bool = True,
+    approved_by: str | None = None,
+    report_path: str | None = None,
 ) -> LoopExit:
     """R-8…R-15: hazırlanmış depoyla paper turlarını aralık sınırlarında atar; nedeniyle çıkar.
 
     İkinci durdurma isteğinde de çıkış kaydı yazılır ve `FORCED` döner. `exchange` yalnız paper
     simülatörüdür; verilmezse yenisi kurulur.
     """
-    loop = _Loop(config, parts, PaperExchange() if exchange is None else exchange)
+    loop = _Loop(
+        config,
+        parts,
+        PaperExchange() if exchange is None else exchange,
+        trial=trial,
+        approved_by=approved_by,
+        report_path=report_path,
+    )
     try:
         return loop.run()
     except ForcedStop:
