@@ -491,3 +491,28 @@ def test_output_without_log_writes_only_the_console() -> None:
     out = io.StringIO()
     Output(out)("satır")
     assert out.getvalue() == "satır\n"
+
+
+def test_start_with_reporting_configured(bot: Bot, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spec 0029 (AC-1): [reporting.telegram] ayarları start komutunca okunur."""
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token-from-env")
+    calls: list[dict[str, Any]] = []
+
+    def mock_transport(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        calls.append(payload)
+        return 200, '{"ok":true}'
+
+    monkeypatch.setattr("crytobot.reporting._client._default_transport", mock_transport)
+
+    bot.write_config()
+    # reporting.telegram bölümünü konfigürasyona ekle
+    cfg_text = bot.config_path.read_text(encoding="utf-8")
+    cfg_text += '\n[reporting.telegram]\nenabled = true\nchat_id = "12345"\n'
+    bot.config_path.write_text(cfg_text, encoding="utf-8")
+
+    code_prep, _ = bot.run("prepare")
+    assert code_prep == EXIT_OK
+
+    code_start, _console = bot.run("start", "--trial")
+    assert code_start == EXIT_OK
+    assert bot.log.exists()

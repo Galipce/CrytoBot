@@ -70,6 +70,7 @@ from crytobot.market_data import (
     read_history,
     read_market_data,
 )
+from crytobot.reporting import ReportingService, load_reporting_config
 
 CONFIG_FILE = "crytobot.toml"
 USAGE = "kullanım: python -m crytobot prepare|start|download|backtest"
@@ -400,6 +401,7 @@ def _start(
     trial: bool = True,
     approved_by: str | None = None,
     report_path: str | None = None,
+    reporter: ReportingService | None = None,
 ) -> int:
     check = open_for_start(config.store_path)
     if check.outcome is not StartOutcome.READY:
@@ -412,6 +414,7 @@ def _start(
         trial=trial,
         approved_by=approved_by,
         report_path=report_path,
+        reporter=reporter,
     )
     if exit_.reason is ExitReason.LOG_FAILED:
         output.say(line(parts.clock(), "durdurma", _LOG_FAILED))
@@ -428,6 +431,7 @@ def run(
     read: Read | None = None,
     wait: Callable[[float], None] | None = None,
     download: Download = download_history,
+    reporter: ReportingService | None = None,
 ) -> int:
     """Komutu çalıştırır, çıkış kodunu döndürür. Ayar, kilit, depo sırası: borsaya ve depoya
     ayarlar denetlenmeden dokunulmaz (R-2); kilit depodan önce alınır (R-6)."""
@@ -469,6 +473,13 @@ def run(
             output,
             stop,
         )
+        if reporter is None:
+            document = _load_toml(config_path)
+            reporting_cfg = (
+                load_reporting_config(document) if isinstance(document, Mapping) else None
+            )
+            if reporting_cfg is not None and reporting_cfg.is_active:
+                reporter = ReportingService(reporting_cfg)
         return _start(
             config,
             output,
@@ -476,6 +487,7 @@ def run(
             trial=trial,
             approved_by=approved_by,
             report_path=report_path,
+            reporter=reporter,
         )
     except LogWriteError:
         output.say(line(clock(), "durdurma", _LOG_FAILED))

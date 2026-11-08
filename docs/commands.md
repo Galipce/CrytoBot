@@ -327,7 +327,7 @@ lives in [`prompts/recovery/README.md`](../prompts/recovery/README.md).
 ## E — Application commands (CrytoBot CLI)
 
 - `python -m crytobot prepare` — paper deposunu açılış bakiyesiyle oluşturur.
-- `python -m crytobot start` — BR-10 aşama onayı ve geçerli backtest raporuyla kanıtlı başlatma.
+- `python -m crytobot start` — BR-10 aşama onayı ve geçerli backtest raporuyla kanıtlı başlatma. Yapılandırmada `[reporting.telegram]` etkinse (`enabled = true`, bot token ve chat id tanımlı) döngü süresince anlık işlem dolumları, risk durdurma halleri ve UTC 00:00 günlük özet raporu Telegram üzerinden bildirilir; yapılandırma eksik veya kapalıysa bildirimsiz çalışır.
 - `python -m crytobot start --trial` — BR-10 kapısını atlar; deneme işaretiyle (`TRIAL_MARK`) başlatır.
 - `python -m crytobot download` — geçmiş veriyi indirir (`[history]`).
 - `python -m crytobot backtest` — geçmiş veride stratejiyi koşturur ve raporu yazar (`[backtest]`).
