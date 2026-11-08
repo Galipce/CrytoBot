@@ -1,0 +1,128 @@
+"""Spec 0028 AC-4 (R-2) aşama onayı ayar denetimleri (plan Adım 2)."""
+
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import Any
+
+from crytobot.app import load_stage_config
+
+
+def valid_document() -> dict[str, Any]:
+    return {
+        "stage": {
+            "report_path": "backtest-report.txt",
+            "approved_by": "Galip Badem",
+            "approved_at": "2026-11-08T12:00:00Z",
+            "min_trades": 15,
+            "min_profit_factor": "1.5",
+        }
+    }
+
+
+def test_stage_config_validation() -> None:
+    """AC-4: Onay ayarları geçerliliği, eksik alanlar, tipler ve eşikler."""
+    # Mutlu yol (tüm alanlar dolu)
+    res = load_stage_config(valid_document())
+    assert res.setting is None
+    assert res.config is not None
+    assert res.config.report_path == "backtest-report.txt"
+    assert res.config.approved_by == "Galip Badem"
+    assert res.config.approved_at == datetime(2026, 11, 8, 12, 0, tzinfo=UTC)
+    assert res.config.min_trades == 15
+    assert res.config.min_profit_factor == Decimal("1.5")
+
+    # Mutlu yol (isteğe bağlı alanlar yok: min_trades varsayılan 10, min_profit_factor None)
+    doc_defaults = {
+        "stage": {
+            "report_path": "report.txt",
+            "approved_by": "Ali",
+            "approved_at": "2026-11-08T00:00:00+00:00",
+        }
+    }
+    res_def = load_stage_config(doc_defaults)
+    assert res_def.config is not None
+    assert res_def.config.min_trades == 10
+    assert res_def.config.min_profit_factor is None
+
+    # [stage] bölümü yok
+    res_missing_sec = load_stage_config({})
+    assert res_missing_sec.setting == "stage"
+    assert "ayar eksik: stage" in res_missing_sec.message
+
+    # [stage] tablo değil
+    res_bad_sec = load_stage_config({"stage": "not_a_table"})
+    assert res_bad_sec.setting == "stage"
+    assert "ayar geçersiz: stage" in res_bad_sec.message
+
+    # document Mapping değil
+    res_not_map = load_stage_config("string")
+    assert res_not_map.setting == "stage"
+
+    # Sırayla eksik alanlar
+    # 1. report_path eksik
+    d = valid_document()
+    del d["stage"]["report_path"]
+    res_rp = load_stage_config(d)
+    assert res_rp.setting == "stage.report_path"
+    assert "ayar eksik: stage.report_path" in res_rp.message
+
+    # 1b. report_path boş veya metin dışı
+    for bad_rp in ("", "   ", 123, None):
+        d = valid_document()
+        d["stage"]["report_path"] = bad_rp
+        res_bad_rp = load_stage_config(d)
+        assert res_bad_rp.setting == "stage.report_path"
+        assert "ayar geçersiz: stage.report_path" in res_bad_rp.message
+
+    # 2. approved_by eksik
+    d = valid_document()
+    del d["stage"]["approved_by"]
+    res_ab = load_stage_config(d)
+    assert res_ab.setting == "stage.approved_by"
+    assert "ayar eksik: stage.approved_by" in res_ab.message
+
+    # 2b. approved_by boş veya metin dışı
+    for bad_ab in ("", "   ", 456, None):
+        d = valid_document()
+        d["stage"]["approved_by"] = bad_ab
+        res_bad_ab = load_stage_config(d)
+        assert res_bad_ab.setting == "stage.approved_by"
+        assert "ayar geçersiz: stage.approved_by" in res_bad_ab.message
+
+    # 3. approved_at eksik
+    d = valid_document()
+    del d["stage"]["approved_at"]
+    res_at = load_stage_config(d)
+    assert res_at.setting == "stage.approved_at"
+    assert "ayar eksik: stage.approved_at" in res_at.message
+
+    # 3b. approved_at ISO değil, zaman dilimsiz veya geçersiz
+    for bad_at in ("invalid-date", "2026-11-08 12:00:00", "2026-11-08T12:00:00", 12345, None):
+        d = valid_document()
+        d["stage"]["approved_at"] = bad_at
+        res_bad_at = load_stage_config(d)
+        assert res_bad_at.setting == "stage.approved_at"
+        assert "ayar geçersiz: stage.approved_at" in res_bad_at.message
+
+    # 4. min_trades sıfır, negatif veya tam sayı değil
+    for bad_mt in (0, -1, -10, 1.5, "10", True, False, None):
+        d = valid_document()
+        d["stage"]["min_trades"] = bad_mt
+        res_bad_mt = load_stage_config(d)
+        assert res_bad_mt.setting == "stage.min_trades"
+        assert "ayar geçersiz: stage.min_trades" in res_bad_mt.message
+
+    # 5. min_profit_factor 1'den küçük veya geçersiz tip
+    for bad_pf in ("0.99", "0", "-1", "invalid", True, False, None):
+        d = valid_document()
+        d["stage"]["min_profit_factor"] = bad_pf
+        res_bad_pf = load_stage_config(d)
+        assert res_bad_pf.setting == "stage.min_profit_factor"
+        assert "ayar geçersiz: stage.min_profit_factor" in res_bad_pf.message
+
+    # 6. Bilinmeyen anahtar
+    d = valid_document()
+    d["stage"]["unknown_key"] = "test"
+    res_unk = load_stage_config(d)
+    assert res_unk.setting == "stage.unknown_key"
+    assert "bilinmeyen ayar: stage.unknown_key" in res_unk.message

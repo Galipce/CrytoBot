@@ -56,6 +56,13 @@ from crytobot.app._loop import (
 from crytobot.app._market import to_turn_market
 from crytobot.app._notices import NoticeKind, TurnMemory, TurnNotice
 from crytobot.app._result import BuyHalt, PairNote, PairOutcome, TurnOutcome, TurnResult
+from crytobot.app._stage import (
+    StageConfig,
+    StageConfigResult,
+    StageGateResult,
+    check_stage_gate,
+    load_stage_config,
+)
 from crytobot.app._start import (
     PREPARE_HINT,
     PrepareOutcome,
@@ -96,6 +103,9 @@ __all__: list[str] = [
     "PairOutcome",
     "PrepareOutcome",
     "PrepareResult",
+    "StageConfig",
+    "StageConfigResult",
+    "StageGateResult",
     "StartCheck",
     "StartOutcome",
     "StopRequest",
@@ -104,10 +114,12 @@ __all__: list[str] = [
     "TurnOutcome",
     "TurnResult",
     "TurnSettings",
+    "check_stage_gate",
     "line",
     "load_backtest_config",
     "load_config",
     "load_download_config",
+    "load_stage_config",
     "open_for_start",
     "prepare_store",
     "read_pairs",

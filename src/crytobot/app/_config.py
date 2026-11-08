@@ -28,9 +28,9 @@ _PROBE_PAIR = "PROBE/USDT"
 _PROBE_STRATEGY = StrategySettings(1, 2, 2, Decimal(70), 2, Decimal(2), Decimal(2))
 _INTERVALS_BY_TEXT = {text: interval for interval, text in CANDLE_INTERVALS.items()}
 _DIGITS = frozenset("0123456789")
-# Specs 0024, 0026: their contents are judged by the download (0023) and backtest (0025)
-# loaders, the bot never reads them; matched by exact name only
-_PASSED_SECTIONS = frozenset({"history", "backtest"})
+# Specs 0024, 0026, 0028: their contents are judged by the download (0023), backtest (0025)
+# and stage (0028) loaders, the bot never reads them; matched by exact name only
+_PASSED_SECTIONS = frozenset({"history", "backtest", "stage"})
 
 
 @dataclass(frozen=True)
