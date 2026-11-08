@@ -110,12 +110,15 @@ class Bot:
     def wait(self, seconds: float) -> None:
         self.clock.advance(seconds)
 
-    def run(self, command: str, console: Any = None) -> tuple[int, str]:
+    def run(self, *command: str, console: Any = None, trial: bool = True) -> tuple[int, str]:
+        cmd = list(command)
+        if cmd == ["start"] and trial:
+            cmd = ["start", "--trial"]
         out = io.StringIO() if console is None else console
         self.stop = StopRequest()  # a new process: its own stop request and read count
         self.reads = 0
         code = run(
-            [command],
+            cmd,
             config_path=self.config_path,
             console=out,
             clock=self.clock,

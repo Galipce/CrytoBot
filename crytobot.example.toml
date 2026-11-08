@@ -54,6 +54,17 @@ r = "2"
 # split_at = 2025-11-22T00:00:00Z         # örneklem içi / dışı ayrımı, UTC, dönemin içinde
 # spread = "0.0005"                      # sabit spread (oran); yalnız maliyet kapısında
 
+# Aşama onayı (spec 0028, BR-10): paper botunun kanıtlı modda başlatılması için geçerli bir
+# backtest raporu ve insan onayı gerekir. Onay ayarları yapılmadan `crytobot start` çalıştırılamaz
+# (deneme modu için `crytobot start --trial` kullanılır).
+# Ayarların varsayılanı yoktur: kanıtlı başlatmadan önce aşağıdaki satırların başındaki "# " kaldırılır.
+# [stage]
+# report_path = "crytobot-backtest.txt"  # geçerli ve aday işareti taşıyan backtest rapor dosyası
+# approved_by = "Ad Soyad"              # onayı veren kişinin adı / kimliği
+# approved_at = 2026-11-08T12:00:00Z    # onay anı, UTC ISO formatında
+# min_trades = 10                       # asgari işlem sayısı (isteğe bağlı, varsayılan 10)
+# min_profit_factor = "1.5"             # asgari kâr faktörü (isteğe bağlı, ≥1)
+
 # Geçmiş veri indirme (`python -m crytobot download`, spec 0023): beyaz listedeki çiftlerin kapanmış
 # mumları, ısınma için `candle_count` kadar önceki mumlarla, herkese açık veriden anahtarsız indirilir.
 # Mum aralığı, çiftler ve çağrı süresi yukarıdaki ayarlardır. Var olan dosyanın üzerine yazılmaz.

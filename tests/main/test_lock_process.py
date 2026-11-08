@@ -33,7 +33,7 @@ def read(pairs, settings):
 
 stop = StopRequest()
 install_signals(stop)
-sys.exit(run(["start"], config_path=Path("crytobot.toml"), stop=stop, read=read,
+sys.exit(run(["start", "--trial"], config_path=Path("crytobot.toml"), stop=stop, read=read,
              wait=make_wait(stop)))
 """
 SETTINGS = {
@@ -79,7 +79,7 @@ def test_second_process_is_refused_and_first_keeps_running(tmp_path: Path) -> No
         try:
             assert _wait_for(log, "tur: ", 60), "the first bot made no turn"
             second = subprocess.run(
-                [sys.executable, "-m", "crytobot", "start"],
+                [sys.executable, "-m", "crytobot", "start", "--trial"],
                 cwd=tmp_path,
                 capture_output=True,
                 timeout=60,
