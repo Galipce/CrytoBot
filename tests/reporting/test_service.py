@@ -92,6 +92,37 @@ def test_service_fail_safe_network_error_and_queue_drain() -> None:
     assert "GÜNLÜK ÖZET RAPORU" in sent_texts[3]
 
 
+def test_dispatch_avoids_redundant_network_call_when_queue_not_drained() -> None:
+    # F-02: Kuyruk boşaltılamadığında yeni mesaj için gereksiz ağ çağrısı yapılmaz,
+    # doğrudan kuyruğa eklenir (çift timeout ve FIFO bozulması önlenir).
+    transport_calls = 0
+
+    def failing_transport(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        nonlocal transport_calls
+        transport_calls += 1
+        return 0, "Network unreachable"
+
+    queue = NotificationQueue(maxlen=10)
+    service = ReportingService(CONFIG, queue=queue, transport=failing_transport)
+
+    # 1. İlk mesaj: kuyruk boş olduğu için doğrudan gönderilmeye çalışılır (1 çağrı)
+    err1 = service.dispatch("Message 1")
+    assert err1 == "network_error"
+    assert transport_calls == 1
+    assert len(service.queue) == 1
+
+    # 2. İkinci mesaj: drain_queue() Message 1'i dener ve başarısız olur (1 çağrı).
+    # Message 2 için ağa gitmeden doğrudan kuyruğa ekler (toplam çağrı 2 kalır, 3 olmaz).
+    err2 = service.dispatch("Message 2")
+    assert err2 == "network_error"
+    assert transport_calls == 2
+    assert len(service.queue) == 2
+
+    # Sıranın FIFO kaldığı doğrulanır:
+    assert service.queue.pop().text == "Message 1"
+    assert service.queue.pop().text == "Message 2"
+
+
 def test_service_disabled_config_is_noop() -> None:
     disabled_config = TelegramConfig(enabled=False, bot_token="", chat_id="")
     called = False

@@ -74,10 +74,16 @@ class ReportingService:
             return None
 
         # Önce varsa kuyruktaki eski mesajları eritmeyi dene
-        self.drain_queue()
+        drain_errors = self.drain_queue()
 
         if not self.is_active:
             return "reporting_disabled"
+
+        # Kuyruk tamamen eritilemediyse (ağ hala kapalı), sırayı korumak ve
+        # mükerrer zaman aşımını önlemek için yeni mesajı doğrudan kuyruğa ekle (F-02)
+        if len(self._queue) > 0:
+            self._queue.enqueue(OutgoingMessage(text=text, parse_mode=parse_mode))
+            return drain_errors[0] if drain_errors else "network_error"
 
         success, err = self._client.send_message(text, parse_mode=parse_mode)
         if success:
