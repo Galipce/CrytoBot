@@ -181,7 +181,7 @@ class BinanceLiveClient:
         retry_after = self._extract_retry_after()
 
         if status == _HTTP_BANNED:
-            raise BannedError("Borsa IP/hesap banı (HTTP 418); fail-closed durduruldu")
+            raise BannedError("Borsa IP/hesap banı (HTTP 418); fail-closed durduruldu") from None
 
         is_rate_limited = status == _HTTP_TOO_MANY or "RateLimitExceeded" in type(err).__name__
         is_unknown = (
@@ -218,7 +218,7 @@ class BinanceLiveClient:
             )
             return res
         except Exception as err:
-            raise self._handle_call_error(err) from err
+            raise self._handle_call_error(err) from None
 
     def query_order(self, client_order_id: str, symbol: str) -> dict[str, Any] | None:
         """origClientOrderId ile emri borsadan sorgular. Yoksa None döner."""
@@ -240,4 +240,4 @@ class BinanceLiveClient:
                     code = None
             if code == _BINANCE_ORDER_NOT_EXIST or "OrderNotFound" in type(err).__name__:
                 return None
-            raise self._handle_call_error(err) from err
+            raise self._handle_call_error(err) from None
