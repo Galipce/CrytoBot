@@ -448,7 +448,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const logsBox = document.getElementById("log-records");
         const logs = Array.isArray(data.logs) ? data.logs : [];
         if (logs.length > 0) {
-          logsBox.innerHTML = logs.map(l => `<div class="log-item">${l}</div>`).join("");
+          logsBox.innerHTML = "";
+          logs.forEach(l => {
+            const item = document.createElement("div");
+            item.className = "log-item";
+            item.textContent = l;
+            logsBox.appendChild(item);
+          });
         }
       }
 

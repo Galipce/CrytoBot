@@ -58,3 +58,11 @@ def test_auto_refresh_and_manual_refresh() -> None:
     assert "let countdown = 5;" in html
     assert "setInterval(tick, 1000);" in html
     assert 'addEventListener("click"' in html
+
+
+def test_logs_rendering_escapes_html_using_text_content() -> None:
+    html = render_dashboard_html()
+
+    # Finding 1: Loglar HTML kaçışı için textContent ile güvenli eklenir
+    assert "item.textContent = l" in html
+    assert "createElement" in html
