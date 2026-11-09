@@ -6,6 +6,7 @@ from datetime import datetime
 from decimal import Decimal, DecimalException, localcontext
 from types import MappingProxyType
 
+from crytobot.execution._live import LiveExchange
 from crytobot.execution._numbers import (
     BOUNDED,
     DIGITS,
@@ -17,6 +18,7 @@ from crytobot.execution._numbers import (
     _significant,
 )
 from crytobot.execution._orders import (
+    LIVE,
     PAPER,
     CloseOrder,
     ExecutionState,
@@ -25,7 +27,7 @@ from crytobot.execution._orders import (
     OrderOutcome,
     _notify,
 )
-from crytobot.execution._paper import OrderStatus, PaperExchange
+from crytobot.execution._paper import Exchange, OrderStatus
 from crytobot.risk import CloseApproval, CloseRequest, PairRules, close_request_problems
 
 CLOSE_ID_PREFIX = "cx-"
@@ -121,9 +123,10 @@ def _rule(number: Decimal, rule: str) -> bool:
 
 
 def place_close_order(
-    state: ExecutionState, request: CloseOrderRequest, exchange: PaperExchange, now: object
+    state: ExecutionState, request: CloseOrderRequest, exchange: Exchange, now: object
 ) -> CloseOrderResult:
-    """BR-9: kapanış onayından paper piyasa satışı oluşturur ya da isteği adlandırarak reddeder.
+    """BR-9: kapanış onayından paper veya live piyasa satışı oluşturur ya da isteği adlandırarak
+    reddeder.
     Ret sırası (R-12, plan 0009 A-1): emrin kendi girdileri ve dolum ölçeği → mod → onaysız kapanış
     → talebin girdileri ve miktara bağlı ölçek → zaten var / kimlik çakışması → borsa kuralı.
     Güvenli mod kapanışı durdurmaz (R-11)."""
@@ -153,10 +156,15 @@ def place_close_order(
             f"geçersiz girdi: ölçek hesaplanamıyor (fiyat {_brief(price)}, slippage"
             f" {_brief(numbers['slippage'])})",
         )
-    if not (type(request.mode) is str and request.mode == PAPER):  # plain str (plan A-4)
+    is_paper = type(request.mode) is str and request.mode == PAPER
+    is_live = (
+        type(request.mode) is str and request.mode == LIVE and isinstance(exchange, LiveExchange)
+    )
+    if not (is_paper or is_live):
         return reject(
             OrderOutcome.UNSUPPORTED_MODE,
-            f"mod {_show(request.mode)} desteklenmiyor: yalnızca paper",
+            f"mod {_show(request.mode)} desteklenmiyor: "
+            "yalnızca paper veya live (LiveExchange ile)",
         )
     if not isinstance(approval, CloseApproval) or approval.reason is not None or close is None:
         return reject(OrderOutcome.UNAPPROVED, "onaysız kapanış: kapanış onayı yok ya da ret")
@@ -217,7 +225,15 @@ def place_close_order(
             f" {_brief(amount)} * dolum fiyatı {_brief(fill)}) asgari tutarın"
             f" ({_brief(numbers['asgari tutar'])}) altında",
         )
-    status = exchange.place(client_order_id)
+    if isinstance(exchange, LiveExchange):
+        status = exchange.place(
+            client_order_id,
+            symbol=pair,
+            side=SELL,
+            amount=amount,
+        )
+    else:
+        status = exchange.place(client_order_id)
     filled = status is OrderStatus.FILLED
     order = CloseOrder(
         client_order_id,

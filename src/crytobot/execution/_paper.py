@@ -4,12 +4,22 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
+from typing import Protocol, runtime_checkable
 
 
 class OrderStatus(Enum):
     FILLED = "filled"
     REJECTED = "rejected"
     UNKNOWN = "unknown"
+
+
+@runtime_checkable
+class Exchange(Protocol):
+    """Borsa adaptör arayüzü (paper ve live ortak sözleşmesi)."""
+
+    def place(self, client_order_id: str) -> OrderStatus: ...
+
+    def query(self, client_order_id: str) -> OrderStatus: ...
 
 
 @dataclass(frozen=True)
