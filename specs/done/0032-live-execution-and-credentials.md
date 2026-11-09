@@ -1,6 +1,6 @@
 # Spec 0032 — Borsa API anahtar yönetimi ve ccxt Binance spot live execution adaptörü
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0032-plan.md`
 - Self-critique: done
@@ -57,27 +57,29 @@ none — no user interface. Kullanıcı konsol komutlarını ve metin logların�
 - Boyut: 8 kabul kriteri. Propose split: Gerek yok; kimlik doğrulaması ve adaptör borsa emir iletiminin ayrılmaz parçalarıdır.
 
 ## Acceptance criteria
-- [ ] AC-1 — Kimlik bilgilerinin güvenli yüklenmesi (R-1, R-8): Canlı modda API anahtarı ve secret yalnızca ortam değişkenlerinden / `.env`'den yüklenir; config dosyasında anahtar aranmaz; eksik veya boş anahtarlarda adaptör `CREDENTIALS_MISSING` ile temiz biçimde reddeder. Testnet ayarlandığında canlı anahtarlar yüklenmez, testnet anahtarları aranır.
-- [ ] AC-2 — Para çekme (Withdrawal) yetkisi koruması (R-2): API anahtarında para çekme yetkisi tespit edilirse adaptör derhal fail-closed olarak `WITHDRAWAL_PERMISSION_FORBIDDEN` ile başlatılmayı reddeder; yetki sorgusu başarısız veya belirsiz olduğunda da çalışmayı durdurur.
-- [ ] AC-3 — Spot yetki doğrulaması (R-3): API anahtarında spot işlem yetkisi kapalı ise adaptör `SPOT_TRADING_DISABLED` ile başlatılmayı reddeder.
-- [ ] AC-4 — Log ve metin redaksiyonu (R-4): API Key ve Secret nesneleri `repr` ve `str` çıktılarında maskelenir (`***REDACTED***`); loglarda ve traceback'lerde açık metin anahtar/secret basılmadığı negatif testle kanıtlanır.
-- [ ] AC-5 — Canlı piyasa alım emri iletimi (R-5): Onaylı alım isteği (`OrderRequest`) `LiveExchange` üzerinden Binance spot API'sine `newClientOrderId=cb-<id>` ile iletilir; borsa kabul edip doldurduğunda `FILLED`, borsa filtreleri (yetersiz bakiye vb.) nedeniyle reddettiğinde `REJECTED` döner (güvenli moda sokmaz).
-- [ ] AC-6 — Canlı piyasa kapanış emri iletimi (R-6): Onaylı kapanış isteği (`CloseOrderRequest`) `LiveExchange` üzerinden Binance spot API'sine `newClientOrderId=cx-<id>` ile iletilir; borsa dolum ve ret yanıtları doğru `CloseOrderResult` durumuna eşlenir.
-- [ ] AC-7 — Ağ hatası ve belirsiz emir (BR-11) (R-5, R-6, R-7): Emir iletimi sırasında borsa zaman aşımı veya ağ hatası verirse emir sonucu `UNKNOWN` döner, bot güvenli moda geçer ve durumu netleşene kadar yeni alımlar engellenir. Borsa 429 (Rate limit) durumunda `Retry-After` süresi korunur; 418 (Banned) durumunda bot fail-closed durur.
-- [ ] AC-8 — Canlı emir sorgulama (R-7): `query_order`, `UNKNOWN` durumundaki emri borsadan `origClientOrderId` ile sorgular; borsa dolumu teyit ederse `FILLED`, emir borsada hiç oluşmamışsa `REJECTED` döner ve güvenli moddan çıkış bildirimini üretir; ağ hatası sürüyorsa `UNKNOWN` kalır.
+- [x] AC-1 — Kimlik bilgilerinin güvenli yüklenmesi (R-1, R-8): Canlı modda API anahtarı ve secret yalnızca ortam değişkenlerinden / `.env`'den yüklenir; config dosyasında anahtar aranmaz; eksik veya boş anahtarlarda adaptör `CREDENTIALS_MISSING` ile temiz biçimde reddeder. Testnet ayarlandığında canlı anahtarlar yüklenmez, testnet anahtarları aranır.
+- [x] AC-2 — Para çekme (Withdrawal) yetkisi koruması (R-2): API anahtarında para çekme yetkisi tespit edilirse adaptör derhal fail-closed olarak `WITHDRAWAL_PERMISSION_FORBIDDEN` ile başlatılmayı reddeder; yetki sorgusu başarısız veya belirsiz olduğunda da çalışmayı durdurur.
+- [x] AC-3 — Spot yetki doğrulaması (R-3): API anahtarında spot işlem yetkisi kapalı ise adaptör `SPOT_TRADING_DISABLED` ile başlatılmayı reddeder.
+- [x] AC-4 — Log ve metin redaksiyonu (R-4): API Key ve Secret nesneleri `repr` ve `str` çıktılarında maskelenir (`***REDACTED***`); loglarda ve traceback'lerde açık metin anahtar/secret basılmadığı negatif testle kanıtlanır.
+- [x] AC-5 — Canlı piyasa alım emri iletimi (R-5): Onaylı alım isteği (`OrderRequest`) `LiveExchange` üzerinden Binance spot API'sine `newClientOrderId=cb-<id>` ile iletilir; borsa kabul edip doldurduğunda `FILLED`, borsa filtreleri (yetersiz bakiye vb.) nedeniyle reddettiğinde `REJECTED` döner (güvenli moda sokmaz).
+- [x] AC-6 — Canlı piyasa kapanış emri iletimi (R-6): Onaylı kapanış isteği (`CloseOrderRequest`) `LiveExchange` üzerinden Binance spot API'sine `newClientOrderId=cx-<id>` ile iletilir; borsa dolum ve ret yanıtları doğru `CloseOrderResult` durumuna eşlenir.
+- [x] AC-7 — Ağ hatası ve belirsiz emir (BR-11) (R-5, R-6, R-7): Emir iletimi sırasında borsa zaman aşımı veya ağ hatası verirse emir sonucu `UNKNOWN` döner, bot güvenli moda geçer ve durumu netleşene kadar yeni alımlar engellenir. Borsa 429 (Rate limit) durumunda `Retry-After` süresi korunur; 418 (Banned) durumunda bot fail-closed durur.
+- [x] AC-8 — Canlı emir sorgulama (R-7): `query_order`, `UNKNOWN` durumundaki emri borsadan `origClientOrderId` ile sorgular; borsa dolumu teyit ederse `FILLED`, emir borsada hiç oluşmamışsa `REJECTED` döner ve güvenli moddan çıkış bildirimini üretir; ağ hatası sürüyorsa `UNKNOWN` kalır.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 2 (fix-1: F-1..F-6, fix-2: F-7..F-9) |
+| Review findings: real / noise / deferred | 9 / 0 / 0 (Round 1: 6 real [fix-1], Round 2: 3 real [fix-2]) |
+| Regressions introduced | 0 (kanıt bu PR'ın full CI koşusu) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `check` ve `doctor` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). VERIFY @`c9b78f6`: adı geçen testler hızlı profilde yeşil, 8 kasıtlı bozmanın 8'i kırmızı; full kanıt bu PR'ın CI koşusudur.
