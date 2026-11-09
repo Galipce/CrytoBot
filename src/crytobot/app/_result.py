@@ -33,6 +33,7 @@ class BuyHalt(Enum):
     HISTORY_IMMUTABLE = "history_immutable"
     OBSERVATION_REJECTED = "observation_rejected"
     DRAWDOWN = "drawdown"
+    KILL_SWITCH = "kill_switch"
 
 
 class PairNote(Enum):
