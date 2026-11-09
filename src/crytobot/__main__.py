@@ -448,10 +448,15 @@ def _dashboard(
     def status_provider() -> tuple[int, dict[str, object]]:
         running = is_lock_held(config.store_path)
         logs_tuple: tuple[str, ...] = ()
-        if Path(config.log_path).is_file():
+        log_file = Path(config.log_path)
+        if log_file.is_file():
             try:
-                with open(config.log_path, encoding="utf-8") as f:
-                    all_lines = [log_line.strip() for log_line in f.readlines() if log_line.strip()]
+                with open(log_file, "rb") as f:
+                    size = log_file.stat().st_size
+                    seek_pos = max(0, size - 8192)
+                    f.seek(seek_pos)
+                    chunk = f.read().decode("utf-8", errors="replace")
+                    all_lines = [line.strip() for line in chunk.splitlines() if line.strip()]
                     logs_tuple = tuple(all_lines[-10:])
             except OSError:
                 pass

@@ -1,9 +1,11 @@
 """Spec 0031 AC-1, AC-8 (R-1, R-7): CLI `dashboard` komutu, port çakışması ve durdurma testleri."""
 
 import io
+import json
 import socket
 import threading
 import time
+import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -110,3 +112,52 @@ def test_dashboard_refuses_invalid_dashboard_config(tmp_path: Path) -> None:
     assert code == EXIT_REFUSED
     out = console.getvalue()
     assert "bilinmeyen ayar: dashboard.unknown" in out
+
+
+@pytest.mark.enable_socket
+def test_dashboard_tails_large_log_file(tmp_path: Path) -> None:
+    probe_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe_sock.bind(("127.0.0.1", 0))
+    _, free_port = probe_sock.getsockname()
+    probe_sock.close()
+
+    cfg_path, _ = setup_config_and_store(
+        tmp_path, prepare=True, custom_dashboard=f"[dashboard]\nport = {free_port}\n"
+    )
+    log_path = tmp_path / "bot.log"
+    log_lines = [f"log line {i}: " + ("x" * 80) for i in range(200)]
+    log_path.write_text("\n".join(log_lines) + "\n", encoding="utf-8")
+
+    console = io.StringIO()
+    stop = StopRequest()
+    client_error: list[Exception] = []
+
+    def fetch_and_stop() -> None:
+        time.sleep(0.3)
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{free_port}/api/status",
+                headers={"Host": f"127.0.0.1:{free_port}"},
+            )
+            with urllib.request.urlopen(req) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                assert len(data["logs"]) == 10
+                assert "log line 199" in data["logs"][-1]
+        except Exception as exc:
+            client_error.append(exc)
+        finally:
+            stop.request("test_done")
+
+    client_thread = threading.Thread(target=fetch_and_stop)
+    client_thread.start()
+
+    code = run(
+        ["dashboard"],
+        config_path=cfg_path,
+        console=console,
+        clock=lambda: T0,
+        stop=stop,
+    )
+    client_thread.join()
+    assert not client_error
+    assert code == EXIT_OK
