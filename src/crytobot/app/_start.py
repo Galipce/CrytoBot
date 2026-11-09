@@ -106,7 +106,7 @@ def open_for_start(store_path: str, mode: str = PAPER) -> StartCheck:
             )
         return StartCheck(outcome, f"başlatma reddedildi: {message}", hint)
     if loaded.state.ledger.balance is None:
-        hint = PREPARE_HINT if mode == PAPER else "önce hazırlık: python -m crytobot prepare --live"
+        hint = None if mode == PAPER else "önce hazırlık: python -m crytobot prepare --live"
         return StartCheck(
             StartOutcome.LEDGER_NOT_OPENED, "başlatma reddedildi: defter açılmamış", hint
         )

@@ -183,7 +183,7 @@ def test_dual_lock_mode_mismatch_and_live_flag_required(tmp_path: Path) -> None:
     create_store(store_unopened_paper, "paper")
     check_unopened_paper = open_for_start(store_unopened_paper, mode="paper")
     assert check_unopened_paper.outcome is StartOutcome.LEDGER_NOT_OPENED
-    assert "prepare --live" not in str(check_unopened_paper.hint)
+    assert check_unopened_paper.hint is None
 
 
 def test_prepare_live_creates_store_with_exchange_balance(tmp_path: Path) -> None:
