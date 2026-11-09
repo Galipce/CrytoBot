@@ -71,7 +71,7 @@ def check_api_restrictions(data: Any) -> None:
 
     if data.get("enableWithdrawals") is not False:
         raise PermissionForbiddenError(
-            "API anahtarında para çekme (withdrawal) yetkisi açık veya doğrulanamadı; fail-closed durduruldu",
+            "API anahtarında para çekme yetkisi açık veya belirsiz; fail-closed durduruldu",
             code=WITHDRAWAL_PERMISSION_FORBIDDEN,
         )
 

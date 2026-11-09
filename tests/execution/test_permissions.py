@@ -79,7 +79,7 @@ def test_withdrawal_permission_fails_closed() -> None:
     client_snake = BinanceLiveClient(credentials=creds, exchange=fake_snake)
     client_snake.verify_permissions()
 
-    # 6. enableWithdrawals alanı eksik veya None ise -> fail-closed WITHDRAWAL_PERMISSION_FORBIDDEN (F-4)
+    # 6. enableWithdrawals alanı eksik veya None ise -> fail-closed (F-4)
     fake_missing_withdraw = FakeExchange(
         restrictions={
             "enableSpotAndMarginTrading": True,
