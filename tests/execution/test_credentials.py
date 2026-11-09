@@ -46,7 +46,7 @@ def test_load_credentials_from_env_and_file(tmp_path: Path) -> None:
         "# Yorum satırı\n"
         "\n"
         "GEÇERSİZ_SATIR_EŞİTTİR_YOK\n"
-        "BINANCE_API_KEY='file_key_789'\n"
+        "BINANCE_API_KEY=file_key_789 # satır içi yorum\n"
         'export BINANCE_API_SECRET="file_secret_999"\n',
         encoding="utf-8",
     )

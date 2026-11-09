@@ -61,6 +61,8 @@ def _parse_env_file(path: Path) -> dict[str, str]:
         v = v.strip()
         if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
             v = v[1:-1]
+        elif " #" in v:
+            v = v.split(" #", 1)[0].strip()
         res[k] = v
     return res
 
