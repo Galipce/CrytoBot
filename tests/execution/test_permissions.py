@@ -79,6 +79,17 @@ def test_withdrawal_permission_fails_closed() -> None:
     client_snake = BinanceLiveClient(credentials=creds, exchange=fake_snake)
     client_snake.verify_permissions()
 
+    # 6. enableWithdrawals alanı eksik veya None ise -> fail-closed WITHDRAWAL_PERMISSION_FORBIDDEN (F-4)
+    fake_missing_withdraw = FakeExchange(
+        restrictions={
+            "enableSpotAndMarginTrading": True,
+        }
+    )
+    client_missing_withdraw = BinanceLiveClient(credentials=creds, exchange=fake_missing_withdraw)
+    with pytest.raises(PermissionForbiddenError) as exc_missing_withdraw:
+        client_missing_withdraw.verify_permissions()
+    assert exc_missing_withdraw.value.code == WITHDRAWAL_PERMISSION_FORBIDDEN
+
 
 def test_spot_trading_disabled_rejected() -> None:
     """AC-3: Spot işlem yetkisi kapalı ise adaptör SPOT_TRADING_DISABLED ile reddeder."""

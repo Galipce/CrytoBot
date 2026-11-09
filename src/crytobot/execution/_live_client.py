@@ -69,9 +69,9 @@ def check_api_restrictions(data: Any) -> None:
     if not isinstance(data, dict):
         raise PermissionCheckFailedError("Yetki yanıtı geçersiz formatta")
 
-    if data.get("enableWithdrawals") is True:
+    if data.get("enableWithdrawals") is not False:
         raise PermissionForbiddenError(
-            "API anahtarında para çekme (withdrawal) yetkisi açık; fail-closed durduruldu",
+            "API anahtarında para çekme (withdrawal) yetkisi açık veya doğrulanamadı; fail-closed durduruldu",
             code=WITHDRAWAL_PERMISSION_FORBIDDEN,
         )
 
