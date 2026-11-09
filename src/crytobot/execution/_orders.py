@@ -340,7 +340,11 @@ def place_order(
             f" slippage {_brief(checked.slippage)}, ücret {_brief(checked.fee)},"
             f" adım {_brief(checked.step)})",
         )
-    is_paper = type(request.mode) is str and request.mode == PAPER
+    is_paper = (
+        type(request.mode) is str
+        and request.mode == PAPER
+        and not isinstance(exchange, LiveExchange)
+    )
     is_live = (
         type(request.mode) is str and request.mode == LIVE and isinstance(exchange, LiveExchange)
     )

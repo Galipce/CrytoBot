@@ -156,7 +156,11 @@ def place_close_order(
             f"geçersiz girdi: ölçek hesaplanamıyor (fiyat {_brief(price)}, slippage"
             f" {_brief(numbers['slippage'])})",
         )
-    is_paper = type(request.mode) is str and request.mode == PAPER
+    is_paper = (
+        type(request.mode) is str
+        and request.mode == PAPER
+        and not isinstance(exchange, LiveExchange)
+    )
     is_live = (
         type(request.mode) is str and request.mode == LIVE and isinstance(exchange, LiveExchange)
     )

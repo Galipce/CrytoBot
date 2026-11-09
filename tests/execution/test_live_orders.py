@@ -180,6 +180,12 @@ def test_place_market_buy_order_filled() -> None:
     assert res_rej.order.fill_price is None
     assert not res_rej.state.unknown
 
+    # 3. paper modunda LiveExchange verilirse UNSUPPORTED_MODE ile reddedilir (F-1)
+    paper_req = make_buy_request(intent_id="s1-btc-0003", mode="paper")
+    res_paper = place_order(EMPTY_EXECUTION, paper_req, live_venue, NOW)
+    assert res_paper.outcome is OrderOutcome.UNSUPPORTED_MODE
+    assert res_paper.order is None
+
 
 def test_place_market_close_order_filled() -> None:
     """AC-6: Canlı piyasa kapanış emri cx- kimliğiyle iletilir; dolum ve ret doğru işlenir."""
@@ -209,6 +215,12 @@ def test_place_market_close_order_filled() -> None:
     assert res_rej.order.status is OrderStatus.REJECTED
     assert res_rej.order.fill_price is None
     assert not res_rej.state.unknown
+
+    # 3. paper modunda LiveExchange verilirse UNSUPPORTED_MODE ile reddedilir (F-1)
+    paper_close_req = make_close_request(mode="paper")
+    res_close_paper = place_close_order(EMPTY_EXECUTION, paper_close_req, live_venue, NOW)
+    assert res_close_paper.outcome is OrderOutcome.UNSUPPORTED_MODE
+    assert res_close_paper.order is None
 
 
 def test_network_timeout_results_in_unknown_and_safe_mode() -> None:
