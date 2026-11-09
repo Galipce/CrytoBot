@@ -335,6 +335,7 @@ lives in [`prompts/recovery/README.md`](../prompts/recovery/README.md).
 - `python -m crytobot kill-switch` (veya `kill-switch on`) — yeni alımları anında durdurur ve kalıcı duruma işler; açık pozisyonların kapanışı engellenmez.
 - `python -m crytobot resume` — aktif kill switch ve/veya drawdown durdurmasını kaldırır, zirve kasayı son gözlenen kasaya günceller ve kaydeder.
 - `python -m crytobot stop` — çalışan bot sürecine temiz durdurma isteği iletir; mevcut tur tamamlandığında bot döngüsü güvenle kapanır.
+- `python -m crytobot dashboard` — localhost üzerinde salt-okunur web panosunu (`127.0.0.1:8080`) başlatır; tarayıcıdan anlık kasanın, drawdown oranının, açık pozisyonların ve son turların koyu temalı web arayüzünden izlenmesini sağlar (ADR 0002, spec 0031).
 
 ## Quick reference
 
