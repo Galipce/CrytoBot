@@ -1,17 +1,4 @@
-"""Onaylı emirleri borsaya (live) / simülatöre (paper, backtest) iletmek, emir durumunu izlemek.
-
-Bugün yalnızca paper mod vardır (spec 0006): `place_order`, `risk`'in onayladığı bir öneriden
-(`TradeApproval.intent`) simülatörde anında dolan bir piyasa alımı oluşturur. Öneri kimliği
-`clientOrderId`'yi belirler (`cb-` + kimlik); aynı kimlik ikinci bir emir oluşturmaz. Miktar
-yuvarlanmaz: adımın katı değilse ya da asgarilerin altındaysa istek reddedilir. Durumu bilinmeyen
-bir emir varken (güvenli mod, BR-11) yeni alım oluşmaz; `query_order` durumu netleştirir, güvenli
-moda giriş ve çıkış birer `Notification` üretir.
-
-`place_close_order` (spec 0009), `risk`'in kapanış onayından (`CloseApproval`) açık bir pozisyonun
-paper piyasa satışını oluşturur: dolum fiyatı = fiyat * (1 - slippage), kimlik pozisyonunkinden
-türer (`cb-` → `cx-`), aynı pozisyon iki kez satılmaz. Kapanış koruyucudur: güvenli mod onu
-durdurmaz; ama durumu bilinmeyen bir kapanış da yeni alımları durdurur.
-"""
+"""Onaylı emirleri borsaya (live) / simülatöre (paper, backtest) iletmek, emir durumunu izlemek."""
 
 from crytobot.execution._close import (
     CLOSE_ID_PREFIX,
@@ -20,9 +7,32 @@ from crytobot.execution._close import (
     CloseOrderResult,
     place_close_order,
 )
+from crytobot.execution._credentials import (
+    CREDENTIALS_MISSING,
+    REDACTED,
+    CredentialsError,
+    ExchangeCredentials,
+    ExecutionError,
+    load_credentials,
+    redact_secrets,
+)
+from crytobot.execution._live import LiveExchange
+from crytobot.execution._live_client import (
+    PERMISSION_CHECK_FAILED,
+    SPOT_TRADING_DISABLED,
+    WITHDRAWAL_PERMISSION_FORBIDDEN,
+    BannedError,
+    BinanceLiveClient,
+    LiveExchangeCallError,
+    PermissionCheckFailedError,
+    PermissionForbiddenError,
+    check_api_restrictions,
+    verify_permissions,
+)
 from crytobot.execution._orders import (
     CLIENT_ID_PREFIX,
     EMPTY_EXECUTION,
+    LIVE,
     PAPER,
     CloseOrder,
     ExecutionState,
@@ -38,18 +48,32 @@ from crytobot.execution._orders import (
     place_order,
     query_order,
 )
-from crytobot.execution._paper import OrderStatus, PaperExchange
+from crytobot.execution._paper import Exchange, OrderStatus, PaperExchange
 
 __all__: list[str] = [
     "CLIENT_ID_PREFIX",
     "CLOSE_ID_PREFIX",
+    "CREDENTIALS_MISSING",
     "EMPTY_EXECUTION",
+    "LIVE",
     "PAPER",
+    "PERMISSION_CHECK_FAILED",
+    "REDACTED",
     "SELL",
+    "SPOT_TRADING_DISABLED",
+    "WITHDRAWAL_PERMISSION_FORBIDDEN",
+    "BannedError",
+    "BinanceLiveClient",
     "CloseOrder",
     "CloseOrderRequest",
     "CloseOrderResult",
+    "CredentialsError",
+    "Exchange",
+    "ExchangeCredentials",
+    "ExecutionError",
     "ExecutionState",
+    "LiveExchange",
+    "LiveExchangeCallError",
     "Notification",
     "NotificationKind",
     "Order",
@@ -58,10 +82,16 @@ __all__: list[str] = [
     "OrderResult",
     "OrderStatus",
     "PaperExchange",
+    "PermissionCheckFailedError",
+    "PermissionForbiddenError",
     "QueryOutcome",
     "QueryResult",
+    "check_api_restrictions",
     "execution_problems",
+    "load_credentials",
     "place_close_order",
     "place_order",
     "query_order",
+    "redact_secrets",
+    "verify_permissions",
 ]
