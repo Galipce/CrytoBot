@@ -1,3 +1,8 @@
 """CLI ve Telegram komutları, yetkilendirme, audit log."""
 
-__all__: list[str] = []
+from crytobot.control._audit import AuditEvent, decode_audit_event
+
+__all__: list[str] = [
+    "AuditEvent",
+    "decode_audit_event",
+]
