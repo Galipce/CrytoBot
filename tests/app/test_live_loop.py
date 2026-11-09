@@ -66,9 +66,7 @@ class MockLiveExchange(LiveExchange):
         return self.resolutions.get(client_order_id, OrderStatus.UNKNOWN)
 
 
-def test_balance_reconciliation_tolerance_and_halt(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_balance_reconciliation_tolerance_and_halt(tmp_path: Path, monkeypatch: Any) -> None:
     """Spec 0033 AC-5 (R-6): Bakiye mutabakatı toleransı (<=0.05 USDT) ve RECONCILIATION_HALT."""
     store_path = str(tmp_path / "live_recon.db")
     # Defter açılış bakiyesi: 1000.00 USDT

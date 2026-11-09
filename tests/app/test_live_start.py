@@ -172,6 +172,7 @@ def test_dual_lock_mode_mismatch_and_live_flag_required(tmp_path: Path) -> None:
 
     # (c) Defter açılmamış depoda ipucu mod uyumu (F-3)
     from crytobot.persistence import create_store
+
     store_unopened_live = str(tmp_path / "unopened_live.db")
     create_store(store_unopened_live, "live")
     check_unopened_live = open_for_start(store_unopened_live, mode="live")
