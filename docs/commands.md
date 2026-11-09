@@ -331,6 +331,10 @@ lives in [`prompts/recovery/README.md`](../prompts/recovery/README.md).
 - `python -m crytobot start --trial` — BR-10 kapısını atlar; deneme işaretiyle (`TRIAL_MARK`) başlatır.
 - `python -m crytobot download` — geçmiş veriyi indirir (`[history]`).
 - `python -m crytobot backtest` — geçmiş veride stratejiyi koşturur ve raporu yazar (`[backtest]`).
+- `python -m crytobot status` — botun süreç durumunu (çalışıyor/durdu), modunu, serbest bakiyesini, toplam kasasını, açık pozisyonlarını, günün kâr/zararını, zirve kasayı, drawdown oranını, aktif durdurmaları ve son tur özetini konsola basar (salt okunur).
+- `python -m crytobot kill-switch` (veya `kill-switch on`) — yeni alımları anında durdurur ve kalıcı duruma işler; açık pozisyonların kapanışı engellenmez.
+- `python -m crytobot resume` — aktif kill switch ve/veya drawdown durdurmasını kaldırır, zirve kasayı son gözlenen kasaya günceller ve kaydeder.
+- `python -m crytobot stop` — çalışan bot sürecine temiz durdurma isteği iletir; mevcut tur tamamlandığında bot döngüsü güvenle kapanır.
 
 ## Quick reference
 

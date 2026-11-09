@@ -26,7 +26,7 @@ class SaveRefusedError(AppError):
 
 
 # what stays visible without stopping the buys: risk refuses them itself (R-8)
-_INFORMATIONAL = frozenset({BuyHalt.DRAWDOWN})
+_INFORMATIONAL = frozenset({BuyHalt.DRAWDOWN, BuyHalt.KILL_SWITCH})
 
 
 def buy_fill(order: Order, at: datetime) -> Fill:
@@ -93,6 +93,10 @@ class TurnRun:
             self.halt(BuyHalt.DRAWDOWN)
         else:
             self.halts.pop(BuyHalt.DRAWDOWN, None)
+        if self.state.risk.kill_switch:
+            self.halt(BuyHalt.KILL_SWITCH)
+        else:
+            self.halts.pop(BuyHalt.KILL_SWITCH, None)
 
     def save(
         self,

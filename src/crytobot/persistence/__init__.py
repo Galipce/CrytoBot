@@ -14,7 +14,9 @@ from crytobot.persistence._store import (
     StoredState,
     StoreOutcome,
     StoreResult,
+    append_audit_record,
     create_store,
+    load_audit_records,
     load_store,
     save_store,
 )
@@ -25,7 +27,9 @@ __all__: list[str] = [
     "StoreOutcome",
     "StoreResult",
     "StoredState",
+    "append_audit_record",
     "create_store",
+    "load_audit_records",
     "load_store",
     "save_store",
 ]

@@ -63,6 +63,7 @@ class ApprovalReason(Enum):
     """Ret nedenleri; birden fazla sorun varsa bu sıradaki ilki döner (R-8)."""
 
     INVALID_INPUT = "invalid_input"
+    KILL_SWITCH_ACTIVE = "kill_switch_active"
     DRAWDOWN_HALT = "drawdown_halt"
     DAILY_LOSS_LIMIT = "daily_loss_limit"
     NOT_BUY = "not_buy"
@@ -215,6 +216,11 @@ def approve_trade(
         return reject(ApprovalReason.INVALID_INPUT, "geçersiz girdi: " + "; ".join(problems))
     equity = cast(Decimal, _number(account.equity))  # validated above, equal to the state's
     peak, day_start = cast(Decimal, state.peak_equity), cast(Decimal, state.day_start_equity)
+    if state.kill_switch:
+        return reject(
+            ApprovalReason.KILL_SWITCH_ACTIVE,
+            "acil durdurma devrede: kill switch aktif",
+        )
     if state.halted or _reached(peak, equity, limits.max_drawdown):
         return reject(
             ApprovalReason.DRAWDOWN_HALT,

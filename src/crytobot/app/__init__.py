@@ -33,6 +33,13 @@ from crytobot.app._backtest_config import (
     load_backtest_config,
 )
 from crytobot.app._config import SETTING_NAMES, BotConfig, ConfigResult, load_config
+from crytobot.app._control import (
+    ControlResult,
+    engage_kill_switch,
+    query_status,
+    request_stop,
+    resume_operations,
+)
 from crytobot.app._download import (
     DownloadConfig,
     DownloadConfigResult,
@@ -88,6 +95,7 @@ __all__: list[str] = [
     "BotConfig",
     "BuyHalt",
     "ConfigResult",
+    "ControlResult",
     "DownloadConfig",
     "DownloadConfigResult",
     "DownloadExit",
@@ -115,6 +123,7 @@ __all__: list[str] = [
     "TurnResult",
     "TurnSettings",
     "check_stage_gate",
+    "engage_kill_switch",
     "line",
     "load_backtest_config",
     "load_config",
@@ -122,7 +131,10 @@ __all__: list[str] = [
     "load_stage_config",
     "open_for_start",
     "prepare_store",
+    "query_status",
     "read_pairs",
+    "request_stop",
+    "resume_operations",
     "run_backtest",
     "run_download",
     "run_loop",
