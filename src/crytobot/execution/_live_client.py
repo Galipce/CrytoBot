@@ -161,6 +161,11 @@ class BinanceLiveClient:
         """Borsa anahtar yetkilerini kontrol eder (R-2, R-3)."""
         verify_permissions(self._exchange)
 
+    def _reset_seen(self) -> None:
+        self._seen.status = None
+        self._seen.retry_after = None
+        self._seen.body = None
+
     def _extract_retry_after(self) -> float | None:
         text = getattr(self._seen, "retry_after", None)
         if isinstance(text, str) and _RETRY_AFTER.fullmatch(text):
@@ -198,6 +203,7 @@ class BinanceLiveClient:
         client_order_id: str,
     ) -> dict[str, Any]:
         """Piyasa emri iletir. Ağ hatasında UNKNOWN, rette REJECTED."""
+        self._reset_seen()
         try:
             res: dict[str, Any] = self._exchange.create_order(
                 symbol,
@@ -212,6 +218,7 @@ class BinanceLiveClient:
 
     def query_order(self, client_order_id: str, symbol: str) -> dict[str, Any] | None:
         """origClientOrderId ile emri borsadan sorgular. Yoksa None döner."""
+        self._reset_seen()
         try:
             res: dict[str, Any] = self._exchange.fetch_order(
                 None,

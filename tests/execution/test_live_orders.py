@@ -319,6 +319,22 @@ def test_query_order_resolves_filled_or_rejected() -> None:
     assert q_still.order.status is OrderStatus.UNKNOWN
     assert q_still.state.unknown
 
+    # 4. Önceki yanıttan kalan -2013 kodu sonraki ağ zaman aşımına sızmaz (F-2)
+    fake_leak = FakeCcxtExchange(
+        fetch_order_error=FakeRequestTimeout("socket timeout"),
+    )
+    client_leak = BinanceLiveClient(CREDS, exchange=fake_leak)
+    # Önceden kalan yanıt durumunu taklit et
+    client_leak._seen.status = 400
+    client_leak._seen.body = '{"code": -2013, "msg": "Order does not exist"}'
+    venue_leak = LiveExchange(client_leak)
+
+    q_leak = query_order(initial.state, "cb-s1-btc-0001", venue_leak, NOW)
+    assert q_leak.outcome is QueryOutcome.UNCHANGED
+    assert q_leak.order is not None
+    assert q_leak.order.status is OrderStatus.UNKNOWN
+    assert q_leak.state.unknown
+
 
 class FakeOrderNotFound(Exception):
     pass
