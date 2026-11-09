@@ -91,7 +91,8 @@ from crytobot.reporting import ReportingService, load_reporting_config
 
 CONFIG_FILE = "crytobot.toml"
 USAGE = (
-    "kullanım: python -m crytobot prepare|start|download|backtest|status|kill-switch|resume|stop|dashboard"
+    "kullanım: python -m crytobot "
+    "prepare|start|download|backtest|status|kill-switch|resume|stop|dashboard"
 )
 COMMANDS = (
     ["prepare"],
@@ -450,7 +451,7 @@ def _dashboard(
         if Path(config.log_path).is_file():
             try:
                 with open(config.log_path, encoding="utf-8") as f:
-                    all_lines = [l.strip() for l in f.readlines() if l.strip()]
+                    all_lines = [log_line.strip() for log_line in f.readlines() if log_line.strip()]
                     logs_tuple = tuple(all_lines[-10:])
             except OSError:
                 pass

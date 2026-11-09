@@ -1,10 +1,9 @@
-"""Spec 0031 AC-6, AC-7 (R-5, R-6): Pano durum verisi, açık pozisyonlu/pozisyonsuz ve hata durumları testleri."""
+"""Spec 0031 AC-6, AC-7 (R-5, R-6): Pano durum verisi, açık pozisyonlu/pozisyonsuz ve
+hata durumları testleri.
+"""
 
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
-
-import pytest
 
 from crytobot.app import (
     BotConfig,
@@ -63,16 +62,19 @@ def test_dashboard_positions_rendering(tmp_path: Path) -> None:
     code, data = get_dashboard_status(config, clock=lambda: T0, is_running=True)
     assert code == 200
     assert data["is_running"] is True
-    assert len(data["positions"]) == 1
+    positions = data["positions"]
+    assert isinstance(positions, list)
+    assert len(positions) == 1
 
-    pos = data["positions"][0]
+    pos = positions[0]
+    assert isinstance(pos, dict)
     assert pos["pair"] == BTC
     assert pos["direction"] == "ALIM"
-    assert pos["amount"] > 0
-    assert pos["entry_price"] > 0
-    assert pos["current_price"] > 0
-    assert pos["stop_loss"] > 0
-    assert pos["take_profit"] > 0
+    assert isinstance(pos["amount"], (int, float)) and pos["amount"] > 0
+    assert isinstance(pos["entry_price"], (int, float)) and pos["entry_price"] > 0
+    assert isinstance(pos["current_price"], (int, float)) and pos["current_price"] > 0
+    assert isinstance(pos["stop_loss"], (int, float)) and pos["stop_loss"] > 0
+    assert isinstance(pos["take_profit"], (int, float)) and pos["take_profit"] > 0
 
 
 def test_dashboard_handles_missing_or_corrupt_store(tmp_path: Path) -> None:
@@ -85,8 +87,10 @@ def test_dashboard_handles_missing_or_corrupt_store(tmp_path: Path) -> None:
 
     code, data = get_dashboard_status(missing_config, clock=lambda: T0, is_running=False)
     assert code == 503
-    assert "Depo bulunamadı" in data["error"]
-    assert "prepare" in data["error"]
+    err_missing = data["error"]
+    assert isinstance(err_missing, str)
+    assert "Depo bulunamadı" in err_missing
+    assert "prepare" in err_missing
 
     # 2. Depo dosyası bozukken
     corrupt_db = tmp_path / "bozuk_depo.db"
@@ -95,5 +99,6 @@ def test_dashboard_handles_missing_or_corrupt_store(tmp_path: Path) -> None:
 
     code, data = get_dashboard_status(corrupt_config, clock=lambda: T0, is_running=False)
     assert code == 503
-    assert "Depo okunamıyor" in data["error"]
-
+    err_corrupt = data["error"]
+    assert isinstance(err_corrupt, str)
+    assert "Depo okunamıyor" in err_corrupt

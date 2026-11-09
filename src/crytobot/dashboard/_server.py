@@ -6,7 +6,6 @@ GET dışındaki metotları HTTP 405 Method Not Allowed ile reddeder.
 """
 
 import json
-import socket
 import urllib.parse
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -50,7 +49,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         return True
 
     def _send_forbidden(self, reason: str) -> None:
-        body = f"Erişim reddedildi: {reason}\n".encode("utf-8")
+        body = f"Erişim reddedildi: {reason}\n".encode()
         self.send_response(403)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))

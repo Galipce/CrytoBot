@@ -4,20 +4,13 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
-
-import pytest
 
 from crytobot.persistence import (
     StoreOutcome,
-    create_store,
     load_store,
 )
 from tests.persistence.chain import (
-    bought,
-    loaded,
     opened,
-    save,
     stored,
 )
 

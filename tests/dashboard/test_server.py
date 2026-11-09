@@ -1,4 +1,6 @@
-"""Spec 0031 AC-2, AC-3, AC-8 (R-3, R-4, R-7, R-8): Host denetimi, HTTP metot kısıtı, durum API'si testleri."""
+"""Spec 0031 AC-2, AC-3, AC-8 (R-3, R-4, R-7, R-8): Host denetimi, HTTP metot kısıtı,
+durum API'si testleri.
+"""
 
 import io
 import json
@@ -125,7 +127,7 @@ def test_api_status_endpoint_returns_error_status_when_store_fails() -> None:
         return 503, {"error": "depo bulunamadı"}
 
     req = "GET /api/status HTTP/1.1\r\nHost: 127.0.0.1:8080\r\n\r\n"
-    code, headers, body = simulate_request(req, status_provider=error_provider)
+    code, _headers, body = simulate_request(req, status_provider=error_provider)
 
     assert code == 503
     parsed_json = json.loads(body.decode("utf-8"))

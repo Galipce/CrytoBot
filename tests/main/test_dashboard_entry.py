@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from crytobot.__main__ import EXIT_OK, EXIT_REFUSED, StopRequest, run
+from crytobot.__main__ import EXIT_OK, EXIT_REFUSED, run
+from crytobot.app import StopRequest
 from tests.main.test_entry import config_text
 
 T0 = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)

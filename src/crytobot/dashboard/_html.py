@@ -33,7 +33,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     body {
       background-color: var(--bg);
       color: var(--text-main);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       line-height: 1.5;
       padding: 1.5rem;
     }
@@ -61,12 +62,35 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
-    .badge-running { background-color: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
-    .badge-stopped { background-color: var(--gray-bg); color: var(--gray); border: 1px solid var(--gray); }
-    .badge-mode { background-color: rgba(59, 130, 246, 0.15); color: var(--accent); border: 1px solid var(--accent); }
-    .badge-halt-none { background-color: var(--green-bg); color: var(--green); }
-    .badge-halt-kill { background-color: var(--red-bg); color: var(--red); border: 1px solid var(--red); }
-    .badge-halt-drawdown { background-color: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber); }
+    .badge-running {
+      background-color: var(--green-bg);
+      color: var(--green);
+      border: 1px solid var(--green);
+    }
+    .badge-stopped {
+      background-color: var(--gray-bg);
+      color: var(--gray);
+      border: 1px solid var(--gray);
+    }
+    .badge-mode {
+      background-color: rgba(59, 130, 246, 0.15);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+    .badge-halt-none {
+      background-color: var(--green-bg);
+      color: var(--green);
+    }
+    .badge-halt-kill {
+      background-color: var(--red-bg);
+      color: var(--red);
+      border: 1px solid var(--red);
+    }
+    .badge-halt-drawdown {
+      background-color: var(--amber-bg);
+      color: var(--amber);
+      border: 1px solid var(--amber);
+    }
     .controls { display: flex; align-items: center; gap: 1rem; }
     .refresh-btn {
       background-color: var(--accent);
@@ -108,7 +132,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       border-radius: 8px;
       padding: 1.25rem;
     }
-    .card-label { font-size: 0.8125rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500; }
+    .card-label {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
     .card-value { font-size: 1.5rem; font-weight: 700; color: #fff; }
     .card-subtext { font-size: 0.8125rem; margin-top: 0.375rem; color: var(--text-muted); }
     .val-positive { color: var(--green); }
@@ -271,8 +300,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="card">
           <div class="section-title">Son Tur Durumu</div>
           <div style="font-size: 0.875rem;">
-            <p style="margin-bottom: 0.5rem;"><strong>Zaman:</strong> <span id="turn-time">—</span></p>
-            <p style="margin-bottom: 0.5rem;"><strong>Sonuç:</strong> <span id="turn-result">—</span></p>
+            <p style="margin-bottom: 0.5rem;">
+              <strong>Zaman:</strong> <span id="turn-time">—</span>
+            </p>
+            <p style="margin-bottom: 0.5rem;">
+              <strong>Sonuç:</strong> <span id="turn-result">—</span>
+            </p>
             <p><strong>Açıklama:</strong> <span id="turn-message">—</span></p>
           </div>
         </div>
@@ -294,7 +327,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <script>
     (function() {
       let countdown = 5;
-      let countdownTimer = null;
 
       function formatNumber(num, decimals = 2) {
         if (num === null || num === undefined || isNaN(num)) return "—";

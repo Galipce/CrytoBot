@@ -1,4 +1,6 @@
-"""Spec 0031 AC-4, AC-5 (R-5): Pano HTML arayüzü, responsive tasarım, CDN yokluğu ve yenileme testleri."""
+"""Spec 0031 AC-4, AC-5 (R-5): Pano HTML arayüzü, responsive tasarım, CDN yokluğu ve
+yenileme testleri.
+"""
 
 from crytobot.dashboard import render_dashboard_html
 
@@ -39,8 +41,8 @@ def test_dashboard_html_offline_and_responsive() -> None:
     # AC-4: Harici CDN veya internet bağlantısı bağımlılığı OLMAMALI (tamamen çevrimdışı)
     assert "http://" not in html
     assert "https://" not in html
-    assert "<link rel=\"stylesheet\" href=\"http" not in html
-    assert "<script src=\"http" not in html
+    assert '<link rel="stylesheet" href="http' not in html
+    assert '<script src="http' not in html
     assert "cdn." not in html.lower()
     assert "unpkg.com" not in html
     assert "cdnjs" not in html

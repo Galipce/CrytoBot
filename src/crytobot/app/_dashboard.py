@@ -35,19 +35,9 @@ def get_dashboard_status(
         }
 
     state = store_res.state
-    free_balance = (
-        float(state.ledger.balance) if state.ledger.balance is not None else 0.0
-    )
-    equity = (
-        float(state.risk.last_equity)
-        if state.risk.last_equity is not None
-        else free_balance
-    )
-    peak_equity = (
-        float(state.risk.peak_equity)
-        if state.risk.peak_equity is not None
-        else equity
-    )
+    free_balance = float(state.ledger.balance) if state.ledger.balance is not None else 0.0
+    equity = float(state.risk.last_equity) if state.risk.last_equity is not None else free_balance
+    peak_equity = float(state.risk.peak_equity) if state.risk.peak_equity is not None else equity
 
     drawdown_pct = 0.0
     if peak_equity > 0 and peak_equity > equity:
@@ -59,9 +49,7 @@ def get_dashboard_status(
         pnl = state.risk.last_equity - state.risk.day_start_equity
         day_total = float(pnl)
         if state.risk.day_start_equity > Decimal("0"):
-            daily_pnl_pct = float(
-                round((pnl / state.risk.day_start_equity) * Decimal("100"), 2)
-            )
+            daily_pnl_pct = float(round((pnl / state.risk.day_start_equity) * Decimal("100"), 2))
 
     positions: list[dict[str, object]] = []
     for p in state.ledger.positions.values():
