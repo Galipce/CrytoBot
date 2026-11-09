@@ -264,7 +264,7 @@ def test_missing_or_unreadable_config_touches_nothing(bot: Bot, kind: str) -> No
 
 
 def test_usage_on_unknown_command(bot: Bot) -> None:
-    for argv in ([], ["live"], ["start", "--live"], ["prepare", "start"]):
+    for argv in ([], ["live"], ["start", "--bilinmeyen"], ["prepare", "start"]):
         out = io.StringIO()
         assert run(argv, config_path=bot.config_path, console=out) == EXIT_REFUSED
         assert "kullanım: python -m crytobot prepare|start" in out.getvalue()

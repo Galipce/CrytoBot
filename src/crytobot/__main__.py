@@ -35,7 +35,6 @@ from types import FrameType
 from typing import IO, TextIO
 
 from crytobot.app import (
-    PREPARE_HINT,
     BacktestConfig,
     BacktestOutcome,
     BacktestParts,
@@ -50,6 +49,7 @@ from crytobot.app import (
     StartOutcome,
     StopRequest,
     check_stage_gate,
+    create_live_exchange,
     engage_kill_switch,
     get_dashboard_status,
     line,
@@ -58,6 +58,7 @@ from crytobot.app import (
     load_download_config,
     load_stage_config,
     open_for_start,
+    prepare_live_store,
     prepare_store,
     query_status,
     request_stop,
@@ -92,11 +93,13 @@ from crytobot.reporting import ReportingService, load_reporting_config
 CONFIG_FILE = "crytobot.toml"
 USAGE = (
     "kullanım: python -m crytobot "
-    "prepare|start|download|backtest|status|kill-switch|resume|stop|dashboard"
+    "prepare|start|download|backtest|status|kill-switch|resume|stop|dashboard [--live] [--trial]"
 )
 COMMANDS = (
     ["prepare"],
+    ["prepare", "--live"],
     ["start"],
+    ["start", "--live"],
     ["start", "--trial"],
     ["download"],
     ["backtest"],
@@ -120,6 +123,7 @@ _EXIT_CODES = {
     ExitReason.READ_REFUSED: EXIT_READ_REFUSED,
     ExitReason.LOG_FAILED: EXIT_LOG_FAILED,
     ExitReason.FORCED: EXIT_FORCED,
+    ExitReason.BANNED: EXIT_REFUSED,
 }
 _BACKTEST_EXIT_CODES = {
     BacktestOutcome.COMPLETED: EXIT_OK,
@@ -389,14 +393,35 @@ def _backtest(config_path: Path, output: Output, stop: StopRequest) -> int:
     return _BACKTEST_EXIT_CODES[exit_.outcome]
 
 
-def _prepare(config: BotConfig, output: Output, clock: Clock) -> int:
-    result = prepare_store(config.store_path, config.opening_balance, clock())
+def _prepare(
+    config: BotConfig,
+    output: Output,
+    clock: Clock,
+    *,
+    is_live: bool = False,
+    testnet: bool = False,
+    live_client: object = None,
+) -> int:
+    if is_live:
+        result = prepare_live_store(
+            config.store_path,
+            clock(),
+            testnet=testnet,
+            live_client=live_client,
+        )
+    else:
+        result = prepare_store(config.store_path, config.opening_balance, clock())
     output(line(clock(), "hazırlık", result.message))
     return EXIT_OK if result.outcome is PrepareOutcome.PREPARED else EXIT_REFUSED
 
 
 def _stage_gate(
-    config_path: Path, bot: BotConfig, output: Output, clock: Clock
+    config_path: Path,
+    bot: BotConfig,
+    output: Output,
+    clock: Clock,
+    *,
+    mode: str = "paper",
 ) -> tuple[bool, str | None, str | None]:
     """BR-10 aşama kapısı: kilit alınmadan, depo açılmadan ve ağa gitmeden önce denetlenir.
 
@@ -407,7 +432,7 @@ def _stage_gate(
         output.say(line(clock(), "başlatma", f"başlatma reddedildi: {document}"))
         return False, None, None
 
-    stage_res = load_stage_config(document)
+    stage_res = load_stage_config(document, mode=mode)
     if stage_res.config is None:
         output.say(line(clock(), "başlatma", f"başlatma reddedildi: {stage_res.message}"))
         return False, None, None
@@ -493,15 +518,17 @@ def _start(
     approved_by: str | None = None,
     report_path: str | None = None,
     reporter: ReportingService | None = None,
+    exchange: object = None,
 ) -> int:
-    check = open_for_start(config.store_path)
+    check = open_for_start(config.store_path, mode=config.mode)
     if check.outcome is not StartOutcome.READY:
-        hint = f"; {PREPARE_HINT}" if check.hint is not None else ""
+        hint = f"; {check.hint}" if check.hint is not None else ""
         output(line(parts.clock(), "başlatma", f"{check.message}{hint}"))
         return EXIT_REFUSED
     exit_ = run_loop(
         config,
         parts,
+        exchange=exchange,  # type: ignore[arg-type]
         trial=trial,
         approved_by=approved_by,
         report_path=report_path,
@@ -523,6 +550,7 @@ def run(
     wait: Callable[[float], None] | None = None,
     download: Download = download_history,
     reporter: ReportingService | None = None,
+    live_client: object = None,
 ) -> int:
     """Komutu çalıştırır, çıkış kodunu döndürür. Ayar, kilit, depo sırası: borsaya ve depoya
     ayarlar denetlenmeden dokunulmaz (R-2); kilit depodan önce alınır (R-6)."""
@@ -537,6 +565,29 @@ def run(
         return _backtest(config_path, output, stop)
     config = _config(config_path, output, clock)
     if config is None:
+        return EXIT_REFUSED
+
+    is_live = "--live" in argv
+    if is_live and config.mode != "live":
+        output.say(
+            line(
+                clock(),
+                argv[0],
+                "başlatma reddedildi: MODE_MISMATCH"
+                " (komutta --live bayrağı var ancak config modu live değil)",
+            )
+        )
+        return EXIT_REFUSED
+
+    if config.mode == "live" and not is_live and argv[0] in ("start", "prepare"):
+        output.say(
+            line(
+                clock(),
+                argv[0],
+                "başlatma reddedildi: LIVE_FLAG_REQUIRED"
+                " (config modu live ancak --live bayrağı verilmedi)",
+            )
+        )
         return EXIT_REFUSED
 
     if argv[0] == "status":
@@ -579,11 +630,39 @@ def run(
     trial = len(argv) > 1 and argv[1] == "--trial"
     approved_by: str | None = None
     report_path: str | None = None
+    live_exchange: object = None
 
-    if argv[0] == "start" and not trial:
-        passed, approved_by, report_path = _stage_gate(config_path, config, output, clock)
-        if not passed:
-            return EXIT_REFUSED
+    if argv[0] == "start":
+        if is_live:
+            passed, approved_by, report_path = _stage_gate(
+                config_path, config, output, clock, mode="live"
+            )
+            if not passed:
+                return EXIT_REFUSED
+            document = _load_toml(config_path)
+            testnet = False
+            if (
+                isinstance(document, Mapping)
+                and "exchange" in document
+                and isinstance(document["exchange"], Mapping)
+            ):
+                testnet = bool(document["exchange"].get("testnet", False))
+            live_exch, err = create_live_exchange(
+                testnet=testnet,
+                client=live_client,
+            )
+            if live_exch is None:
+                output.say(line(clock(), "başlatma", f"başlatma reddedildi: {err}"))
+                return EXIT_REFUSED
+            live_exchange = live_exch
+            if testnet:
+                output.say(line(clock(), "başlatma", "Binance Spot Testnet modunda çalışıyor"))
+        elif not trial:
+            passed, approved_by, report_path = _stage_gate(
+                config_path, config, output, clock, mode="paper"
+            )
+            if not passed:
+                return EXIT_REFUSED
 
     output = Output(console, config.log_path)
     lock = StoreLock(config.store_path)
@@ -593,7 +672,23 @@ def run(
             output(line(clock(), argv[0], f"reddedildi: {refused}"))
             return EXIT_REFUSED
         if argv[0] == "prepare":
-            return _prepare(config, output, clock)
+            testnet = False
+            if is_live:
+                document = _load_toml(config_path)
+                if (
+                    isinstance(document, Mapping)
+                    and "exchange" in document
+                    and isinstance(document["exchange"], Mapping)
+                ):
+                    testnet = bool(document["exchange"].get("testnet", False))
+            return _prepare(
+                config,
+                output,
+                clock,
+                is_live=is_live,
+                testnet=testnet,
+                live_client=live_client,
+            )
         parts = LoopParts(
             clock,
             make_wait(stop, stop_flag_path=stop_flag_path(config.store_path))
@@ -618,6 +713,7 @@ def run(
             approved_by=approved_by,
             report_path=report_path,
             reporter=reporter,
+            exchange=live_exchange,
         )
     except LogWriteError:
         output.say(line(clock(), "durdurma", _LOG_FAILED))
