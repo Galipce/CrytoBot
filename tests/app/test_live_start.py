@@ -23,11 +23,32 @@ from crytobot.execution import (
     PermissionForbiddenError,
 )
 from crytobot.persistence import load_store
-from tests.backtest.test_report_parse import sample_report
 
 NOW = datetime(2026, 11, 9, 20, 0, tzinfo=UTC)
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE = ROOT / "crytobot.example.toml"
+
+SAMPLE_REPORT_TEXT = """== örneklem dışı — BR-10 kanıtı adayı ==
+turlar: 2 (ilk 2026-01-02T00:00:00+00:00, son 2026-01-02T01:00:00+00:00)
+başlangıç kasası: 999.90000000 USDT
+bitiş kasası: 1009.79000000 USDT
+net kâr/zarar: 9.89000000 USDT (getiri %0.9891)
+gerçekleşen kâr/zarar: 9.79000000 USDT
+gerçekleşmemiş kâr/zarar: 0.10000000 USDT
+işlem: 1 (kazanan 1, zararlı 0)
+kazanma oranı: %100.0000
+kâr faktörü: tanımsız
+en büyük drawdown: %0.0109
+ortalama günlük getiri: %0.9891
+ödenen komisyon: 0.11000000 USDT
+ödenen slippage: 0.11000000 USDT
+günlük zarar durdurmalı gün: 0
+drawdown durdurması: yok
+fiyatı ya da verisi eksik tur (çift başına): BTC/USDT 0
+öneri yok (nedene göre): yok
+ret (nedene göre): yok
+gönderilmeyen durum bildirimi (türe göre): yok
+"""
 
 
 class FakeLiveClient(BinanceLiveClient):
@@ -64,7 +85,7 @@ def write_test_config(
     store_file = (dir_path / "bot.db").as_posix()
     log_file = (dir_path / "bot.log").as_posix()
     report_file = dir_path / "report.txt"
-    report_file.write_text(sample_report(), encoding="utf-8")
+    report_file.write_text(SAMPLE_REPORT_TEXT, encoding="utf-8")
 
     stage_lines = [
         "[stage]",
