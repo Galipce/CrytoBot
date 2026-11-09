@@ -118,8 +118,6 @@ class TurnRun:
                 f"bakiye mutabakat farkı toleransı aştı: "
                 f"defter={ledger_balance}, borsa={ex_balance}, fark={diff}",
             )
-        else:
-            self.notices.clear(NoticeKind.RECONCILIATION)
 
     def sync_safe_mode(self) -> None:
         """R-17: durumu bilinmeyen emir kaldıkça alım olmaz; bildirim durumdan türer (Risk 11)."""

@@ -66,7 +66,9 @@ class MockLiveExchange(LiveExchange):
         return self.resolutions.get(client_order_id, OrderStatus.UNKNOWN)
 
 
-def test_balance_reconciliation_tolerance_and_halt(tmp_path: Path) -> None:
+def test_balance_reconciliation_tolerance_and_halt(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
     """Spec 0033 AC-5 (R-6): Bakiye mutabakatı toleransı (<=0.05 USDT) ve RECONCILIATION_HALT."""
     store_path = str(tmp_path / "live_recon.db")
     # Defter açılış bakiyesi: 1000.00 USDT
@@ -158,6 +160,51 @@ def test_balance_reconciliation_tolerance_and_halt(tmp_path: Path) -> None:
     # Fakat kapanış emri gönderilmiştir ve pozisyon kapatılmıştır (R-8)
     assert len(res_close.closes) > 0
     assert len(res_close.closures) > 0
+
+    # 5. Sonraki turda borsa bakiyesi normale döndüğünde settle() bildirimi temizler (F-1)
+    notices.clear()
+    state_after_close = load_store(store_path, "live").state
+    assert state_after_close is not None
+    cur_bal = state_after_close.ledger.balance
+    assert cur_bal is not None
+    market_fresh = {
+        BTC: pair_market(closes=FLAT, closed_at=NOW + timedelta(hours=2), price=Decimal(10))
+    }
+    res_recovered = run_turn(
+        market=market_fresh,
+        settings=settings,
+        store_path=store_path,
+        now=NOW + timedelta(hours=2),
+        exchange=MockLiveExchange(free_balance=cur_bal),
+        sink=notices.append,
+        memory=memory,
+    )
+    assert BuyHalt.RECONCILIATION_HALT not in res_recovered.halts
+    assert any(n.kind is NoticeKind.RECONCILIATION and not n.entering for n in notices)
+
+    # 6. Depo kalıcı flagged durumdayken borsa bakiyesi tutsa bile bildirim silinmez (F-1)
+    original_load = load_store(store_path, "live")
+    flagged_loaded = replace(original_load, conflicts=("fill conflict",))
+    monkeypatch.setattr(
+        "crytobot.app._turn.load_store",
+        lambda sp, mode: flagged_loaded,
+    )
+    notices.clear()
+    mem_flagged = TurnMemory()
+    market_fresh_3 = {
+        BTC: pair_market(closes=FLAT, closed_at=NOW + timedelta(hours=3), price=Decimal(10))
+    }
+    res_flagged = run_turn(
+        market=market_fresh_3,
+        settings=settings,
+        store_path=store_path,
+        now=NOW + timedelta(hours=3),
+        exchange=MockLiveExchange(free_balance=cur_bal),
+        sink=notices.append,
+        memory=mem_flagged,
+    )
+    assert BuyHalt.RECONCILIATION in res_flagged.halts
+    assert (NoticeKind.RECONCILIATION, "") in mem_flagged.active
 
 
 def test_live_turn_orders_and_safe_mode(tmp_path: Path) -> None:
