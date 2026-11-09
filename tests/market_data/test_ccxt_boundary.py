@@ -6,7 +6,7 @@ from pathlib import Path
 import crytobot
 
 SRC = Path(crytobot.__file__).parent
-ALLOWED = {SRC / "market_data" / "_client.py"}
+ALLOWED = {SRC / "market_data" / "_client.py", SRC / "execution" / "_live_client.py"}
 
 
 def _imports_ccxt(source: str) -> bool:

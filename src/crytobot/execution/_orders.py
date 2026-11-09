@@ -8,6 +8,7 @@ from decimal import Decimal, DecimalException, localcontext
 from enum import Enum
 from types import MappingProxyType
 
+from crytobot.execution._live import LiveExchange
 from crytobot.execution._numbers import (
     BOUNDED,
     CALC_DIGITS,
@@ -19,10 +20,11 @@ from crytobot.execution._numbers import (
     _show,
     _significant,
 )
-from crytobot.execution._paper import OrderStatus, PaperExchange
+from crytobot.execution._paper import Exchange, OrderStatus
 from crytobot.risk import CLOSE_REASONS, PairRules, TradeApproval, TradeIntent
 
 PAPER = "paper"
+LIVE = "live"
 BUY = "buy"
 CLIENT_ID_PREFIX = "cb-"
 # ASCII only: exchanges accept at most 36 of [A-Za-z0-9_-] in a client order id (R-6)
@@ -302,9 +304,10 @@ def _judged_differently(judged: object, checked: _Checked) -> bool:
 
 
 def place_order(
-    state: ExecutionState, request: OrderRequest, exchange: PaperExchange, now: object
+    state: ExecutionState, request: OrderRequest, exchange: Exchange, now: object
 ) -> OrderResult:
-    """BR-9: onaylı öneriden paper piyasa alımı oluşturur ya da isteği adlandırarak reddeder."""
+    """BR-9: onaylı öneriden paper veya live piyasa alımı oluşturur ya da isteği adlandırarak
+    reddeder."""
     intent = request.intent
     pair = intent.pair if isinstance(intent, TradeIntent) else None
 
@@ -337,10 +340,19 @@ def place_order(
             f" slippage {_brief(checked.slippage)}, ücret {_brief(checked.fee)},"
             f" adım {_brief(checked.step)})",
         )
-    if not (isinstance(request.mode, str) and request.mode == PAPER):
+    is_paper = (
+        type(request.mode) is str
+        and request.mode == PAPER
+        and not isinstance(exchange, LiveExchange)
+    )
+    is_live = (
+        type(request.mode) is str and request.mode == LIVE and isinstance(exchange, LiveExchange)
+    )
+    if not (is_paper or is_live):
         return reject(
             OrderOutcome.UNSUPPORTED_MODE,
-            f"mod {_show(request.mode)} desteklenmiyor: yalnızca paper",
+            f"mod {_show(request.mode)} desteklenmiyor: "
+            "yalnızca paper veya live (LiveExchange ile)",
         )
     client_order_id = CLIENT_ID_PREFIX + checked.intent_id
     existing = state.orders.get(client_order_id)
@@ -395,7 +407,15 @@ def place_order(
             f"borsa kuralı: tutar {_brief(notional)} (miktar {_brief(amount)} * dolum fiyatı"
             f" {_brief(fill)}) asgari tutarın ({_brief(checked.min_notional)}) altında",
         )
-    status = exchange.place(client_order_id)
+    if isinstance(exchange, LiveExchange):
+        status = exchange.place(
+            client_order_id,
+            symbol=checked.pair,
+            side=checked.side,
+            amount=amount,
+        )
+    else:
+        status = exchange.place(client_order_id)
     filled = status is OrderStatus.FILLED
     order = Order(
         client_order_id,
@@ -543,10 +563,10 @@ def _notify(
 
 
 def query_order(
-    state: ExecutionState, client_order_id: object, exchange: PaperExchange, now: object
+    state: ExecutionState, client_order_id: object, exchange: Exchange, now: object
 ) -> QueryResult:
-    """R-9: durumu bilinmeyen emrin durumunu simülatörden sorar; son bilinmeyen emir netleşince
-    güvenli mod biter ve bir çıkış bildirimi üretilir."""
+    """R-9: durumu bilinmeyen emrin durumunu simülatörden veya borsadan sorar; son bilinmeyen emir
+    netleşince güvenli mod biter ve bir çıkış bildirimi üretilir."""
     if not isinstance(now, datetime) or now.utcoffset() is None:
         return QueryResult(
             state,
@@ -574,7 +594,10 @@ def query_order(
             None,
             f"geçersiz girdi: {order.client_order_id} için dolum tahmini yok",
         )
-    status = exchange.query(order.client_order_id)
+    if isinstance(exchange, LiveExchange):
+        status = exchange.query(order.client_order_id, symbol=order.pair)
+    else:
+        status = exchange.query(order.client_order_id)
     if status is OrderStatus.UNKNOWN:
         return QueryResult(
             state,
