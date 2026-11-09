@@ -103,3 +103,10 @@ def test_credentials_repr_and_str_redacted() -> None:
 
     # None creds ile çağrıldığında metni bozmaz
     assert redact_secrets("normal text", None) == "normal text"
+
+    # Substring durumu: key secret'ın alt dizesi olsa bile uzunluk sırasına göre maskelenir (F-5)
+    creds_sub = ExchangeCredentials(api_key="sub", api_secret="prefix_sub_suffix", testnet=False)
+    masked_sub = redact_secrets("error: prefix_sub_suffix leaked", creds_sub)
+    assert "prefix" not in masked_sub
+    assert "suffix" not in masked_sub
+    assert masked_sub == f"error: {REDACTED} leaked"

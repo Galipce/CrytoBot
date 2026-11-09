@@ -105,8 +105,7 @@ def redact_secrets(text: str, credentials: ExchangeCredentials | None = None) ->
     if credentials is None:
         return text
     out = text
-    if credentials.api_key:
-        out = out.replace(credentials.api_key, REDACTED)
-    if credentials.api_secret:
-        out = out.replace(credentials.api_secret, REDACTED)
+    secrets = [s for s in (credentials.api_key, credentials.api_secret) if s]
+    for secret in sorted(secrets, key=len, reverse=True):
+        out = out.replace(secret, REDACTED)
     return out
