@@ -2,7 +2,7 @@
 
 import pytest
 
-from crytobot.execution._credentials import ExchangeCredentials
+from crytobot.execution._credentials import REDACTED, ExchangeCredentials
 from crytobot.execution._live_client import (
     PERMISSION_CHECK_FAILED,
     SPOT_TRADING_DISABLED,
@@ -128,3 +128,21 @@ def test_spot_trading_disabled_rejected() -> None:
     client_valid = BinanceLiveClient(credentials=creds, exchange=fake_valid)
     client_valid.verify_permissions()
     assert client_valid.credentials == creds
+
+
+def test_verify_permissions_redacts_secrets_in_error() -> None:
+    """AC-2, AC-4: Yetki sorgusu hatasında sırlar maskelenir ve traceback zincirlenmez (F-7)."""
+    creds = ExchangeCredentials(
+        api_key="leaked_key_999", api_secret="leaked_sec_888", testnet=False
+    )
+    fake = FakeExchange(
+        raise_error=RuntimeError("Auth error for leaked_key_999 with leaked_sec_888")
+    )
+    client = BinanceLiveClient(credentials=creds, exchange=fake)
+    with pytest.raises(PermissionCheckFailedError) as exc_info:
+        client.verify_permissions()
+    msg = str(exc_info.value)
+    assert "leaked_key_999" not in msg
+    assert "leaked_sec_888" not in msg
+    assert REDACTED in msg
+    assert exc_info.value.__cause__ is None

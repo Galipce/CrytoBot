@@ -82,7 +82,10 @@ def check_api_restrictions(data: Any) -> None:
         )
 
 
-def verify_permissions(exchange: Any) -> None:
+def verify_permissions(
+    exchange: Any,
+    credentials: ExchangeCredentials | None = None,
+) -> None:
     """API yetkilerini borsadan sorgular ve doğrular (R-2, R-3)."""
     try:
         if hasattr(exchange, "sapiGetAccountApiRestrictions"):
@@ -94,7 +97,8 @@ def verify_permissions(exchange: Any) -> None:
     except PermissionForbiddenError:
         raise
     except Exception as err:
-        raise PermissionCheckFailedError(f"Yetki sorgusu başarısız: {err}") from err
+        safe_msg = redact_secrets(str(err), credentials)
+        raise PermissionCheckFailedError(f"Yetki sorgusu başarısız: {safe_msg}") from None
 
     check_api_restrictions(data)
 
@@ -159,7 +163,7 @@ class BinanceLiveClient:
 
     def verify_permissions(self) -> None:
         """Borsa anahtar yetkilerini kontrol eder (R-2, R-3)."""
-        verify_permissions(self._exchange)
+        verify_permissions(self._exchange, self._credentials)
 
     def _reset_seen(self) -> None:
         self._seen.status = None
