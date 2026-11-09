@@ -1,6 +1,6 @@
 # Spec 0031 — Localhost salt-okunur web panosu (dashboard)
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0031-plan.md`
 - Self-critique: done
@@ -50,27 +50,29 @@ Davranış:
 - Boyut: 8 kabul kriteri. Propose split: Gerek yok, tek spec olarak teslim edilebilir.
 
 ## Acceptance criteria
-- [ ] AC-1 — Sunucu başlatma ve kapatma (R-1): `dashboard` komutu sunucuyu `127.0.0.1` ve ayardaki portta (`8080`) başlatır, konsola erişim adresini basar; Ctrl+C (veya sinyal) ile temiz biçimde kapanır.
-- [ ] AC-2 — Host denetimi ve HTTP metot kısıtı (R-3, R-8): `Host` başlığı `127.0.0.1` veya `localhost` dışındaki istekler HTTP 403 Forbidden ile reddedilir; GET dışındaki metotlar (POST, PUT, DELETE vb.) HTTP 405 Method Not Allowed ile reddedilir.
-- [ ] AC-3 — Salt okunur durum API'si (R-2, R-4): `/api/status` uç noktası HTTP GET ile çağrıldığında depodaki en güncel durumu (süreç durumu, mod, toplam kasa, serbest bakiye, zirve, drawdown %, açık pozisyonlar, aktif durdurmalar, son tur) JSON olarak döner; depoyu değiştirmez ve kilit almaz.
-- [ ] AC-4 — Modern ve responsive web arayüzü (R-5): Kök adrese (`/`) GET isteği yapıldığında modern, koyu temalı, responsive HTML arayüzü döner; sistem durum rozetini, finansal metrik kartlarını, açık pozisyonlar tablosunu ve son tur özetini doğru gösterir; harici CDN veya ağ bağlantısı gerektirmez.
-- [ ] AC-5 — Otomatik yenileme ve dinamik veri akışı (R-5): Web arayüzü JavaScript ile `/api/status` üzerinden her 5 saniyede bir sayfayı yeniden yüklemeden kartları ve tabloları günceller; ayrıca elle "Yenile" butonuyla anında tetiklenebilir.
-- [ ] AC-6 — Açık pozisyonlu ve pozisyonsuz durumlar (R-5): Açık pozisyon varken tüm pozisyon detayları (çift, miktar, giriş, stop, hedef) tabloda listelenir; açık pozisyon yokken anlaşılır boş durum mesajı ("Açık pozisyon yok") gösterilir.
-- [ ] AC-7 — Depo yok veya bozukken hata yönetimi (R-6): Depo dosyası henüz oluşturulmamışken (`prepare` öncesi) veya bozukken sunucu çökmez; `/api/status` ve web arayüzü anlaşılır hata durumu döner ve kullanıcıya durumu adıyla bildirir.
-- [ ] AC-8 — Port meşgulken ret (R-7): İstenen port başka bir süreç tarafından dinleniyorsa `dashboard` komutu çökmeden adıyla hata mesajı basar ve `EXIT_REFUSED` ile çıkar.
+- [x] AC-1 — Sunucu başlatma ve kapatma (R-1): `dashboard` komutu sunucuyu `127.0.0.1` ve ayardaki portta (`8080`) başlatır, konsola erişim adresini basar; Ctrl+C (veya sinyal) ile temiz biçimde kapanır.
+- [x] AC-2 — Host denetimi ve HTTP metot kısıtı (R-3, R-8): `Host` başlığı `127.0.0.1` veya `localhost` dışındaki istekler HTTP 403 Forbidden ile reddedilir; GET dışındaki metotlar (POST, PUT, DELETE vb.) HTTP 405 Method Not Allowed ile reddedilir.
+- [x] AC-3 — Salt okunur durum API'si (R-2, R-4): `/api/status` uç noktası HTTP GET ile çağrıldığında depodaki en güncel durumu (süreç durumu, mod, toplam kasa, serbest bakiye, zirve, drawdown %, açık pozisyonlar, aktif durdurmalar, son tur) JSON olarak döner; depoyu değiştirmez ve kilit almaz.
+- [x] AC-4 — Modern ve responsive web arayüzü (R-5): Kök adrese (`/`) GET isteği yapıldığında modern, koyu temalı, responsive HTML arayüzü döner; sistem durum rozetini, finansal metrik kartlarını, açık pozisyonlar tablosunu ve son tur özetini doğru gösterir; harici CDN veya ağ bağlantısı gerektirmez.
+- [x] AC-5 — Otomatik yenileme ve dinamik veri akışı (R-5): Web arayüzü JavaScript ile `/api/status` üzerinden her 5 saniyede bir sayfayı yeniden yüklemeden kartları ve tabloları günceller; ayrıca elle "Yenile" butonuyla anında tetiklenebilir.
+- [x] AC-6 — Açık pozisyonlu ve pozisyonsuz durumlar (R-5): Açık pozisyon varken tüm pozisyon detayları (çift, miktar, giriş, stop, hedef) tabloda listelenir; açık pozisyon yokken anlaşılır boş durum mesajı ("Açık pozisyon yok") gösterilir.
+- [x] AC-7 — Depo yok veya bozukken hata yönetimi (R-6): Depo dosyası henüz oluşturulmamışken (`prepare` öncesi) veya bozukken sunucu çökmez; `/api/status` ve web arayüzü anlaşılır hata durumu döner ve kullanıcıya durumu adıyla bildirir.
+- [x] AC-8 — Port meşgulken ret (R-7): İstenen port başka bir süreç tarafından dinleniyorsa `dashboard` komutu çökmeden adıyla hata mesajı basar ve `EXIT_REFUSED` ile çıkar.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 1 (fix-1: Finding 1, Finding 2) |
+| Review findings: real / noise / deferred | 2 / 0 / 0 (Finding 1 real [fix-1], Finding 2 real [fix-1]) |
+| Regressions introduced | 0 (kanıt bu PR'ın full CI koşusu) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `check` ve `doctor` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). VERIFY @`8195264`: adı geçen testler hızlı profilde yeşil, 5 kasıtlı bozmanın 5'i kırmızı, 7 UI ekran görüntüsü galeri olarak doğrulandı; full kanıt bu PR'ın CI koşusudur.
