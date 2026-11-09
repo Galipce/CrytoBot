@@ -9,7 +9,7 @@ from crytobot.app._inputs import TurnSettings, aware, read_market, settings_prob
 from crytobot.app._notices import NoticeKind, Notices, TurnMemory, TurnNotice
 from crytobot.app._result import BuyHalt, TurnOutcome, TurnResult
 from crytobot.app._session import SaveRefusedError, TurnRun
-from crytobot.execution import PAPER, PaperExchange
+from crytobot.execution import LIVE, PAPER, BannedError, Exchange, LiveExchange
 from crytobot.persistence import load_store
 
 
@@ -26,8 +26,9 @@ def _unexpected(error: Exception, notices: Notices) -> str:
 
 
 def _trade(run: TurnRun) -> TurnResult:
-    """R-1: sorgu → gözlem → kapanış → gözlem → alım. Her adım durumu kendisi kaydeder."""
+    """R-1: sorgu → bakiye mutabakatı → gözlem → kapanış → gözlem → alım."""
     resolve_unknown(run)
+    run.reconcile_balance()
     pairs = dict.fromkeys(
         (*run.settings.whitelist, *(p.pair for p in run.state.ledger.positions.values()))
     )
@@ -46,9 +47,10 @@ def _begin(
     settings: TurnSettings,
     store_path: object,
     now: datetime,
-    exchange: PaperExchange,
+    exchange: Exchange,
     notices: Notices,
     memory: TurnMemory,
+    mode: str = PAPER,
 ) -> TurnResult:
     if not aware(now):
         notices.enter(NoticeKind.INVALID_TIME, "", "turun zamanı zaman dilimi taşımalı")
@@ -57,7 +59,7 @@ def _begin(
     problem = settings_problem(settings, now)
     if problem is not None:
         return _refusal(TurnOutcome.INVALID_SETTINGS, f"geçersiz ayar: {problem}", notices)
-    loaded = load_store(store_path, PAPER)  # R-13: always paper; a live store is refused
+    loaded = load_store(store_path, mode)
     if loaded.state is None:
         notices.enter(NoticeKind.STORE_UNAVAILABLE, "", loaded.message)
         return _refusal(TurnOutcome.STORE_UNAVAILABLE, loaded.message, notices)
@@ -80,6 +82,8 @@ def _begin(
         return _trade(run)
     except SaveRefusedError as refused:
         return run.result(TurnOutcome.SAVE_REFUSED, str(refused))
+    except BannedError:
+        raise
     except Exception as error:  # R-11: what was saved so far stays in the result
         return run.result(TurnOutcome.UNEXPECTED_ERROR, _unexpected(error, notices))
 
@@ -90,23 +94,24 @@ def run_turn(
     settings: TurnSettings,
     store_path: object,
     now: datetime,
-    exchange: PaperExchange,
+    exchange: Exchange,
     sink: Callable[[TurnNotice], None],
     memory: TurnMemory,
 ) -> TurnResult:
     """Tek geçiş: açık pozisyonları kapatır, risk onaylı alım yapar, her adımı kaydeder.
 
-    İstisna fırlatmaz (R-11). Mod girdisi yoktur (R-13). Kâr hedefi ve kâr-zarar girdi değildir
+    İstisna fırlatmaz (R-11). Kâr hedefi ve kâr-zarar girdi değildir
     (R-14). `memory` süreç belleğidir: aynı süreçte aynı nesne verilir (plan Risk 5).
     """
     for name, valid in (
         ("memory", isinstance(memory, TurnMemory)),
-        ("exchange", isinstance(exchange, PaperExchange)),
+        ("exchange", isinstance(exchange, Exchange)),
         ("sink", callable(sink)),
     ):
         if not valid:
             return _refusal(TurnOutcome.INVALID_SETTINGS, f"geçersiz ayar: {name}")
     notices = Notices(memory, sink, now)
+    turn_mode = LIVE if isinstance(exchange, LiveExchange) else PAPER
     try:
         return _begin(
             market=market,
@@ -116,6 +121,9 @@ def run_turn(
             exchange=exchange,
             notices=notices,
             memory=memory,
+            mode=turn_mode,
         )
+    except BannedError:
+        raise
     except Exception as error:  # R-11; every completed step is already saved (plan Risk 13)
         return _refusal(TurnOutcome.UNEXPECTED_ERROR, _unexpected(error, notices), notices)

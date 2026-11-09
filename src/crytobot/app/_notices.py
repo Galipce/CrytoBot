@@ -62,6 +62,7 @@ class TurnMemory:
 
     active: set[tuple[NoticeKind, str]] = field(default_factory=set)
     history_halted: bool = False
+    retry_after: float | None = None
 
 
 class Notices:

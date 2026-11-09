@@ -257,7 +257,9 @@ class BinanceLiveClient:
                 if val is None and isinstance(res, dict) and isinstance(res.get(asset), dict):
                     val = res[asset].get("free")
             else:
-                raise LiveExchangeCallError("fetch_free_balance veya fetch_balance metodu bulunamadı")
+                raise LiveExchangeCallError(
+                    "fetch_free_balance veya fetch_balance metodu bulunamadı"
+                )
             if val is None:
                 return Decimal("0")
             return Decimal(str(val))

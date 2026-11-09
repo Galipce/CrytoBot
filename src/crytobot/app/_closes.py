@@ -8,7 +8,6 @@ from crytobot.app._inputs import PairMarket
 from crytobot.app._notices import NoticeKind
 from crytobot.app._session import TurnRun, buy_fill
 from crytobot.execution import (
-    PAPER,
     CloseOrder,
     CloseOrderRequest,
     Order,
@@ -96,7 +95,7 @@ def _close_one(run: TurnRun, decision: Decision) -> None:
             decision.price,
             run.settings.fee,
             run.settings.slippage,
-            PAPER,
+            run.state.mode,
         ),
         run.exchange,
         run.now,

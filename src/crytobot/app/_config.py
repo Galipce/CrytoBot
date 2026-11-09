@@ -28,8 +28,8 @@ _PROBE_PAIR = "PROBE/USDT"
 _PROBE_STRATEGY = StrategySettings(1, 2, 2, Decimal(70), 2, Decimal(2), Decimal(2))
 _INTERVALS_BY_TEXT = {text: interval for interval, text in CANDLE_INTERVALS.items()}
 _DIGITS = frozenset("0123456789")
-# Specs 0024, 0026, 0028, 0029, 0033: their contents are judged by the download (0023), backtest (0025),
-# stage (0028), reporting (0029) and credentials (0032/0033) loaders, the bot never reads them; matched by exact name only
+# Specs 0024, 0026, 0028, 0029, 0033: their contents are judged by loaders
+# (0023, 0025, 0028, 0029, 0032/0033); the bot never reads them; matched by exact name only
 _PASSED_SECTIONS = frozenset({"history", "backtest", "stage", "reporting", "dashboard", "exchange"})
 
 
@@ -129,7 +129,6 @@ _SCHEMA: tuple[tuple[str, tuple[tuple[str, _Parse], ...]], ...] = (
             ("log_path", _text),
             ("turn_interval", _interval),
             ("opening_balance", _number),
-            ("mode", _mode),
         ),
     ),
     (
@@ -209,18 +208,25 @@ def _parse(document: object) -> dict[str, object]:
         for key, parse in keys:
             name = f"{section}.{key}"
             if key not in table:
-                if section == "bot" and key == "mode":
-                    values[name] = "paper"
-                    continue
                 raise _missing(name)
             try:
                 values[name] = parse(table[key])
             except _Bad:
                 raise _invalid(name) from None
         known = {key for key, _ in keys}
+        if section == "bot":
+            known.add("mode")
         for key in table:
             if key not in known:
                 raise _Problem(f"{section}.{key}", f"bilinmeyen ayar: {section}.{key}")
+    bot_table = document.get("bot")
+    mode = "paper"
+    if isinstance(bot_table, Mapping) and "mode" in bot_table:
+        try:
+            mode = _mode(bot_table["mode"])
+        except _Bad:
+            raise _invalid("bot.mode") from None
+    values["bot.mode"] = mode
     for section in document:
         if section in _PASSED_SECTIONS:
             continue

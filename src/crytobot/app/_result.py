@@ -29,6 +29,8 @@ class BuyHalt(Enum):
     INVALID_DATA = "invalid_data"
     UNKNOWN_ORDERS = "unknown_orders"
     RECONCILIATION = "reconciliation"
+    RECONCILIATION_HALT = "reconciliation_halt"
+    BALANCE_CHECK_FAILED = "balance_check_failed"
     SAVE_REFUSED = "save_refused"
     HISTORY_IMMUTABLE = "history_immutable"
     OBSERVATION_REJECTED = "observation_rejected"

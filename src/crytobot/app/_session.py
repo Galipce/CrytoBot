@@ -11,7 +11,7 @@ from decimal import Decimal
 from crytobot.app._inputs import DataIssue, DataReport, TurnSettings
 from crytobot.app._notices import NoticeKind, Notices, TurnMemory
 from crytobot.app._result import BuyHalt, PairOutcome, TurnOutcome, TurnResult
-from crytobot.execution import CloseOrder, ExecutionState, Order, PaperExchange
+from crytobot.execution import CloseOrder, Exchange, ExecutionState, Order
 from crytobot.persistence import StoredState, StoreOutcome, save_store
 from crytobot.portfolio import Closure, Fill, Ledger, SnapshotOutcome, account_state
 from crytobot.risk import RiskState, observe
@@ -52,7 +52,7 @@ class TurnRun:
     settings: TurnSettings
     market: Mapping[str, object]
     now: datetime
-    exchange: PaperExchange
+    exchange: Exchange
     notices: Notices
     memory: TurnMemory
     state: StoredState
@@ -75,6 +75,51 @@ class TurnRun:
         """R-7: işaret depodan türer; temiz turla ya da yeniden başlatmayla kalkmaz."""
         self.halt(BuyHalt.RECONCILIATION)
         self.notices.enter(NoticeKind.RECONCILIATION, "", message)
+
+    def reconcile_balance(self) -> None:
+        """Spec 0033 R-6: Canlı modda tur başı bakiye mutabakatı (tolerans <= 0.05 USDT)."""
+        if self.state.mode != "live":
+            return
+        fetch_bal = getattr(self.exchange, "fetch_free_balance", None)
+        if not callable(fetch_bal):
+            return
+        try:
+            ex_balance = fetch_bal(asset="USDT")
+        except Exception as err:
+            retry_after = getattr(err, "retry_after", None)
+            if retry_after is not None and retry_after > 0:
+                self.memory.retry_after = retry_after
+            if type(err).__name__ == "BannedError":
+                raise
+            self.halt(BuyHalt.BALANCE_CHECK_FAILED)
+            self.notices.enter(
+                NoticeKind.SAFE_MODE,
+                "",
+                f"güvenli mod: borsa bakiye sorgusu başarısız ({type(err).__name__})",
+            )
+            return
+
+        if ex_balance is None:
+            self.halt(BuyHalt.BALANCE_CHECK_FAILED)
+            self.notices.enter(
+                NoticeKind.SAFE_MODE, "", "güvenli mod: borsa serbest bakiyesi alınamadı"
+            )
+            return
+
+        ledger_balance = self.state.ledger.balance
+        if ledger_balance is None:
+            return
+        diff = abs(ledger_balance - ex_balance)
+        if diff > Decimal("0.05"):
+            self.halt(BuyHalt.RECONCILIATION_HALT)
+            self.notices.enter(
+                NoticeKind.RECONCILIATION,
+                "",
+                f"bakiye mutabakat farkı toleransı aştı: "
+                f"defter={ledger_balance}, borsa={ex_balance}, fark={diff}",
+            )
+        else:
+            self.notices.clear(NoticeKind.RECONCILIATION)
 
     def sync_safe_mode(self) -> None:
         """R-17: durumu bilinmeyen emir kaldıkça alım olmaz; bildirim durumdan türer (Risk 11)."""
