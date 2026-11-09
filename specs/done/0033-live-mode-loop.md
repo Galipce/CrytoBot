@@ -1,6 +1,6 @@
 # Spec 0033 — Canlı Mod Döngüsü ve Bakiye Mutabakatı
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0033-plan.md`
 - Self-critique: done
@@ -66,27 +66,29 @@ none — no user interface. Kullanıcı konsol komutlarını ve metin logların�
 - Boyut: 8 kabul kriteri. Propose split: Gerek yok; canlı mod başlatma, bakiye mutabakatı ve `LiveExchange` entegrasyonu tek bir kullanıcı yeteneğini ("botun canlı modda çalışması") oluşturur.
 
 ## Acceptance criteria
-- [ ] AC-1 — Çift kilitli canlı başlatma (R-1, R-3): `mode = "live"` ayarı ve `--live` bayrağı birlikte verilmediğinde (yalnız biri verildiğinde veya hiçbiri verilmediğinde) bot canlı modda başlamaz; `MODE_MISMATCH` veya `LIVE_FLAG_REQUIRED` ile adıyla reddeder. Paper depoyla canlı başlatma, canlı depoyla paper başlatma reddedilir.
-- [ ] AC-2 — Canlı depo hazırlığı (R-2): `python -m crytobot prepare --live`, `.env`'den anahtarları yükler, borsa serbest USDT bakiyesini sorgular, defteri bu bakiye ile açar ve depoyu `mode="live"` olarak kaydeder. Depo zaten varken hiçbir şey yazmadan reddeder. `--live` bayrağı olmadan eski paper hazırlık davranışı bozulmaz.
-- [ ] AC-3 — BR-10 canlı aşama kapısı denetimi (R-4): Canlı başlatma sırasında `[stage]` içinde `live_approved_by` veya `live_approved_at` eksik veya geçersizse bot başlamaz, ilk sorunlu ayar adıyla söylenir.
-- [ ] AC-4 — Kimlik ve yetki güvenlik kapıları (R-5): Canlı başlatmada API anahtarı eksikse (`CREDENTIALS_MISSING`), para çekme yetkisi açıksa (`WITHDRAWAL_PERMISSION_FORBIDDEN`) veya spot işlem yetkisi kapalıysa bot fail-closed olarak başlamayı reddeder.
-- [ ] AC-5 — Tur başı bakiye mutabakatı (R-6): Canlı mod turunda borsa serbest USDT bakiyesi ile yerel defter serbest bakiyesi karşılaştırılır. Fark ≤ 0.05 USDT ise tur normal devam eder; fark > 0.05 USDT ise bot `RECONCILIATION_HALT` ile güvenli moda geçer, yeni alımları durdurur ve bildirim üretir. Borsa bakiye sorgusu başarısız olduğunda da yeni alımlar engellenir.
-- [ ] AC-6 — Canlı emir iletimi ve döngü entegrasyonu (R-7, R-8): Canlı mod turlarında `run_turn`, `_buys` ve `_closes` `LiveExchange` adaptörünü kullanır; emirler `mode=LIVE` ile iletilir; `FILLED` emirler deftere ve pozisyonlara doğru işlenir; `UNKNOWN` kalan emirlerde bot güvenli moda geçer ve `query_order` çözene kadar yeni işlem açmaz.
-- [ ] AC-7 — Borsa rate limit ve ban yönetimi (R-9): Canlı döngüde borsa 429 verdiğinde `Retry-After` süresince bekler; borsa 418 (`BannedError`) verdiğinde bot fail-closed temiz durmaya geçer.
-- [ ] AC-8 — Canlı temiz durdurma ve süreç kilidi (R-10): Canlı modda çalışan bot Ctrl+C veya durdurma isteği aldığında mevcut turu tamamlar, durumu kaydeder, `.lock` kilidini çözer ve temiz çıkar. İkinci durdurma isteğinde `ForcedStop` ile anında çıkar.
+- [x] AC-1 — Çift kilitli canlı başlatma (R-1, R-3): `mode = "live"` ayarı ve `--live` bayrağı birlikte verilmediğinde (yalnız biri verildiğinde veya hiçbiri verilmediğinde) bot canlı modda başlamaz; `MODE_MISMATCH` veya `LIVE_FLAG_REQUIRED` ile adıyla reddeder. Paper depoyla canlı başlatma, canlı depoyla paper başlatma reddedilir.
+- [x] AC-2 — Canlı depo hazırlığı (R-2): `python -m crytobot prepare --live`, `.env`'den anahtarları yükler, borsa serbest USDT bakiyesini sorgular, defteri bu bakiye ile açar ve depoyu `mode="live"` olarak kaydeder. Depo zaten varken hiçbir şey yazmadan reddeder. `--live` bayrağı olmadan eski paper hazırlık davranışı bozulmaz.
+- [x] AC-3 — BR-10 canlı aşama kapısı denetimi (R-4): Canlı başlatma sırasında `[stage]` içinde `live_approved_by` veya `live_approved_at` eksik veya geçersizse bot başlamaz, ilk sorunlu ayar adıyla söylenir.
+- [x] AC-4 — Kimlik ve yetki güvenlik kapıları (R-5): Canlı başlatmada API anahtarı eksikse (`CREDENTIALS_MISSING`), para çekme yetkisi açıksa (`WITHDRAWAL_PERMISSION_FORBIDDEN`) veya spot işlem yetkisi kapalıysa bot fail-closed olarak başlamayı reddeder.
+- [x] AC-5 — Tur başı bakiye mutabakatı (R-6): Canlı mod turunda borsa serbest USDT bakiyesi ile yerel defter serbest bakiyesi karşılaştırılır. Fark ≤ 0.05 USDT ise tur normal devam eder; fark > 0.05 USDT ise bot `RECONCILIATION_HALT` ile güvenli moda geçer, yeni alımları durdurur ve bildirim üretir. Borsa bakiye sorgusu başarısız olduğunda da yeni alımlar engellenir.
+- [x] AC-6 — Canlı emir iletimi ve döngü entegrasyonu (R-7, R-8): Canlı mod turlarında `run_turn`, `_buys` ve `_closes` `LiveExchange` adaptörünü kullanır; emirler `mode=LIVE` ile iletilir; `FILLED` emirler deftere ve pozisyonlara doğru işlenir; `UNKNOWN` kalan emirlerde bot güvenli moda geçer ve `query_order` çözene kadar yeni işlem açmaz.
+- [x] AC-7 — Borsa rate limit ve ban yönetimi (R-9): Canlı döngüde borsa 429 verdiğinde `Retry-After` süresince bekler; borsa 418 (`BannedError`) verdiğinde bot fail-closed temiz durmaya geçer.
+- [x] AC-8 — Canlı temiz durdurma ve süreç kilidi (R-10): Canlı modda çalışan bot Ctrl+C veya durdurma isteği aldığında mevcut turu tamamlar, durumu kaydeder, `.lock` kilidini çözer ve temiz çıkar. İkinci durdurma isteğinde `ForcedStop` ile anında çıkar.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 2 (fix-1: F-1..F-3, fix-2: F-4) |
+| Review findings: real / noise / deferred | 3 / 0 / 0 (Round 1: 3 real [fix-1]) |
+| Regressions introduced | 1 (F-4: Fix-1 F-3 kağıt modu ipucu regresyonu; fix-2 ile çözüldü) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `check` ve `doctor` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). VERIFY @`4f07b79`: adı geçen testler hızlı profilde yeşil, 8 kasıtlı bozmanın 8'i kırmızı; full kanıt bu PR'ın CI koşusudur.
