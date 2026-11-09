@@ -25,6 +25,7 @@ from crytobot.persistence._codec import (
     encode_entry,
     encode_orders,
     encode_risk,
+    encode_risk_legacy,
     encode_summary,
     order_resolution_allowed,
 )
@@ -43,6 +44,7 @@ _SCHEMA = (
     "CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT",
     "CREATE TABLE entries(seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT",
     "CREATE TABLE orders(seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT",
+    "CREATE TABLE audit(seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT",
 )
 
 
@@ -294,7 +296,7 @@ def _risk_allows(stored: RiskState, risk: RiskState) -> bool:
         return False
     if risk.day == stored.day and str(risk.day_start_equity) != str(stored.day_start_equity):
         return False
-    if stored.halted and not risk.halted:
+    if (stored.halted and not risk.halted) or (stored.kill_switch and not risk.kill_switch):
         return (
             str(risk.peak_equity) == str(risk.last_equity)
             and str(risk.last_equity) == str(stored.last_equity)
@@ -367,7 +369,10 @@ def _save(
     if meta["ledger"] != encode_summary(base.ledger):
         return _UNREADABLE
     # Spec 0012 CB-3: the same for the risk row. From here on the row is valid base.risk's text.
-    if meta["risk"] != encode_risk(base.risk):
+    # Spec 0030 Risk 4: allow 6-element legacy encoding if kill_switch is False.
+    if meta["risk"] != encode_risk(base.risk) and not (
+        not base.risk.kill_switch and meta["risk"] == encode_risk_legacy(base.risk)
+    ):
         return _UNREADABLE
     stored_entries, stored_orders = _rows(database, "entries"), _rows(database, "orders")
     if not _history_allows(
@@ -419,3 +424,51 @@ def save_store(
         return _UNREADABLE
     except (KeyError, OSError, ValueError):
         return _WRITE_FAILED
+
+
+def append_audit_record(path: object, record: object) -> StoreResult:
+    """R-7: Denetim kaydını append-only olarak audit tablosuna yazar."""
+    target = _target(path)
+    if target is None or type(record) is not str or not record:
+        return _INVALID
+    try:
+        if not target.exists():
+            return _MISSING
+
+        def _append() -> StoreResult:
+            with closing(_connect(target)) as database:
+                database.execute("BEGIN EXCLUSIVE")
+                database.execute(
+                    "CREATE TABLE IF NOT EXISTS audit(seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT"
+                )
+                meta = _meta(database)
+                if meta.get("format_version") != FORMAT_VERSION:
+                    return _UNKNOWN_VERSION
+                count = database.execute("SELECT COUNT(*) FROM audit").fetchone()[0]
+                database.execute("INSERT INTO audit(seq, row) VALUES (?, ?)", (count, record))
+                database.execute("COMMIT")
+                return StoreResult(StoreOutcome.SAVED, None, (), "denetim kaydı eklendi")
+
+        return _waiting(_append)
+    except sqlite3.Error as error:
+        return _BUSY if _busy(error) else _WRITE_FAILED
+    except (CodecError, KeyError, OSError, ValueError):
+        return _WRITE_FAILED
+
+
+def load_audit_records(path: object) -> list[str]:
+    """Test ve denetim: audit tablosundaki tüm kayıtları sıra numarasına göre döndürür."""
+    target = _target(path)
+    if target is None or not target.exists():
+        return []
+    try:
+        with closing(_connect(target)) as database:
+            database.execute("BEGIN")
+            has_table = database.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit'"
+            ).fetchone()
+            if not has_table:
+                return []
+            return _rows(database, "audit")
+    except (sqlite3.Error, CodecError, OSError):
+        return []

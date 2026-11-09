@@ -308,13 +308,39 @@ def encode_risk(state: RiskState) -> str:
             None if state.last_time is None else state.last_time.isoformat(),
             _optional_text(state.last_equity),
             state.halted,
+            state.kill_switch,
+        ]
+    )
+
+
+def encode_risk_legacy(state: RiskState) -> str:
+    """Spec 0030 Risk 4: Eski 6 elemanlı risk satırı biçimi."""
+    return _dumps(
+        [
+            None if state.day is None else state.day.isoformat(),
+            _optional_text(state.day_start_equity),
+            _optional_text(state.peak_equity),
+            None if state.last_time is None else state.last_time.isoformat(),
+            _optional_text(state.last_equity),
+            state.halted,
         ]
     )
 
 
 def decode_risk(text: object) -> RiskState:
     try:
-        day, day_start, peak, at, last, halted = _loads(text)
+        raw = _loads(text)
+        if not isinstance(raw, list):
+            raise CodecError
+        if len(raw) == 6:
+            day, day_start, peak, at, last, halted = raw
+            kill_switch = False
+        elif len(raw) == 7:
+            day, day_start, peak, at, last, halted, kill_switch = raw
+        else:
+            raise CodecError
+        if type(halted) is not bool or type(kill_switch) is not bool:
+            raise CodecError
         parsed = None if day is None else date.fromisoformat(_text(day))
     except (TypeError, ValueError) as error:
         raise CodecError from error
@@ -327,4 +353,5 @@ def decode_risk(text: object) -> RiskState:
         None if at is None else _time(at),
         _optional_number(last),
         halted,
+        kill_switch,
     )
