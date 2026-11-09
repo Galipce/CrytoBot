@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from decimal import Decimal
 from enum import Enum
 from types import MappingProxyType
 from typing import Protocol, runtime_checkable
@@ -21,6 +22,8 @@ class Exchange(Protocol):
 
     def query(self, client_order_id: str) -> OrderStatus: ...
 
+    def fetch_free_balance(self, asset: str = "USDT") -> Decimal | None: ...
+
 
 @dataclass(frozen=True)
 class PaperExchange:
@@ -30,9 +33,13 @@ class PaperExchange:
 
     placements: Mapping[str, OrderStatus] = field(default_factory=lambda: MappingProxyType({}))
     resolutions: Mapping[str, OrderStatus] = field(default_factory=lambda: MappingProxyType({}))
+    free_balances: Mapping[str, Decimal] = field(default_factory=lambda: MappingProxyType({}))
 
     def place(self, client_order_id: str) -> OrderStatus:
         return self.placements.get(client_order_id, OrderStatus.FILLED)
 
     def query(self, client_order_id: str) -> OrderStatus:
         return self.resolutions.get(client_order_id, OrderStatus.UNKNOWN)
+
+    def fetch_free_balance(self, asset: str = "USDT") -> Decimal | None:
+        return self.free_balances.get(asset)

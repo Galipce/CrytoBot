@@ -402,3 +402,81 @@ def test_live_exchange_statuses_and_errors() -> None:
     fake_ccxt.create_order_error = FakeOperationFailed("internal error")
     fake_ccxt.status_code = 500
     assert venue.place("cb-test-500", "BTC/USDT", "buy", Decimal("1")) is OrderStatus.UNKNOWN
+
+
+def test_fetch_free_balance() -> None:
+    """Spec 0033 R-6: Canlı bakiye sorgusu ve fail-closed hata yönetimi."""
+    from crytobot.execution import PaperExchange
+    from crytobot.execution._live_client import LiveExchangeCallError
+
+    class FakeBalanceExchange:
+        def __init__(self) -> None:
+            self.free_balance_result: dict[str, Any] | None = {"USDT": "1250.50"}
+            self.balance_result: dict[str, Any] | None = None
+            self.error: Exception | None = None
+            self.status_code = 200
+            self.retry_after: str | None = None
+            self.on_rest_response: Any = None
+
+        def fetch_free_balance(self) -> dict[str, Any]:
+            if self.on_rest_response is not None:
+                headers = {"Retry-After": self.retry_after} if self.retry_after else {}
+                self.on_rest_response(self.status_code, "OK", "", "GET", headers, "")
+            if self.error is not None:
+                raise self.error
+            assert self.free_balance_result is not None
+            return self.free_balance_result
+
+    # 1. Başarılı fetch_free_balance
+    fake = FakeBalanceExchange()
+    client = BinanceLiveClient(CREDS, exchange=fake)
+    live = LiveExchange(client)
+    assert live.fetch_free_balance("USDT") == Decimal("1250.50")
+    assert client.fetch_free_balance("BTC") == Decimal("0")
+
+    # 2. Sadece fetch_balance metodu olan borsa
+    class FakeLegacyBalanceExchange:
+        def __init__(self, res: dict[str, Any]) -> None:
+            self.res = res
+            self.on_rest_response: Any = None
+
+        def fetch_balance(self) -> dict[str, Any]:
+            return self.res
+
+    legacy1 = FakeLegacyBalanceExchange({"free": {"USDT": "500.25"}})
+    client_leg1 = BinanceLiveClient(CREDS, exchange=legacy1)
+    assert client_leg1.fetch_free_balance("USDT") == Decimal("500.25")
+
+    legacy2 = FakeLegacyBalanceExchange({"USDT": {"free": "750.00"}})
+    client_leg2 = BinanceLiveClient(CREDS, exchange=legacy2)
+    assert client_leg2.fetch_free_balance("USDT") == Decimal("750.00")
+
+    # 3. HTTP 418 Banned
+    fake.error = Exception("IP banned")
+    fake.status_code = 418
+    with pytest.raises(BannedError):
+        live.fetch_free_balance("USDT")
+
+    # 4. HTTP 429 Rate limited
+    fake.error = FakeRateLimitExceeded("Rate limit exceeded")
+    fake.status_code = 429
+    fake.retry_after = "60"
+    with pytest.raises(LiveExchangeCallError) as exc_info:
+        live.fetch_free_balance("USDT")
+    assert exc_info.value.is_unknown is True
+    assert exc_info.value.retry_after == 60.0
+
+    # 5. Geçersiz bakiye formatı
+    fake.error = None
+    fake.status_code = 200
+    fake.retry_after = None
+    fake.free_balance_result = {"USDT": "not-a-number"}
+    with pytest.raises(LiveExchangeCallError) as exc_invalid:
+        live.fetch_free_balance("USDT")
+    assert "Geçersiz bakiye" in str(exc_invalid.value)
+
+    # 6. PaperExchange fetch_free_balance
+    paper_default = PaperExchange()
+    assert paper_default.fetch_free_balance("USDT") is None
+    paper_configured = PaperExchange(free_balances={"USDT": Decimal("1000")})
+    assert paper_configured.fetch_free_balance("USDT") == Decimal("1000")

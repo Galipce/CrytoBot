@@ -59,3 +59,7 @@ class LiveExchange:
             if err.is_unknown:
                 return OrderStatus.UNKNOWN
             return OrderStatus.REJECTED
+
+    def fetch_free_balance(self, asset: str = "USDT") -> Decimal:
+        """Borsadaki serbest bakiyeyi çeker."""
+        return self.client.fetch_free_balance(asset=asset)
