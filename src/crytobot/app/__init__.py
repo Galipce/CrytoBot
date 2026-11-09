@@ -40,6 +40,7 @@ from crytobot.app._control import (
     request_stop,
     resume_operations,
 )
+from crytobot.app._dashboard import get_dashboard_status
 from crytobot.app._download import (
     DownloadConfig,
     DownloadConfigResult,
@@ -124,6 +125,7 @@ __all__: list[str] = [
     "TurnSettings",
     "check_stage_gate",
     "engage_kill_switch",
+    "get_dashboard_status",
     "line",
     "load_backtest_config",
     "load_config",
