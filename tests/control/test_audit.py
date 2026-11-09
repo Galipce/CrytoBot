@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from crytobot.control import AuditEvent, decode_audit_event
-from crytobot.persistence import create_store, load_audit_records, append_audit_record
+from crytobot.persistence import append_audit_record, create_store, load_audit_records
 
 T0 = datetime(2026, 11, 2, 10, 0, 0, tzinfo=UTC)
 

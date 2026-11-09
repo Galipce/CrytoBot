@@ -11,12 +11,10 @@ yazımı atomiktir (spec 0011). Beklenmeyen hata döngüyü düşürmez: tip ad�
 """
 
 from collections.abc import Callable, Mapping
-from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from pathlib import Path
 
 from crytobot.app._config import BotConfig
 from crytobot.app._events import (
@@ -408,9 +406,6 @@ class _Loop:
 
     # --- the loop -----------------------------------------------------------------------------
     def finish(self, reason: ExitReason) -> LoopExit:
-        stop_flag = Path(self.config.store_path).with_suffix(Path(self.config.store_path).suffix + ".stop")
-        with suppress(OSError):
-            stop_flag.unlink(missing_ok=True)
         text = _REASON_TEXT[reason]
         if reason is ExitReason.STOPPED and self.parts.stop.source:
             text = f"{text} ({self.parts.stop.source})"
@@ -448,9 +443,6 @@ class _Loop:
         while True:
             if self.log_failed:
                 return self.finish(ExitReason.LOG_FAILED)
-            stop_flag = Path(self.config.store_path).with_suffix(Path(self.config.store_path).suffix + ".stop")
-            if stop_flag.exists():
-                self.parts.stop.request("cli-stop")
             if self.parts.stop.requested:
                 return self.finish(ExitReason.STOPPED)
             target = self.next_due(last)

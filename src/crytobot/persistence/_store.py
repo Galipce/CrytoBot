@@ -439,7 +439,8 @@ def append_audit_record(path: object, record: object) -> StoreResult:
             with closing(_connect(target)) as database:
                 database.execute("BEGIN EXCLUSIVE")
                 database.execute(
-                    "CREATE TABLE IF NOT EXISTS audit(seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT"
+                    "CREATE TABLE IF NOT EXISTS audit("
+                    "seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT"
                 )
                 meta = _meta(database)
                 if meta.get("format_version") != FORMAT_VERSION:

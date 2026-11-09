@@ -5,25 +5,20 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
-import pytest
-
 from crytobot.__main__ import (
     EXIT_OK,
     EXIT_REFUSED,
     StoreLock,
     run,
 )
-from crytobot.app import stop_flag_path
+from crytobot.control import stop_flag_path
 from crytobot.persistence import (
-    append_audit_record,
-    create_store,
     load_audit_records,
     load_store,
     save_store,
 )
-from crytobot.portfolio import open_ledger, EMPTY_LEDGER
-from crytobot.risk import DEFAULT_LIMITS, EMPTY_STATE, engage_kill_switch, observe
-from tests.main.test_entry import EXAMPLE, config_text
+from crytobot.risk import DEFAULT_LIMITS, engage_kill_switch, observe
+from tests.main.test_entry import config_text
 
 T0 = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
 
@@ -119,7 +114,9 @@ def test_resume_refused_when_no_halt_active(tmp_path: Path) -> None:
     load_res = load_store(db_path, "paper")
     assert load_res.state is not None
     observed_state = observe(load_res.state.risk, T0, Decimal("10000"), DEFAULT_LIMITS).state
-    save_store(db_path, load_res.state, load_res.state.ledger, load_res.state.execution, observed_state)
+    save_store(
+        db_path, load_res.state, load_res.state.ledger, load_res.state.execution, observed_state
+    )
 
     console = io.StringIO()
     code = run(["resume"], config_path=cfg_path, console=console, clock=lambda: T0)

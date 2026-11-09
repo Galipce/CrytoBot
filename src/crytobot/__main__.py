@@ -63,9 +63,14 @@ from crytobot.app import (
     run_backtest,
     run_download,
     run_loop,
-    stop_flag_path,
 )
 from crytobot.backtest import read_report, report_exists, write_report
+from crytobot.control import (
+    clear_stop_flag,
+    is_lock_held,
+    set_stop_flag,
+    stop_flag_path,
+)
 from crytobot.market_data import (
     HistoryRequest,
     HistoryResult,
@@ -78,7 +83,9 @@ from crytobot.market_data import (
 from crytobot.reporting import ReportingService, load_reporting_config
 
 CONFIG_FILE = "crytobot.toml"
-USAGE = "kullanım: python -m crytobot prepare|start|download|backtest|status|kill-switch|resume|stop"
+USAGE = (
+    "kullanım: python -m crytobot prepare|start|download|backtest|status|kill-switch|resume|stop"
+)
 COMMANDS = (
     ["prepare"],
     ["start"],
@@ -469,7 +476,8 @@ def run(
         return EXIT_REFUSED
 
     if argv[0] == "status":
-        res = query_status(config, clock=clock)
+        running = is_lock_held(config.store_path)
+        res = query_status(config, clock=clock, is_running=running)
         output.say(res.message)
         return EXIT_OK if res.success else EXIT_REFUSED
 
@@ -486,7 +494,17 @@ def run(
         return EXIT_OK if res.success else EXIT_REFUSED
 
     if argv[0] == "stop":
-        res = request_stop(config, clock=clock)
+        running = is_lock_held(config.store_path)
+
+        def _set_flag() -> None:
+            set_stop_flag(config.store_path)
+
+        res = request_stop(
+            config,
+            clock=clock,
+            is_running=running,
+            on_stop_requested=_set_flag,
+        )
         msg = res.message if res.success else f"reddedildi: {res.message}"
         output.say(line(clock(), "stop", msg))
         return EXIT_OK if res.success else EXIT_REFUSED
@@ -538,6 +556,7 @@ def run(
         output.say(line(clock(), "durdurma", _LOG_FAILED))
         return EXIT_LOG_FAILED
     finally:
+        clear_stop_flag(config.store_path)
         lock.release()
 
 

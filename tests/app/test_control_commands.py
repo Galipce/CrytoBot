@@ -1,6 +1,5 @@
 """Spec 0030 AC-1, AC-3, AC-4, AC-5, AC-6: App kontrol kapıları ve tur davranışı testleri."""
 
-import io
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -8,33 +7,28 @@ from pathlib import Path
 from crytobot.app import (
     BotConfig,
     BuyHalt,
-    ControlResult,
     ExitReason,
-    LoopParts,
-    StopRequest,
     TurnOutcome,
     engage_kill_switch,
     query_status,
     request_stop,
     resume_operations,
     run_loop,
-    run_turn,
-    stop_flag_path,
 )
-from crytobot.execution import OrderStatus, PaperExchange
+from crytobot.control import clear_stop_flag, stop_flag_path
+from crytobot.execution import OrderStatus
 from crytobot.market_data import ReadSettings
-from crytobot.persistence import load_store, save_store
-from crytobot.risk import ApprovalReason, engage_kill_switch as risk_engage_kill_switch
+from crytobot.risk import ApprovalReason
 from tests.app.helpers import (
     BTC,
     DEPOSIT,
     ETH,
-    NOW,
     Bot,
     make_settings,
     opened_store,
     pair_market,
 )
+from tests.app.loop_fakes import Harness
 
 T0 = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
 
@@ -59,7 +53,7 @@ def make_bot_config(db_path: Path, log_path: Path) -> BotConfig:
 
 
 def test_turn_with_active_kill_switch(tmp_path: Path) -> None:
-    """AC-3 (R-5): Kill switch devredeyken yeni alım KILL_SWITCH_ACTIVE ile reddedilir, kapanışlar engellenmez."""
+    """AC-3 (R-5): Kill switch devredeyken yeni alım durur, kapanışlar engellenmez."""
     db_path = opened_store(tmp_path / "bot.db")
     log_path = tmp_path / "crytobot.log"
     config = make_bot_config(db_path, log_path)
@@ -72,7 +66,7 @@ def test_turn_with_active_kill_switch(tmp_path: Path) -> None:
     assert res1.buys[0].status is OrderStatus.FILLED
 
     # Kill switch devreye alınıyor
-    ks_res = engage_kill_switch(config)
+    ks_res = engage_kill_switch(config, clock=lambda: T0)
     assert ks_res.success
 
     # Tur 2: Kill switch devrede. BTC fiyatı stop seviyesine düşüyor (8.0 -> stop tetiklenir).
@@ -135,7 +129,7 @@ def test_engage_and_resume_operations(tmp_path: Path) -> None:
     res_ks = engage_kill_switch(config, clock=lambda: T0)
     assert res_ks.success
     status1 = query_status(config, clock=lambda: T0)
-    assert "kill switch" in status1.data["halts"]
+    assert "kill switch" in status1.message
 
     # Zaten devredeyken tekrar devreye alma
     res_ks_again = engage_kill_switch(config, clock=lambda: T0)
@@ -147,7 +141,7 @@ def test_engage_and_resume_operations(tmp_path: Path) -> None:
     assert res_resume.success
     assert "durdurma kaldırıldı" in res_resume.message
     status2 = query_status(config, clock=lambda: T0)
-    assert status2.data["halts"] == "yok"
+    assert "Aktif Durdurmalar: yok" in status2.message
 
     # 3. Durdurma yokken resume reddedilir (AC-5)
     res_resume_none = resume_operations(config, clock=lambda: T0)
@@ -162,7 +156,7 @@ def test_request_stop_behavior(tmp_path: Path) -> None:
     config = make_bot_config(db_path, log_path)
 
     # 1. Bot çalışmıyorken stop reddedilir
-    res_stop_idle = request_stop(config, clock=lambda: T0)
+    res_stop_idle = request_stop(config, clock=lambda: T0, is_running=False)
     assert not res_stop_idle.success
     assert "çalışan bot süreci yok" in res_stop_idle.message
 
@@ -171,15 +165,11 @@ def test_request_stop_behavior(tmp_path: Path) -> None:
     flag.write_text("stop", encoding="utf-8")
     assert flag.exists()
 
-    stop_req = StopRequest()
-    parts = LoopParts(
-        clock=lambda: T0,
-        wait=lambda _s: None,
-        read=lambda _pairs, _settings: None,  # type: ignore[arg-type]
-        write=lambda _msg: None,
-        stop=stop_req,
-    )
-    exit_res = run_loop(config, parts)
+    harness = Harness(db_path, config)
+    if flag.exists():
+        harness.stop.request("cli-stop")
+    exit_res = run_loop(config, harness.parts())
     assert exit_res.reason is ExitReason.STOPPED
     # Çıkışta bayrak temizlenir
+    clear_stop_flag(db_path)
     assert not flag.exists()

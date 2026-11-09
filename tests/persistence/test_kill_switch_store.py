@@ -15,13 +15,19 @@ from crytobot.persistence import (
 )
 from crytobot.persistence._codec import decode_risk, encode_risk
 from crytobot.portfolio import EMPTY_LEDGER
-from crytobot.risk import EMPTY_STATE, DEFAULT_LIMITS, RiskState, engage_kill_switch, observe, resume
+from crytobot.risk import (
+    DEFAULT_LIMITS,
+    EMPTY_STATE,
+    engage_kill_switch,
+    observe,
+    resume,
+)
 
 T0 = datetime(2026, 11, 2, 10, 0, tzinfo=UTC)
 
 
 def test_kill_switch_persists_across_restarts(tmp_path: Path) -> None:
-    """AC-7 (R-6): Kill switch devredeyken kaydedilen durum yeniden yüklendiğinde kill switch devrededir."""
+    """AC-7 (R-6): Kill switch devredeyken kaydedilen durum yüklendiğinde devrededir."""
     db_path = tmp_path / "bot.db"
     res = create_store(db_path, "paper")
     assert res.outcome is StoreOutcome.CREATED

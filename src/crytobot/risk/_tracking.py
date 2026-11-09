@@ -116,7 +116,7 @@ def observe(state: RiskState, at: object, equity: object, limits: RiskLimits) ->
 
 
 def resume(state: RiskState, channel: str) -> StateUpdate:
-    """BR-6: drawdown durdurmasını ve kill switch'i yalnızca CLI kaldırır; zirve kasa son gözlenen kasa olur."""
+    """BR-6: durdurmaları ve kill switch'i yalnızca CLI kaldırır; zirve son kasa olur."""
 
     def reject(reason: TrackingReason, message: str) -> StateUpdate:
         return StateUpdate(state, reason, message)

@@ -36,11 +36,9 @@ from crytobot.app._config import SETTING_NAMES, BotConfig, ConfigResult, load_co
 from crytobot.app._control import (
     ControlResult,
     engage_kill_switch,
-    is_lock_held,
     query_status,
     request_stop,
     resume_operations,
-    stop_flag_path,
 )
 from crytobot.app._download import (
     DownloadConfig,
@@ -126,7 +124,6 @@ __all__: list[str] = [
     "TurnSettings",
     "check_stage_gate",
     "engage_kill_switch",
-    "is_lock_held",
     "line",
     "load_backtest_config",
     "load_config",
@@ -142,6 +139,5 @@ __all__: list[str] = [
     "run_download",
     "run_loop",
     "run_turn",
-    "stop_flag_path",
     "to_turn_market",
 ]
