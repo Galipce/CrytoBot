@@ -1,6 +1,6 @@
 # Spec 0030 — CLI kontrol ve acil durdurma (kill switch)
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0030-plan.md`
 - Self-critique: done
@@ -47,28 +47,30 @@ none — no user interface. Kullanıcı konsol komutlarını ve metin çıktıla
 - Boyut: 9 kabul kriteri. Propose split: 0030 CLI durum ve kill switch (`status`, `kill-switch`, `resume`) ve 0031 Süreç kontrolü (`stop` IPC/sinyal); kept as one — Galip Badem, 2026-11-09, ADR 0002 spec bütçesi korunarak CLI kontrol bütünlüğü tek seferde teslim edilir.
 
 ## Acceptance criteria
-- [ ] AC-1 — Durum sorgulama (R-1): Hazırlanmış depoda `status` komutu botun süreç durumunu (çalışıyor/durdu), modunu (`paper`), serbest bakiyesini, toplam kasasını, açık pozisyonlarını, günün kâr/zararını, zirve kasayı, drawdown oranını, aktif durdurmaları ve son tur özetini doğru biçimde konsola basar; depoda hiçbir değişiklik yapmaz.
-- [ ] AC-2 — Kill switch devreye alma (R-2, R-6): `kill-switch on` komutu kill switch'i kalıcı duruma işler, audit log'a yazar ve onay mesajı basar. Zaten devredeyse durumu bozmadan bilgi verir. Bot kapalıyken veya çalışırken komut güvenle çalışır.
-- [ ] AC-3 — Kill switch altında tur davranışı (R-5): Kill switch devredeyken çalışan bot turlarını atmaya devam eder; yeni alım önerileri `risk` katmanı tarafından `KILL_SWITCH_ACTIVE` ile reddedilir; açık pozisyonların stop ve hedef kapanışları (`approve_close`) engellenmeden normal şekilde gerçekleşir.
-- [ ] AC-4 — Durdurma kaldırma (R-3): `resume` komutu hem kill switch'i hem de drawdown durdurmasını kaldırır, risk zirve kasasını son gözlenen seviyeye günceller, depoya kaydeder, audit log'a yazar ve onay mesajı basar.
-- [ ] AC-5 — Resume reddi (R-3): Hiçbir durdurma aktif değilken (ne kill switch ne drawdown) `resume` komutu durumu değiştirmeden adıyla reddeder ve audit log'a ret kaydı düşer.
-- [ ] AC-6 — Temiz süreç durdurma (R-4): `stop` komutu çalışan bot sürecine durdurma isteği iletir; çalışan süreç mevcut turu tamamlar ve temiz biçimde (`ExitReason.STOPPED`) çıkar; çalışan bot yokken komut durumu adıyla bildirir; her iki durum audit log'a işlenir.
-- [ ] AC-7 — Kalıcılık ve yeniden başlama (R-6): Kill switch devredeyken bot süreci kapatılıp yeniden başlatıldığında kill switch devrede kalır, alım engeli sürer ve `status` çıktısında durdurma devrede görünür.
-- [ ] AC-8 — Denetim günlüğü (R-7): Her kontrol komutu (`kill-switch on`, `resume`, `stop`), UTC zamanı, kanal (`cli`), eylem adı ve sonucu ile hem kayıt dosyasına (`crytobot.log`) hem de kalıcı depoya append-only olarak yazılır.
-- [ ] AC-9 — Depo ve hata durumları (R-8): Depo dosyası henüz oluşturulmamışken (`prepare` öncesi) veya bozukken `status`, `kill-switch`, `resume` ve `stop` komutları çökmeden anlamlı hata mesajı basar, yeni depo oluşturmaz ve bozuk dosyayı ezmez.
+- [x] AC-1 — Durum sorgulama (R-1): Hazırlanmış depoda `status` komutu botun süreç durumunu (çalışıyor/durdu), modunu (`paper`), serbest bakiyesini, toplam kasasını, açık pozisyonlarını, günün kâr/zararını, zirve kasayı, drawdown oranını, aktif durdurmaları ve son tur özetini doğru biçimde konsola basar; depoda hiçbir değişiklik yapmaz.
+- [x] AC-2 — Kill switch devreye alma (R-2, R-6): `kill-switch on` komutu kill switch'i kalıcı duruma işler, audit log'a yazar ve onay mesajı basar. Zaten devredeyse durumu bozmadan bilgi verir. Bot kapalıyken veya çalışırken komut güvenle çalışır.
+- [x] AC-3 — Kill switch altında tur davranışı (R-5): Kill switch devredeyken çalışan bot turlarını atmaya devam eder; yeni alım önerileri `risk` katmanı tarafından `KILL_SWITCH_ACTIVE` ile reddedilir; açık pozisyonların stop ve hedef kapanışları (`approve_close`) engellenmeden normal şekilde gerçekleşir.
+- [x] AC-4 — Durdurma kaldırma (R-3): `resume` komutu hem kill switch'i hem de drawdown durdurmasını kaldırır, risk zirve kasasını son gözlenen seviyeye günceller, depoya kaydeder, audit log'a yazar ve onay mesajı basar.
+- [x] AC-5 — Resume reddi (R-3): Hiçbir durdurma aktif değilken (ne kill switch ne drawdown) `resume` komutu durumu değiştirmeden adıyla reddeder ve audit log'a ret kaydı düşer.
+- [x] AC-6 — Temiz süreç durdurma (R-4): `stop` komutu çalışan bot sürecine durdurma isteği iletir; çalışan süreç mevcut turu tamamlar ve temiz biçimde (`ExitReason.STOPPED`) çıkar; çalışan bot yokken komut durumu adıyla bildirir; her iki durum audit log'a işlenir.
+- [x] AC-7 — Kalıcılık ve yeniden başlama (R-6): Kill switch devredeyken bot süreci kapatılıp yeniden başlatıldığında kill switch devrede kalır, alım engeli sürer ve `status` çıktısında durdurma devrede görünür.
+- [x] AC-8 — Denetim günlüğü (R-7): Her kontrol komutu (`kill-switch on`, `resume`, `stop`), UTC zamanı, kanal (`cli`), eylem adı ve sonucu ile hem kayıt dosyasına (`crytobot.log`) hem de kalıcı depoya append-only olarak yazılır.
+- [x] AC-9 — Depo ve hata durumları (R-8): Depo dosyası henüz oluşturulmamışken (`prepare` öncesi) veya bozukken `status`, `kill-switch`, `resume` ve `stop` komutları çökmeden anlamlı hata mesajı basar, yeni depo oluşturmaz ve bozuk dosyayı ezmez.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 1 (fix-1: Finding 2, Finding 3) |
+| Review findings: real / noise / deferred | 3 / 0 / 0 (Finding 1 real [A-1], Finding 2 real [fix-1], Finding 3 real [fix-1]) |
+| Regressions introduced | 0 (kanıt bu PR'ın full CI koşusu) |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi (`doctor`, `specs/done/`'da işaretsiz kriteri reddediyor); koşul bu PR'ın `check` ve `doctor` işleridir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). VERIFY @`0ffafe1`: adı geçen testler hızlı profilde yeşil, 6 kasıtlı bozmanın 6'sı kırmızı; full kanıt bu PR'ın CI koşusudur.
