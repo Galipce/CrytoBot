@@ -49,6 +49,7 @@ from crytobot.app import (
     StartOutcome,
     StopRequest,
     check_stage_gate,
+    engage_kill_switch,
     line,
     load_backtest_config,
     load_config,
@@ -56,9 +57,13 @@ from crytobot.app import (
     load_stage_config,
     open_for_start,
     prepare_store,
+    query_status,
+    request_stop,
+    resume_operations,
     run_backtest,
     run_download,
     run_loop,
+    stop_flag_path,
 )
 from crytobot.backtest import read_report, report_exists, write_report
 from crytobot.market_data import (
@@ -73,8 +78,19 @@ from crytobot.market_data import (
 from crytobot.reporting import ReportingService, load_reporting_config
 
 CONFIG_FILE = "crytobot.toml"
-USAGE = "kullanım: python -m crytobot prepare|start|download|backtest"
-COMMANDS = (["prepare"], ["start"], ["start", "--trial"], ["download"], ["backtest"])
+USAGE = "kullanım: python -m crytobot prepare|start|download|backtest|status|kill-switch|resume|stop"
+COMMANDS = (
+    ["prepare"],
+    ["start"],
+    ["start", "--trial"],
+    ["download"],
+    ["backtest"],
+    ["status"],
+    ["kill-switch"],
+    ["kill-switch", "on"],
+    ["resume"],
+    ["stop"],
+)
 EXIT_OK = 0
 EXIT_REFUSED = 1
 EXIT_READ_REFUSED = 2
@@ -211,12 +227,16 @@ def make_wait(
     stop: StopRequest,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
+    stop_flag_path: Path | None = None,
 ) -> Callable[[float], None]:
     """≤1 s'lik parçalarla bekler; durdurma isteğinde en geç bir parça sonra döner (plan Risk 6)."""
 
     def wait(seconds: float) -> None:
         end = monotonic() + seconds
         while not stop.requested:
+            if stop_flag_path is not None and stop_flag_path.exists():
+                stop.request("cli-stop")
+                break
             left = end - monotonic()
             if left <= 0:
                 return
@@ -448,6 +468,29 @@ def run(
     if config is None:
         return EXIT_REFUSED
 
+    if argv[0] == "status":
+        res = query_status(config, clock=clock)
+        output.say(res.message)
+        return EXIT_OK if res.success else EXIT_REFUSED
+
+    if argv[0] == "kill-switch":
+        res = engage_kill_switch(config, clock=clock)
+        msg = res.message if res.success else f"reddedildi: {res.message}"
+        output.say(line(clock(), "kill-switch", msg))
+        return EXIT_OK if res.success else EXIT_REFUSED
+
+    if argv[0] == "resume":
+        res = resume_operations(config, clock=clock)
+        msg = res.message if res.success else f"reddedildi: {res.message}"
+        output.say(line(clock(), "resume", msg))
+        return EXIT_OK if res.success else EXIT_REFUSED
+
+    if argv[0] == "stop":
+        res = request_stop(config, clock=clock)
+        msg = res.message if res.success else f"reddedildi: {res.message}"
+        output.say(line(clock(), "stop", msg))
+        return EXIT_OK if res.success else EXIT_REFUSED
+
     trial = len(argv) > 1 and argv[1] == "--trial"
     approved_by: str | None = None
     report_path: str | None = None
@@ -468,7 +511,9 @@ def run(
             return _prepare(config, output, clock)
         parts = LoopParts(
             clock,
-            make_wait(stop) if wait is None else wait,
+            make_wait(stop, stop_flag_path=stop_flag_path(config.store_path))
+            if wait is None
+            else wait,
             make_read(clock) if read is None else read,
             output,
             stop,
