@@ -368,6 +368,13 @@ def test_live_exchange_statuses_and_errors() -> None:
     assert status_canceled is OrderStatus.REJECTED
     assert len(forwarded) == 1
 
+    # on_rest_response sarmalayıcısında forward olmadığında varsayılan body döner (F-8)
+    fake_plain = FakeCcxtExchange()
+    fake_plain.on_rest_response = None
+    client_plain = BinanceLiveClient(CREDS, exchange=fake_plain)
+    ret_body = client_plain._exchange.on_rest_response(200, "OK", "", "GET", {}, "  resp_body  ")
+    assert ret_body == "resp_body"
+
     # place order open/new durumu -> UNKNOWN (F-3)
     fake_ccxt.create_order_result = {"status": "open"}
     status_open = venue.place("cb-test-2", "BTC/USDT", "buy", Decimal("1"))

@@ -153,7 +153,7 @@ class BinanceLiveClient:
             self._seen.body = body
             if forward is not None and callable(forward):
                 return forward(code, reason, url, method, headers, body, *rest)
-            return None
+            return body.strip() if hasattr(body, "strip") else body
 
         self._exchange.on_rest_response = remember_response
 
