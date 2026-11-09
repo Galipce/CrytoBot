@@ -30,7 +30,7 @@ _INTERVALS_BY_TEXT = {text: interval for interval, text in CANDLE_INTERVALS.item
 _DIGITS = frozenset("0123456789")
 # Specs 0024, 0026, 0028, 0029: their contents are judged by the download (0023), backtest (0025),
 # stage (0028) and reporting (0029) loaders, the bot never reads them; matched by exact name only
-_PASSED_SECTIONS = frozenset({"history", "backtest", "stage", "reporting"})
+_PASSED_SECTIONS = frozenset({"history", "backtest", "stage", "reporting", "dashboard"})
 
 
 @dataclass(frozen=True)

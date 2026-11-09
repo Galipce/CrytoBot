@@ -57,7 +57,7 @@ name = "R-3b: only risk, app, backtest and persistence import execution"
 type = "forbidden"
 source_modules = [
     "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.analysis",
-    "crytobot.strategy", "crytobot.portfolio", "crytobot.control", "crytobot.reporting",
+    "crytobot.strategy", "crytobot.portfolio", "crytobot.control", "crytobot.reporting", "crytobot.dashboard",
     # the entry point only wires real effects: the paper simulator comes from app (spec 0022)
     "crytobot.__main__",
 ]
@@ -71,7 +71,7 @@ source_modules = ["crytobot.analysis"]
 forbidden_modules = [
     "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.strategy",
     "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest", "crytobot.control",
-    "crytobot.reporting", "crytobot.app", "crytobot.persistence",
+    "crytobot.reporting", "crytobot.app", "crytobot.persistence", "crytobot.dashboard",
 ]
 allow_indirect_imports = true
 
@@ -81,7 +81,7 @@ type = "forbidden"
 source_modules = [
     "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.analysis",
     "crytobot.strategy", "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest",
-    "crytobot.control", "crytobot.reporting",
+    "crytobot.control", "crytobot.reporting", "crytobot.dashboard",
     # the store is reached only through app's gates (spec 0022)
     "crytobot.__main__",
 ]
@@ -95,6 +95,13 @@ name = "R-3f: backtest imports neither app nor market_data"
 type = "forbidden"
 source_modules = ["crytobot.backtest"]
 forbidden_modules = ["crytobot.app", "crytobot.market_data"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "R-3g: dashboard never imports control or execution"
+type = "forbidden"
+source_modules = ["crytobot.dashboard"]
+forbidden_modules = ["crytobot.control", "crytobot.execution"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]

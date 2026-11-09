@@ -117,13 +117,17 @@ def _target(path: object) -> Path | None:
         return None
 
 
-def _connect(target: Path) -> sqlite3.Connection:
-    """`mode=rw` var olan dosyayı açar, yoksa oluşturmaz (R-2)."""
-    uri = target.resolve().as_uri() + "?mode=rw"
+def _connect(target: Path, readonly: bool = False) -> sqlite3.Connection:
+    """`mode=rw` var olan dosyayı açar, yoksa oluşturmaz (R-2).
+    `readonly=True` ise `mode=ro` ile salt-okunur açar."""
+    mode_param = "mode=ro" if readonly else "mode=rw"
+    uri = target.resolve().as_uri() + f"?{mode_param}"
     connection = sqlite3.connect(uri, uri=True, timeout=0, isolation_level=None)
     try:
-        # R-5, integrity: a power cut leaves one whole state, though the last commit may roll back
-        connection.execute("PRAGMA synchronous=FULL")
+        if not readonly:
+            # R-5, integrity: a power cut leaves one whole state, though the last commit
+            # may roll back
+            connection.execute("PRAGMA synchronous=FULL")
     except sqlite3.Error:  # locked or not a database; the caller's closing() has not begun yet
         connection.close()
         raise
@@ -248,21 +252,21 @@ def _read(database: sqlite3.Connection, mode: str) -> StoreResult:
     )
 
 
-def _read_from(target: Path, mode: str) -> StoreResult:
-    with closing(_connect(target)) as database:
+def _read_from(target: Path, mode: str, readonly: bool = False) -> StoreResult:
+    with closing(_connect(target, readonly=readonly)) as database:
         return _read(database, mode)
 
 
-def load_store(path: object, mode: object) -> StoreResult:
+def load_store(path: object, mode: object, readonly: bool = False) -> StoreResult:
     """R-2, R-3, R-6, R-9: durumun tamamı ya da adlandırılmış sonuç; kısmi ya da boş durum yok."""
     target = _target(path)
-    if target is None or not _valid_mode(mode):
+    if target is None or not _valid_mode(mode) or not isinstance(readonly, bool):
         return _INVALID
     assert isinstance(mode, str)  # checked above
     try:
         if not target.exists():
             return _MISSING
-        return _waiting(lambda: _read_from(target, mode))
+        return _waiting(lambda: _read_from(target, mode, readonly=readonly))
     except sqlite3.Error as error:
         return _BUSY if _busy(error) else _UNREADABLE
     except (CodecError, KeyError, OSError, ValueError):

@@ -23,6 +23,7 @@ yazılamadı (rapor konsolda), 130 zorla durma.
 import signal
 import sys
 import tempfile
+import threading
 import time
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
@@ -50,6 +51,7 @@ from crytobot.app import (
     StopRequest,
     check_stage_gate,
     engage_kill_switch,
+    get_dashboard_status,
     line,
     load_backtest_config,
     load_config,
@@ -71,6 +73,11 @@ from crytobot.control import (
     set_stop_flag,
     stop_flag_path,
 )
+from crytobot.dashboard import (
+    PortBusyError,
+    create_server,
+    load_dashboard_config,
+)
 from crytobot.market_data import (
     HistoryRequest,
     HistoryResult,
@@ -84,7 +91,8 @@ from crytobot.reporting import ReportingService, load_reporting_config
 
 CONFIG_FILE = "crytobot.toml"
 USAGE = (
-    "kullanım: python -m crytobot prepare|start|download|backtest|status|kill-switch|resume|stop"
+    "kullanım: python -m crytobot "
+    "prepare|start|download|backtest|status|kill-switch|resume|stop|dashboard"
 )
 COMMANDS = (
     ["prepare"],
@@ -97,6 +105,7 @@ COMMANDS = (
     ["kill-switch", "on"],
     ["resume"],
     ["stop"],
+    ["dashboard"],
 )
 EXIT_OK = 0
 EXIT_REFUSED = 1
@@ -420,6 +429,61 @@ def _stage_gate(
     return True, stage.approved_by, stage.report_path
 
 
+def _dashboard(
+    config_path: Path,
+    config: BotConfig,
+    output: Output,
+    clock: Clock,
+    stop: StopRequest,
+) -> int:
+    document = _document(config_path, output, clock)
+    if document is None:
+        return EXIT_REFUSED
+    dash_res = load_dashboard_config(document)
+    if dash_res.config is None:
+        output.say(line(clock(), "dashboard", f"reddedildi: {dash_res.message}"))
+        return EXIT_REFUSED
+    dash_cfg = dash_res.config
+
+    def status_provider() -> tuple[int, dict[str, object]]:
+        running = is_lock_held(config.store_path)
+        logs_tuple: tuple[str, ...] = ()
+        log_file = Path(config.log_path)
+        if log_file.is_file():
+            try:
+                with open(log_file, "rb") as f:
+                    size = log_file.stat().st_size
+                    seek_pos = max(0, size - 8192)
+                    f.seek(seek_pos)
+                    chunk = f.read().decode("utf-8", errors="replace")
+                    all_lines = [line.strip() for line in chunk.splitlines() if line.strip()]
+                    logs_tuple = tuple(all_lines[-10:])
+            except OSError:
+                pass
+        return get_dashboard_status(config, clock=clock, is_running=running, logs=logs_tuple)
+
+    try:
+        server = create_server(dash_cfg.host, dash_cfg.port, status_provider)
+    except PortBusyError as err:
+        output.say(line(clock(), "dashboard", f"reddedildi: {err}"))
+        return EXIT_REFUSED
+
+    output.say(f"http://{dash_cfg.host}:{dash_cfg.port}")
+
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+
+    try:
+        while not stop.requested:
+            time.sleep(0.1)
+    finally:
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=2.0)
+
+    return EXIT_OK
+
+
 def _start(
     config: BotConfig,
     output: Output,
@@ -508,6 +572,9 @@ def run(
         msg = res.message if res.success else f"reddedildi: {res.message}"
         output.say(line(clock(), "stop", msg))
         return EXIT_OK if res.success else EXIT_REFUSED
+
+    if argv[0] == "dashboard":
+        return _dashboard(config_path, config, output, clock, stop)
 
     trial = len(argv) > 1 and argv[1] == "--trial"
     approved_by: str | None = None
