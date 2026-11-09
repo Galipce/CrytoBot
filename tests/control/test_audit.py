@@ -31,6 +31,20 @@ def test_audit_event_json_roundtrip() -> None:
     assert decoded.detail == event.detail
 
 
+def test_audit_event_json_escaping_with_quotes() -> None:
+    """detail tırnak işareti ve özel karakter içerdiğinde geçerli JSON üretilir ve geri çözülür."""
+    event = AuditEvent(
+        timestamp=T0,
+        channel="cli",
+        action="kill-switch on",
+        result="refused",
+        detail='hata: "dosya salt-okunur" ve özel karakterler',
+    )
+    json_line = event.to_json()
+    decoded = decode_audit_event(json_line)
+    assert decoded.detail == 'hata: "dosya salt-okunur" ve özel karakterler'
+
+
 def test_audit_event_log_line_format() -> None:
     """AuditEvent log dosyasına yazılacak metin satırını standart biçimde üretir."""
     event = AuditEvent(

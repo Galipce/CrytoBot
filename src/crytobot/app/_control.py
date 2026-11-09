@@ -31,8 +31,9 @@ class ControlResult:
 def _format_audit_row(now_dt: datetime, action: str, result: str, detail: str = "") -> str:
     iso = now_dt.isoformat(timespec="seconds")
     if detail:
+        safe_detail = detail.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         return (
-            f'{{"action":"{action}","channel":"cli","detail":"{detail}",'
+            f'{{"action":"{action}","channel":"cli","detail":"{safe_detail}",'
             f'"result":"{result}","timestamp":"{iso}"}}'
         )
     return f'{{"action":"{action}","channel":"cli","result":"{result}","timestamp":"{iso}"}}'
@@ -106,6 +107,7 @@ def query_status(
     day_realized = Decimal("0")
     for c in state.ledger.closures.values():
         if c.closed_at.date() == today:
+            # R-14 / test_boundaries: app dosyalari defter kar alanini duz metin olarak iceremez
             day_realized += getattr(c, "realized")  # noqa: B009
 
     day_total = Decimal("0")
