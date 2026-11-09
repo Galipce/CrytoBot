@@ -368,6 +368,11 @@ def test_live_exchange_statuses_and_errors() -> None:
     assert status_canceled is OrderStatus.REJECTED
     assert len(forwarded) == 1
 
+    # place order open/new durumu -> UNKNOWN (F-3)
+    fake_ccxt.create_order_result = {"status": "open"}
+    status_open = venue.place("cb-test-2", "BTC/USDT", "buy", Decimal("1"))
+    assert status_open is OrderStatus.UNKNOWN
+
     # query order canceled ve open durumları
     fake_ccxt.fetch_order_result = {"status": "canceled"}
     assert venue.query("cb-test-1", "BTC/USDT") is OrderStatus.REJECTED

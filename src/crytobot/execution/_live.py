@@ -37,7 +37,7 @@ class LiveExchange:
                 return OrderStatus.FILLED
             if raw_status in ("canceled", "cancelled", "expired", "rejected"):
                 return OrderStatus.REJECTED
-            return OrderStatus.FILLED if isinstance(res, dict) else OrderStatus.UNKNOWN
+            return OrderStatus.UNKNOWN
         except LiveExchangeCallError as err:
             if err.is_unknown:
                 return OrderStatus.UNKNOWN
