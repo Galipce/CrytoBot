@@ -25,7 +25,7 @@ from crytobot.execution import (
 )
 from crytobot.persistence import load_store
 from crytobot.portfolio import CloseReason
-from tests.app.helpers import BTC, CROSS, FLAT, NOW, make_settings, pair_market
+from tests.app.helpers import BTC, CROSS, ETH, FLAT, NOW, make_settings, pair_market
 from tests.app.test_live_start import FakeLiveClient
 
 PAIR = BTC
@@ -150,6 +150,9 @@ def test_stop_order_failure_enters_safe_mode_and_halts_buys(tmp_path: Path) -> N
     assert ex.placed_stop_calls[0]["symbol"] == PAIR
     assert ex.placed_stop_calls[0]["amount"] == buy_order.amount
     assert ex.placed_stop_calls[0]["stop_price"] == buy_order.stop
+    # VERIFY round 1 (AC-3, R-4): yedek limitli stopun fiyatı stopun slippage kadar altı
+    slippage = make_settings().slippage
+    assert ex.placed_stop_calls[0]["limit_price"] == buy_order.stop * (1 - slippage)
 
     # 2. Stop emri başarısızlığı fail-closed durdurma ve güvenli mod üretmeli
     assert BuyHalt.STOP_ORDER_FAILED in res.halts
@@ -610,3 +613,35 @@ def test_unknown_stop_status_halts_without_replacing(tmp_path: Path) -> None:
     assert [(n.kind, n.subject, n.entering) for n in notices if n.subject == position_id] == [
         (NoticeKind.STOP_ORDER_FAILED, position_id, True)
     ]
+
+
+@pytest.mark.parametrize("stop_status", [OrderStatus.NEW, OrderStatus.REJECTED])
+def test_unprotected_position_actually_stops_new_buys(
+    tmp_path: Path, stop_status: OrderStatus
+) -> None:
+    """Spec 0034 AC-7 (R-5), VERIFY round 1: BTC'nin borsa stopu reddedilmişken alım sinyali olan
+    ETH'de emir verilmez. Pozitif kontrol: stop sağlamken (NEW) aynı turda ETH alınır."""
+    store_path, _ = _opened(tmp_path, f"ac7-{stop_status.value}.db")
+    ex = MockLiveExchange(
+        free_balance=_balance(store_path),
+        stop_query_status=stop_status,
+        stop_fetch_order={"status": "rejected"},  # the id is taken: not re-placed
+    )
+    res = run_turn(
+        market={
+            BTC: pair_market(closes=FLAT, price=Decimal(10), closed_at=LATER),
+            ETH: pair_market(closes=CROSS, price=Decimal(10), closed_at=LATER),
+        },
+        settings=make_settings(whitelist=(BTC, ETH)),
+        store_path=store_path,
+        now=LATER,
+        exchange=ex,
+        sink=lambda n: None,
+        memory=TurnMemory(),
+    )
+    if stop_status is OrderStatus.NEW:
+        assert [o.pair for o in res.buys] == [ETH]
+    else:
+        assert BuyHalt.STOP_ORDER_FAILED in res.halts
+        assert res.buys == ()
+        assert not any(c.startswith("place:cb-") for c in ex.call_order)

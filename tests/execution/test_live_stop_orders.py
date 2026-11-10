@@ -182,8 +182,11 @@ def test_stop_order_lifecycle_and_order_status_mapping() -> None:
 
 
 def test_stop_order_fallback_to_stop_loss_limit() -> None:
-    """R-4: STOP_LOSS reddedildiğinde STOP_LOSS_LIMIT fallback çağrılır."""
+    """R-4: STOP_LOSS reddedildiğinde STOP_LOSS_LIMIT fallback çağrılır. VERIFY round 1: yedek
+    emrin tipi, limit fiyatı (stop * (1 - slippage)), stop fiyatı ve kimliği borsaya giden
+    çağrıda doğrulanır; düz LIMIT satış stopun altında hemen dolardı."""
     call_count = 0
+    calls: list[dict[str, Any]] = []
 
     def mock_create(
         symbol: str,
@@ -195,6 +198,7 @@ def test_stop_order_fallback_to_stop_loss_limit() -> None:
     ) -> dict[str, Any]:
         nonlocal call_count
         call_count += 1
+        calls.append({"type": type, "side": side, "price": price, "params": dict(params or {})})
         if type == "STOP_LOSS":
             raise FakeExchangeError("STOP_LOSS market order not supported on this pair")
         return {"status": "open", "id": "fallback-limit-stop"}
@@ -214,6 +218,13 @@ def test_stop_order_fallback_to_stop_loss_limit() -> None:
 
     assert status is OrderStatus.NEW
     assert call_count == 2
+    first, fallback = calls
+    assert first["type"] == "STOP_LOSS" and first["price"] is None
+    assert fallback["type"] == "STOP_LOSS_LIMIT"
+    assert fallback["side"] == "sell"
+    assert Decimal(str(fallback["price"])) == Decimal("94.905")
+    assert Decimal(str(fallback["params"]["stopPrice"])) == Decimal("95")
+    assert fallback["params"]["newClientOrderId"] == "cs-fallback-test"
 
 
 def test_stop_order_network_error_does_not_attempt_fallback() -> None:
