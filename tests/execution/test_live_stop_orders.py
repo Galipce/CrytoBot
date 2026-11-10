@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+import ccxt
+
 from crytobot.execution import (
     STOP_ID_PREFIX,
     ExchangeCredentials,
@@ -19,15 +21,16 @@ PAIR = "BTC/USDT"
 NOW = datetime(2026, 11, 10, 10, 0, tzinfo=UTC)
 
 
-class FakeRequestTimeout(Exception):
+# spec 0036 plan Risk 6: R-7 classifies by ccxt class, so the fakes are real ccxt subclasses
+class FakeRequestTimeout(ccxt.RequestTimeout):  # type: ignore[misc]
     pass
 
 
-class FakeExchangeError(Exception):
+class FakeExchangeError(ccxt.InvalidOrder):  # type: ignore[misc]
     pass
 
 
-class FakeOrderNotFound(Exception):
+class FakeOrderNotFound(ccxt.OrderNotFound):  # type: ignore[misc]
     pass
 
 

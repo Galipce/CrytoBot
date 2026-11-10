@@ -37,6 +37,7 @@ class BuyHalt(Enum):
     DRAWDOWN = "drawdown"
     KILL_SWITCH = "kill_switch"
     STOP_ORDER_FAILED = "stop_order_failed"
+    POSITION_BELOW_MINIMUM = "position_below_minimum"
 
 
 class PairNote(Enum):

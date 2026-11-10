@@ -24,6 +24,18 @@ _BINANCE_ORDER_NOT_EXIST: Final = -2013
 _BINANCE_UNKNOWN_ORDER: Final = -2011
 
 
+def is_definite_refusal(err: BaseException) -> bool:
+    """R-7: yalnız yetersiz bakiye, geçersiz emir (filtre dahil) ve yetki hatası kesin rettir;
+    ağ hatası, zaman aşımı, erişilemezlik, bakım, hız sınırı ve tanınmayan her hata değildir.
+    Sınıf `isinstance` ile denetlenir, adla değil. `DuplicateOrderId` ve "emir yok" türleri
+    `InvalidOrder` alt sınıfıdır ama emrin var olup olmadığını söylemez."""
+    import ccxt  # lazy: paper and backtest never load ccxt for execution
+
+    refusals = (ccxt.InsufficientFunds, ccxt.InvalidOrder, ccxt.AuthenticationError)
+    undecided = (ccxt.DuplicateOrderId, ccxt.OrderNotFound, ccxt.OrderNotCached)
+    return isinstance(err, refusals) and not isinstance(err, undecided)
+
+
 class PermissionForbiddenError(ExecutionError):
     """Para çekme yetkisi gibi yasaklı veya eksik bir yetki tespit edildiğinde fırlatılır."""
 
@@ -185,14 +197,11 @@ class BinanceLiveClient:
         if status == _HTTP_BANNED:
             raise BannedError("Borsa IP/hesap banı (HTTP 418); fail-closed durduruldu") from None
 
-        is_rate_limited = status == _HTTP_TOO_MANY or "RateLimitExceeded" in type(err).__name__
+        # R-7: by ccxt class, never by name; a 5xx or 429 is unknown whatever the class says
         is_unknown = (
             status in _HTTP_SERVER_ERRORS
-            or is_rate_limited
-            or any(
-                name in type(err).__name__
-                for name in ("NetworkError", "RequestTimeout", "OperationFailed")
-            )
+            or status == _HTTP_TOO_MANY
+            or not is_definite_refusal(err)
         )
         safe_msg = redact_secrets(str(err), self._credentials)
         return LiveExchangeCallError(
@@ -314,6 +323,18 @@ class BinanceLiveClient:
             if code == _BINANCE_ORDER_NOT_EXIST or "OrderNotFound" in type(err).__name__:
                 return None
             raise self._handle_call_error(err) from None
+
+    def fetch_order_trades(self, symbol: str, order_id: str) -> list[dict[str, Any]]:
+        """Plan 0036 Risk 2: emrin borsa işlemleri (`myTrades`, `orderId`); emir sorgusu
+        komisyonu vermez, işlemler verir."""
+        self._reset_seen()
+        try:
+            res = self._exchange.fetch_my_trades(symbol, params={"orderId": order_id})
+        except Exception as err:
+            raise self._handle_call_error(err) from None
+        if not isinstance(res, list) or not all(isinstance(t, dict) for t in res):
+            raise LiveExchangeCallError("Geçersiz işlem listesi", is_unknown=True)
+        return res
 
     def fetch_free_balance(self, asset: str = "USDT") -> Decimal:
         """Borsadan ilgili varlığın serbest (free) bakiyesini çeker."""

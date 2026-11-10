@@ -17,6 +17,14 @@ from crytobot.execution._credentials import (
     load_credentials,
     redact_secrets,
 )
+from crytobot.execution._fills import (
+    ExchangeFill,
+    FillVerdict,
+    LiveReply,
+    Settled,
+    judge_fill,
+    settle_reply,
+)
 from crytobot.execution._live import LiveExchange
 from crytobot.execution._live_client import (
     PERMISSION_CHECK_FAILED,
@@ -28,12 +36,14 @@ from crytobot.execution._live_client import (
     PermissionCheckFailedError,
     PermissionForbiddenError,
     check_api_restrictions,
+    is_definite_refusal,
     verify_permissions,
 )
 from crytobot.execution._orders import (
     CLIENT_ID_PREFIX,
     EMPTY_EXECUTION,
     LIVE,
+    NOT_FOUND_GRACE,
     PAPER,
     STOP_ID_PREFIX,
     CloseOrder,
@@ -51,6 +61,7 @@ from crytobot.execution._orders import (
     position_id_from_stop_id,
     query_order,
     stop_client_id,
+    with_exchange_fill,
 )
 from crytobot.execution._paper import Exchange, OrderStatus, PaperExchange
 
@@ -60,6 +71,7 @@ __all__: list[str] = [
     "CREDENTIALS_MISSING",
     "EMPTY_EXECUTION",
     "LIVE",
+    "NOT_FOUND_GRACE",
     "PAPER",
     "PERMISSION_CHECK_FAILED",
     "REDACTED",
@@ -75,10 +87,13 @@ __all__: list[str] = [
     "CredentialsError",
     "Exchange",
     "ExchangeCredentials",
+    "ExchangeFill",
     "ExecutionError",
     "ExecutionState",
+    "FillVerdict",
     "LiveExchange",
     "LiveExchangeCallError",
+    "LiveReply",
     "Notification",
     "NotificationKind",
     "Order",
@@ -91,8 +106,11 @@ __all__: list[str] = [
     "PermissionForbiddenError",
     "QueryOutcome",
     "QueryResult",
+    "Settled",
     "check_api_restrictions",
     "execution_problems",
+    "is_definite_refusal",
+    "judge_fill",
     "load_credentials",
     "place_close_order",
     "place_order",
@@ -100,6 +118,8 @@ __all__: list[str] = [
     "query_order",
     "record_stop_fill",
     "redact_secrets",
+    "settle_reply",
     "stop_client_id",
     "verify_permissions",
+    "with_exchange_fill",
 ]

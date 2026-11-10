@@ -1,6 +1,6 @@
 # Spec 0036 — Canlı modda gerçek dolum, coinden komisyon ve kesinliği olmayan emir
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0036-plan.md`
 - Self-critique: done

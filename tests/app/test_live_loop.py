@@ -22,15 +22,72 @@ from crytobot.execution import (
     BannedError,
     LiveExchange,
     LiveExchangeCallError,
+    LiveReply,
     OrderStatus,
 )
 from crytobot.persistence import load_store
-from tests.app.helpers import BTC, CROSS, FLAT, NOW, make_settings, pair_market
+from tests.app.helpers import BTC, CROSS, FEE, FLAT, NOW, SLIPPAGE, make_settings, pair_market
 from tests.app.loop_fakes import harness
 from tests.app.test_live_start import FakeLiveClient, write_test_config
 
+# spec 0036 plan Risk 6: the turn reads the exchange's fill (`place_market`, `query_fill`). These
+# fakes answer the old status hooks (`place`, `query`) with a full fill at the paper estimate:
+# buys at 10 * (1 + slippage), sells at 15 * (1 - slippage), the fee in USDT at the fee rate.
+BUY_FILL = Decimal(10) * (1 + SLIPPAGE)
+SELL_FILL = Decimal(15) * (1 - SLIPPAGE)
 
-class MockLiveExchange(LiveExchange):
+
+def exchange_reply(
+    status: OrderStatus, client_order_id: str, amount: object, price: Decimal
+) -> LiveReply:
+    """Durum `FILLED` ise borsanın tam dolum yanıtı (USDT komisyonu), değilse yalnız durum."""
+    if status is not OrderStatus.FILLED or amount is None:
+        return LiveReply(status)
+    filled = Decimal(str(amount))
+    cost = filled * price
+    return LiveReply(
+        status,
+        {
+            "status": "closed",
+            "id": client_order_id,
+            "filled": str(filled),
+            "average": str(price),
+            "cost": str(cost),
+            "fee": {"cost": str(cost * FEE), "currency": "USDT"},
+        },
+    )
+
+
+class FillingLiveExchange(LiveExchange):
+    """`place` ve `query`'nin durumunu tam dolum yanıtına çevirir (plan 0036 Risk 6)."""
+
+    buy_price = BUY_FILL
+    sell_price = SELL_FILL
+
+    def _sent(self) -> dict[str, tuple[str, object]]:
+        sent: dict[str, tuple[str, object]] = self.__dict__.setdefault("_sent_orders", {})
+        return sent
+
+    def place_market(
+        self,
+        client_order_id: str,
+        symbol: str = "",
+        side: str = "",
+        amount: object = None,
+    ) -> LiveReply:
+        status = self.place(client_order_id, symbol=symbol, side=side, amount=amount)
+        self._sent()[client_order_id] = (side, amount)
+        price = self.buy_price if side == "buy" else self.sell_price
+        return exchange_reply(status, client_order_id, amount, price)
+
+    def query_fill(self, client_order_id: str, symbol: str = "") -> LiveReply:
+        status = self.query(client_order_id, symbol=symbol)
+        side, amount = self._sent().get(client_order_id, ("buy", None))
+        price = self.buy_price if side == "buy" else self.sell_price
+        return exchange_reply(status, client_order_id, amount, price)
+
+
+class MockLiveExchange(FillingLiveExchange):
     def __init__(
         self,
         free_balance: Decimal = Decimal("1000.00"),

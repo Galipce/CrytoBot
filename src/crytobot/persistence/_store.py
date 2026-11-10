@@ -35,6 +35,8 @@ from crytobot.risk import EMPTY_STATE, RiskState, risk_state_problems
 
 MODES = ("paper", "live")
 FORMAT_VERSION = "1"
+# spec 0036 R-13: a live store opened before real fills existed lacks this key and is refused
+LIVE_FILLS_KEY, LIVE_FILLS = "fills", "exchange"
 # R-10 allows 5 s; the rest is for the last attempt. SQLite's own timeout is not used: it adds up
 # nominal sleeps, and timeout=4 took 6 s of real time on Windows (plan 0011 Risk 4).
 BUSY_WAIT_S = 4.0
@@ -62,6 +64,7 @@ class StoreOutcome(Enum):
     BUSY = "busy"
     STALE_WRITE = "stale_write"
     HISTORY_IMMUTABLE = "history_immutable"
+    LIVE_STORE_OUTDATED = "live_store_outdated"
 
 
 @dataclass(frozen=True)
@@ -102,6 +105,10 @@ _WRITE_FAILED = _refusal(StoreOutcome.WRITE_FAILED, "yazılamadı")
 _BUSY = _refusal(StoreOutcome.BUSY, "depo meşgul")
 _STALE = _refusal(StoreOutcome.STALE_WRITE, "eski yazım")
 _IMMUTABLE = _refusal(StoreOutcome.HISTORY_IMMUTABLE, "geçmiş değiştirilemez")
+_OUTDATED = _refusal(
+    StoreOutcome.LIVE_STORE_OUTDATED,
+    "eski canlı depo: gerçek dolum bilgisi taşımıyor; prepare --live ile yeniden açın",
+)
 
 
 def _valid_mode(mode: object) -> bool:
@@ -180,7 +187,11 @@ def _header(meta: dict[str, str], mode: str) -> StoreResult | int:
         return _UNREADABLE
     if "ledger" not in meta:
         return _UNREADABLE
-    return _MODE_MISMATCH if stored_mode != mode else int(revision)
+    if stored_mode != mode:
+        return _MODE_MISMATCH
+    if mode == "live" and meta.get(LIVE_FILLS_KEY) != LIVE_FILLS:  # spec 0036 R-13
+        return _OUTDATED
+    return int(revision)
 
 
 def _problems(ledger: object, execution: object, risk: object) -> list[str]:
@@ -218,6 +229,8 @@ def create_store(path: object, mode: object) -> StoreResult:
         "ledger": encode_summary(EMPTY_LEDGER),
         "risk": encode_risk(EMPTY_STATE),
     }
+    if mode == "live":  # spec 0036 R-13: this store records the exchange's real fills
+        meta[LIVE_FILLS_KEY] = LIVE_FILLS
     try:
         with closing(_connect(target)) as database:
             database.execute("BEGIN EXCLUSIVE")
@@ -316,13 +329,14 @@ def _history_allows(
     stored_risk: RiskState,
     image: _Image,
     risk: RiskState,
+    mode: str,
 ) -> bool:
     if image.entries[: len(stored_entries)] != stored_entries:
         return False
     if len(image.orders) < len(stored_orders):
         return False
     for before, after in zip(stored_orders, image.orders, strict=False):
-        if before != after and not order_resolution_allowed(before, after):
+        if before != after and not order_resolution_allowed(before, after, mode):
             return False
     return _risk_allows(stored_risk, risk)
 
@@ -380,7 +394,7 @@ def _save(
         return _UNREADABLE
     stored_entries, stored_orders = _rows(database, "entries"), _rows(database, "orders")
     if not _history_allows(
-        stored_entries, stored_orders, decode_risk(meta["risk"]), image, state.risk
+        stored_entries, stored_orders, decode_risk(meta["risk"]), image, state.risk, base.mode
     ):
         return _IMMUTABLE
     _write(database, stored_entries, stored_orders, image, state.revision)

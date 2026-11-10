@@ -23,6 +23,9 @@ from crytobot.persistence import StoreOutcome, create_store, load_store, save_st
 from crytobot.portfolio import EMPTY_LEDGER, LedgerOutcome, open_ledger
 
 PREPARE_HINT = "önce hazırlık: python -m crytobot prepare"
+LIVE_PREPARE_HINT = "önce hazırlık: python -m crytobot prepare --live"
+# spec 0036 R-13: the old file is never deleted by the bot; the owner moves it aside
+OUTDATED_HINT = "eski depo dosyasını kenara alıp python -m crytobot prepare --live ile yeniden açın"
 
 
 class PrepareOutcome(Enum):
@@ -70,11 +73,12 @@ class StartOutcome(Enum):
     STORE_BUSY = "store_busy"
     MODE_MISMATCH = "mode_mismatch"
     LEDGER_NOT_OPENED = "ledger_not_opened"
+    LIVE_STORE_OUTDATED = "live_store_outdated"
 
 
 @dataclass(frozen=True)
 class StartCheck:
-    """`hint` yalnız depo yokken doludur (R-4)."""
+    """`hint` depo yokken (R-4) ve canlı depo eskiyken (spec 0036 R-13) doludur."""
 
     outcome: StartOutcome
     message: str
@@ -85,6 +89,7 @@ _REFUSALS = {
     StoreOutcome.NOT_FOUND: StartOutcome.STORE_MISSING,
     StoreOutcome.BUSY: StartOutcome.STORE_BUSY,
     StoreOutcome.MODE_MISMATCH: StartOutcome.MODE_MISMATCH,
+    StoreOutcome.LIVE_STORE_OUTDATED: StartOutcome.LIVE_STORE_OUTDATED,
 }
 
 
@@ -99,14 +104,12 @@ def open_for_start(store_path: str, mode: str = PAPER) -> StartCheck:
             message = loaded.message
         hint = None
         if outcome is StartOutcome.STORE_MISSING:
-            hint = (
-                PREPARE_HINT
-                if mode == PAPER
-                else "önce hazırlık: python -m crytobot prepare --live"
-            )
+            hint = PREPARE_HINT if mode == PAPER else LIVE_PREPARE_HINT
+        elif outcome is StartOutcome.LIVE_STORE_OUTDATED:
+            hint = OUTDATED_HINT
         return StartCheck(outcome, f"başlatma reddedildi: {message}", hint)
     if loaded.state.ledger.balance is None:
-        hint = None if mode == PAPER else "önce hazırlık: python -m crytobot prepare --live"
+        hint = None if mode == PAPER else LIVE_PREPARE_HINT
         return StartCheck(
             StartOutcome.LEDGER_NOT_OPENED, "başlatma reddedildi: defter açılmamış", hint
         )

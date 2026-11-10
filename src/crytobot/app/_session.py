@@ -9,7 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from crytobot.app._control import format_audit_row
-from crytobot.app._inputs import DataIssue, DataReport, TurnSettings
+from crytobot.app._inputs import DataIssue, DataReport, PairMarket, TurnSettings
 from crytobot.app._notices import NoticeKind, Notices, TurnMemory
 from crytobot.app._result import BuyHalt, PairOutcome, TurnOutcome, TurnResult
 from crytobot.execution import (
@@ -22,8 +22,8 @@ from crytobot.execution import (
     stop_client_id,
 )
 from crytobot.persistence import StoredState, StoreOutcome, append_audit_record, save_store
-from crytobot.portfolio import Closure, Fill, Ledger, SnapshotOutcome, account_state
-from crytobot.risk import RiskState, engage_kill_switch, observe
+from crytobot.portfolio import Closure, Fill, Ledger, Position, SnapshotOutcome, account_state
+from crytobot.risk import PairRules, RiskState, engage_kill_switch, observe
 
 
 class AppError(Exception):
@@ -51,12 +51,13 @@ _INFORMATIONAL = frozenset({BuyHalt.DRAWDOWN, BuyHalt.KILL_SWITCH})
 
 
 def buy_fill(order: Order, at: datetime) -> Fill:
-    """Dolan alım emrinin defter kaydı: alım yolu ve bilinmeyen emir sorgusu aynı kaydı yazar."""
+    """Dolan alım emrinin defter kaydı: alım yolu ve bilinmeyen emir sorgusu aynı kaydı yazar.
+    Spec 0036 R-2: canlıda pozisyon miktarı net miktardır."""
     return Fill(
         order.client_order_id,
         order.pair,
         order.side,
-        order.amount,
+        order.position_amount,
         order.fill_price,
         order.fee,
         order.stop,
@@ -153,6 +154,57 @@ class TurnRun:
             return
         if status not in (OrderStatus.NEW, OrderStatus.FILLED):
             self.stop_failed(position_id, f"borsa stop emri başarısız ({stop_id}, {status.value})")
+
+    def unsupported_fill(self, client_order_id: str, pair: str, reason: str) -> None:
+        """Spec 0036 R-5: henüz desteklenmeyen dolum deftere yazılmadı; emir `UNKNOWN` kalır
+        (güvenli mod). Bildirim emir netleşene kadar sürer."""
+        self.notices.enter(
+            NoticeKind.UNSUPPORTED_FILL,
+            client_order_id,
+            f"{pair}: {client_order_id}: {reason}; deftere yazılmadı, elle bakılmalı",
+        )
+
+    def rules_of(self, pair: str) -> PairRules | None:
+        data = self.market.get(pair)
+        rules = data.rules if isinstance(data, PairMarket) else None
+        return rules if isinstance(rules, PairRules) else None
+
+    def check_position_minimums(self) -> None:
+        """Spec 0036 R-2 (plan Risk 7): canlıda her açık pozisyon o turun kurallarıyla denetlenir;
+        asgari miktarın ya da (güncel fiyatla) asgari tutarın altındaki pozisyon alımı durdurur.
+        Kalıcı durum yoktur; kurallar ya da fiyat yoksa önceki bildirim sürer."""
+        if self.state.mode != "live":
+            return
+        for subject, position in self.state.ledger.positions.items():
+            below = self._below_minimum(position)
+            if below is None:
+                self.notices.keep(NoticeKind.POSITION_BELOW_MINIMUM, subject)
+                if (NoticeKind.POSITION_BELOW_MINIMUM, subject) in self.memory.active:
+                    self.halt(BuyHalt.POSITION_BELOW_MINIMUM)
+            elif below:
+                self.halt(BuyHalt.POSITION_BELOW_MINIMUM)
+                self.notices.enter(
+                    NoticeKind.POSITION_BELOW_MINIMUM,
+                    subject,
+                    f"güvenli mod: {position.pair}: {subject} pozisyonu ({position.amount})"
+                    " borsanın asgari miktarının ya da tutarının altında; satılamaz, elle"
+                    " bakılmalı",
+                )
+
+    def _below_minimum(self, position: Position) -> bool | None:
+        """Asgarinin altında mı; değerlendirilemiyorsa `None`."""
+        rules = self.rules_of(position.pair)
+        if rules is None:
+            return None
+        min_amount, min_notional = rules.min_amount, rules.min_notional
+        if not (isinstance(min_amount, Decimal | int) and isinstance(min_notional, Decimal | int)):
+            return None
+        if position.amount < min_amount:
+            return True
+        price = self.report.prices.get(position.pair)
+        if price is None:
+            return None
+        return position.amount * price < min_notional
 
     def reconcile_balance(self) -> None:
         """Spec 0033 R-6: Canlı modda tur başı bakiye mutabakatı (tolerans <= 0.05 USDT)."""

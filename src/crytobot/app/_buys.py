@@ -121,8 +121,12 @@ def _approved_buy(
         ledger = record_fill(ledger, buy_fill(order, run.now)).ledger
     run.save(ledger=ledger, execution=placed.state)  # F-4: the fill is on disk before the stop
     run.buys.append(order)
+    if placed.unsupported is not None:  # spec 0036 R-5: not in the ledger, safe mode
+        run.unsupported_fill(order.client_order_id, pair, placed.unsupported)
     if order.status is OrderStatus.FILLED and run.state.mode == "live":
-        run.place_exchange_stop(order.client_order_id, pair, order.amount, order.stop)
+        # spec 0036 R-6 (S-2): the stop sells what the ledger holds, the net amount
+        run.place_exchange_stop(order.client_order_id, pair, order.position_amount, order.stop)
+        run.check_position_minimums()  # spec 0036 R-2: a position below the minimum halts
     if not run.buying_stopped:
         run.observe_equity()
 

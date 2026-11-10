@@ -58,6 +58,10 @@ uv run python -m crytobot backtest       # veri dosyasıyla backtest koşar, rap
   risk durdurmaları (`DRAWDOWN_HALT`, `DAILY_LOSS_LIMIT`), gerçekleşen alım/satım emir dolumları ve UTC 00:00 gün
   dönümünde performans özet raporu tek yönlü olarak Telegram'a iletilir. Ağ kesintileri ve API hataları botun
   çalışmasını engellemez, bildirimler bellek kuyruğuna alınır.
+- **Canlı depo ve gerçek dolum (spec 0036):** Canlı defter borsanın gerçek dolumunu (ortalama fiyat, komisyon,
+  coinden komisyonda net miktar) yazar. Spec 0036'dan önce açılmış canlı depo `eski canlı depo` diye reddedilir;
+  bot dosyayı silmez, eski dosya kenara alınıp `prepare --live` ile yeniden açılır. Spec 0037 ship edilene kadar
+  Binance'te "komisyonu BNB ile öde" kapalı olmalıdır; açıksa her dolum botu güvenli moda geçirir.
 
 ---
 

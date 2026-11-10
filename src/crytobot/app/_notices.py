@@ -25,6 +25,8 @@ class NoticeKind(Enum):
     DRAWDOWN_HALT = "drawdown_halt"
     DAILY_LOSS_LIMIT = "daily_loss_limit"
     STOP_ORDER_FAILED = "stop_order_failed"
+    UNSUPPORTED_FILL = "unsupported_fill"
+    POSITION_BELOW_MINIMUM = "position_below_minimum"
 
 
 # Absence ends only these: every completed turn evaluates them. Any other state ends with `clear`
@@ -37,6 +39,7 @@ _EVALUATED_EVERY_TURN = frozenset(
         NoticeKind.CLOSE_REFUSED,
         NoticeKind.UNEXPECTED_ERROR,
         NoticeKind.STOP_ORDER_FAILED,  # spec 0034 F-3: derived from the stops every live turn
+        NoticeKind.POSITION_BELOW_MINIMUM,  # spec 0036 R-2: from the positions every live turn
     }
 )
 # about the account, not a pair: evaluated only when the ledger is asked for the equity
@@ -60,11 +63,14 @@ class TurnNotice:
 
 @dataclass
 class TurnMemory:
-    """Süreç belleği: süren durumlar ve "geçmiş değiştirilemez" durdurması (R-6, R-10)."""
+    """Süreç belleği: süren durumlar ve "geçmiş değiştirilemez" durdurması (R-6, R-10).
+    `missing_orders`: önceki turun sorgusunda borsanın "böyle emir yok" dediği emirler (spec 0036
+    R-8, D-5); yeniden başlatma sayımı sıfırlar."""
 
     active: set[tuple[NoticeKind, str]] = field(default_factory=set)
     history_halted: bool = False
     retry_after: float | None = None
+    missing_orders: set[str] = field(default_factory=set)
 
 
 class Notices:

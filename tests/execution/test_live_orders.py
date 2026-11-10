@@ -4,10 +4,12 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+import ccxt
 import pytest
 
 from crytobot.execution import (
     EMPTY_EXECUTION,
+    NOT_FOUND_GRACE,
     CloseOrderRequest,
     NotificationKind,
     OrderOutcome,
@@ -65,16 +67,31 @@ APPROVAL = judge()
 CREDS = ExchangeCredentials(api_key="live_key", api_secret="live_secret", testnet=False)
 
 
-class FakeRequestTimeout(Exception):
+# spec 0036 plan Risk 6: R-7 classifies by ccxt class, so the fakes are real ccxt subclasses
+class FakeRequestTimeout(ccxt.RequestTimeout):  # type: ignore[misc]
     pass
 
 
-class FakeRateLimitExceeded(Exception):
+class FakeRateLimitExceeded(ccxt.RateLimitExceeded):  # type: ignore[misc]
     pass
 
 
-class FakeInsufficientFunds(Exception):
+class FakeInsufficientFunds(ccxt.InsufficientFunds):  # type: ignore[misc]
     pass
+
+
+def full_fill(order_id: str, amount: object, price: str = "100.1") -> dict[str, Any]:
+    """Spec 0036: borsanın tam dolum yanıtı (dolan, ortalama, ödenen, USDT komisyonu)."""
+    filled = Decimal(str(amount))
+    cost = filled * Decimal(price)
+    return {
+        "status": "closed",
+        "id": order_id,
+        "filled": str(filled),
+        "average": price,
+        "cost": str(cost),
+        "fee": {"cost": str(cost * Decimal("0.001")), "currency": "USDT"},
+    }
 
 
 class FakeCcxtExchange:
@@ -89,6 +106,7 @@ class FakeCcxtExchange:
         error_body: str | None = None,
     ) -> None:
         self.create_order_result = create_order_result or {"status": "closed", "id": "12345"}
+        self.fill_id: str | None = None  # spec 0036: answers with a full fill of the sent amount
         self.create_order_error = create_order_error
         self.fetch_order_result = fetch_order_result
         self.fetch_order_error = fetch_order_error
@@ -106,6 +124,8 @@ class FakeCcxtExchange:
             self.on_rest_response(self.status_code, "OK", "", "POST", headers, self.error_body)
         if self.create_order_error is not None:
             raise self.create_order_error
+        if self.fill_id is not None:
+            return full_fill(self.fill_id, amount)
         return self.create_order_result
 
     def fetch_order(
@@ -153,6 +173,7 @@ def test_place_market_buy_order_filled() -> None:
     """AC-5: Canlı piyasa alım emri cb- kimliğiyle iletilir; dolum ve ret doğru işlenir."""
     # 1. Başarılı dolum (FILLED)
     fake_filled = FakeCcxtExchange(create_order_result={"status": "closed", "id": "101"})
+    fake_filled.fill_id = "101"  # spec 0036 R-1: a fill carries the exchange's fill
     client = BinanceLiveClient(CREDS, exchange=fake_filled)
     live_venue = LiveExchange(client)
 
@@ -191,6 +212,7 @@ def test_place_market_close_order_filled() -> None:
     """AC-6: Canlı piyasa kapanış emri cx- kimliğiyle iletilir; dolum ve ret doğru işlenir."""
     # 1. Başarılı dolum
     fake_filled = FakeCcxtExchange(create_order_result={"status": "closed", "id": "201"})
+    fake_filled.fill_id = "201"  # spec 0036 R-4: a fill carries the exchange's fill
     client = BinanceLiveClient(CREDS, exchange=fake_filled)
     live_venue = LiveExchange(client)
 
@@ -280,11 +302,13 @@ def test_query_order_resolves_filled_or_rejected() -> None:
     assert initial.state.unknown
 
     # 1. Borsa emrin dolduğunu doğrular -> FILLED, güvenli mod biter
-    fake_resolved_fill = FakeCcxtExchange(fetch_order_result={"status": "closed", "id": "101"})
+    # spec 0036 R-9: the reply carries the real fill; the buy's net amount needs the step
+    assert initial.order is not None
+    fake_resolved_fill = FakeCcxtExchange(fetch_order_result=full_fill("101", initial.order.amount))
     client_res = BinanceLiveClient(CREDS, exchange=fake_resolved_fill)
     venue_res = LiveExchange(client_res)
 
-    q_res = query_order(initial.state, "cb-s1-btc-0001", venue_res, NOW)
+    q_res = query_order(initial.state, "cb-s1-btc-0001", venue_res, NOW, step=Decimal("0.001"))
     assert q_res.outcome is QueryOutcome.UPDATED
     assert q_res.order is not None
     assert q_res.order.status is OrderStatus.FILLED
@@ -300,7 +324,10 @@ def test_query_order_resolves_filled_or_rejected() -> None:
     client_none = BinanceLiveClient(CREDS, exchange=fake_not_exist)
     venue_none = LiveExchange(client_none)
 
-    q_rej = query_order(initial.state, "cb-s1-btc-0001", venue_none, NOW)
+    # spec 0036 R-8: "no such order" refuses only 5 minutes after placing and on a repeated answer
+    q_rej = query_order(
+        initial.state, "cb-s1-btc-0001", venue_none, NOW + NOT_FOUND_GRACE, missing_seen=True
+    )
     assert q_rej.outcome is QueryOutcome.UPDATED
     assert q_rej.order is not None
     assert q_rej.order.status is OrderStatus.REJECTED
@@ -336,11 +363,11 @@ def test_query_order_resolves_filled_or_rejected() -> None:
     assert q_leak.state.unknown
 
 
-class FakeOrderNotFound(Exception):
+class FakeOrderNotFound(ccxt.OrderNotFound):  # type: ignore[misc]
     pass
 
 
-class FakeOperationFailed(Exception):
+class FakeOperationFailed(ccxt.OperationFailed):  # type: ignore[misc]
     pass
 
 
