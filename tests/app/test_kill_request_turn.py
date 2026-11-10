@@ -174,3 +174,34 @@ def test_no_request_changes_nothing(tmp_path: Path) -> None:
     result = turn(path, "paper", {BTC: pair_market(), ETH: pair_market(closes=FLAT)}, NOW)
     assert len(result.buys) == 1
     assert not stored_kill_switch(path, "paper")
+
+
+def test_refused_save_keeps_the_kill_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Plan 0035 adım 4, VERIFY round 1 F-1: kill kaydı reddedilirse (eski yazım) istek silinmez;
+    tur SAVE_REFUSED biter, alım yok; kayıt yeniden çalışınca sonraki tur isteği işler."""
+    from crytobot.persistence import StoreOutcome, StoreResult
+
+    path = store_for(tmp_path, "paper")
+    request = Request(True)
+    monkeypatch.setattr(
+        "crytobot.app._session.save_store",
+        lambda *a, **k: StoreResult(StoreOutcome.STALE_WRITE, None, (), "eski yazım"),
+    )
+
+    refused = turn(path, "paper", {BTC: pair_market()}, NOW, kill_request=request.as_request())
+
+    assert refused.outcome is TurnOutcome.SAVE_REFUSED
+    assert request.consumed == 0
+    assert refused.buys == ()
+    assert not stored_kill_switch(path, "paper")
+
+    monkeypatch.undo()  # the store accepts writes again
+    later = turn(
+        path, "paper", {BTC: pair_market(closed_at=T1)}, T1, kill_request=request.as_request()
+    )
+
+    assert request.consumed == 1
+    assert stored_kill_switch(path, "paper")
+    assert later.buys == ()
