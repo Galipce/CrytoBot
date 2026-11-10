@@ -28,26 +28,24 @@ NOW = datetime(2026, 11, 9, 20, 0, tzinfo=UTC)
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE = ROOT / "crytobot.example.toml"
 
-SAMPLE_REPORT_TEXT = """== örneklem dışı — BR-10 kanıtı adayı ==
-turlar: 2 (ilk 2026-01-02T00:00:00+00:00, son 2026-01-02T01:00:00+00:00)
-başlangıç kasası: 999.90000000 USDT
-bitiş kasası: 1009.79000000 USDT
+SAMPLE_REPORT_TEXT = """CrytoBot backtest raporu
+dönem: 2026-01-01T00:00:00+00:00 .. 2026-01-03T00:00:00+00:00
+mum aralığı: 1h
+tur aralığı: 1h
+ayrım anı: 2026-01-02T00:00:00+00:00
+çiftler: BTC/USDT, ETH/USDT
+indirme anı: 2026-02-01T12:30:00+00:00
+ısınma mumu (candle_count): 200
+spread: 0.0005
+strateji: fast=12 slow=26 rsi=14 rsi_threshold=70 atr=14 k=2 r=2
+
+== örneklem dışı — BR-10 kanıtı adayı ==
 net kâr/zarar: 9.89000000 USDT (getiri %0.9891)
-gerçekleşen kâr/zarar: 9.79000000 USDT
-gerçekleşmemiş kâr/zarar: 0.10000000 USDT
 işlem: 1 (kazanan 1, zararlı 0)
-kazanma oranı: %100.0000
 kâr faktörü: tanımsız
 en büyük drawdown: %0.0109
-ortalama günlük getiri: %0.9891
-ödenen komisyon: 0.11000000 USDT
-ödenen slippage: 0.11000000 USDT
-günlük zarar durdurmalı gün: 0
-drawdown durdurması: yok
-fiyatı ya da verisi eksik tur (çift başına): BTC/USDT 0
-öneri yok (nedene göre): yok
-ret (nedene göre): yok
-gönderilmeyen durum bildirimi (türe göre): yok
+
+== tüm koşu ==
 """
 
 
