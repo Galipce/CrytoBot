@@ -3,6 +3,7 @@
 import json
 import re
 import threading
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any, Final
 
@@ -55,6 +56,30 @@ def _venue_code(body: object) -> object:
     except (ValueError, RecursionError):
         return None
     return parsed.get("code") if isinstance(parsed, dict) else None
+
+
+@dataclass(frozen=True)
+class AssetBalance:
+    """Spec 0037 R-5: bir varlığın borsadaki serbest ve toplam (serbest + emirde bekleyen)
+    miktarı."""
+
+    free: Decimal
+    total: Decimal
+
+
+def _balance_number(value: object) -> Decimal:
+    """Bakiye sayısı; yoksa sıfır, sayı değilse ya da negatifse `LiveExchangeCallError`."""
+    if value is None:
+        return Decimal(0)
+    if isinstance(value, bool) or not isinstance(value, str | int | float | Decimal):
+        raise LiveExchangeCallError("Geçersiz bakiye formatı")
+    try:
+        number = Decimal(repr(value)) if isinstance(value, float) else Decimal(value)
+    except (InvalidOperation, ValueError):
+        raise LiveExchangeCallError("Geçersiz bakiye formatı") from None
+    if not number.is_finite() or number < 0:
+        raise LiveExchangeCallError("Geçersiz bakiye formatı")
+    return number
 
 
 class PermissionForbiddenError(ExecutionError):
@@ -356,6 +381,52 @@ class BinanceLiveClient:
         if not isinstance(res, list) or not all(isinstance(t, dict) for t in res):
             raise LiveExchangeCallError("Geçersiz işlem listesi", is_unknown=True)
         return res
+
+    def fetch_balances(self) -> dict[str, AssetBalance]:
+        """Spec 0037 R-5 (plan Risk 8): tek `fetch_balance` çağrısıyla her varlığın serbest ve
+        toplam miktarı. Toplam, ccxt'nin `total`'ıdır (serbest + emirde bekleyen); bildirilmezse
+        serbest + `used`. Bozuk yanıt `LiveExchangeCallError`'dır."""
+        self._reset_seen()
+        try:
+            res = self._exchange.fetch_balance()
+        except Exception as err:
+            raise self._handle_call_error(err) from None
+        if not isinstance(res, dict):
+            raise LiveExchangeCallError("Geçersiz bakiye yanıtı")
+        free_map, used_map, total_map = (res.get(key) for key in ("free", "used", "total"))
+        if not all(isinstance(m, dict | None) for m in (free_map, used_map, total_map)):
+            raise LiveExchangeCallError("Geçersiz bakiye yanıtı")
+        assets = {*(free_map or {}), *(total_map or {})}
+        found: dict[str, AssetBalance] = {}
+        for asset in sorted(a for a in assets if isinstance(a, str)):
+            free = _balance_number((free_map or {}).get(asset))
+            total_raw = (total_map or {}).get(asset)
+            if total_raw is None:
+                total = free + _balance_number((used_map or {}).get(asset))
+            else:
+                total = _balance_number(total_raw)
+            found[asset] = AssetBalance(free, total)
+        return found
+
+    def fetch_last_price(self, symbol: str) -> Decimal | None:
+        """Spec 0037 R-4 (G-9; plan Risk 9): çiftin son fiyatı. Çift borsanın piyasalarında yoksa
+        `None`; sorgu hatası `LiveExchangeCallError`, ban `BannedError`'dır."""
+        self._reset_seen()
+        try:
+            markets = self._exchange.load_markets()
+            if not isinstance(markets, dict) or symbol not in markets:
+                return None
+            ticker = self._exchange.fetch_ticker(symbol)
+        except Exception as err:
+            raise self._handle_call_error(err) from None
+        last = ticker.get("last") if isinstance(ticker, dict) else None
+        if isinstance(last, bool) or not isinstance(last, str | int | float | Decimal):
+            return None
+        try:
+            price = Decimal(repr(last)) if isinstance(last, float) else Decimal(last)
+        except (InvalidOperation, ValueError):
+            return None
+        return price if price.is_finite() and price > 0 else None
 
     def fetch_free_balance(self, asset: str = "USDT") -> Decimal:
         """Borsadan ilgili varlığın serbest (free) bakiyesini çeker."""
