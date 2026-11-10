@@ -1,14 +1,19 @@
-"""Canlı borsa adaptörü: emirleri ve sorguları ccxt istemcisine iletir (spec 0032, 0034)."""
+"""Canlı borsa adaptörü: emirleri ve sorguları ccxt istemcisine iletir (spec 0032, 0034, 0036)."""
 
 from dataclasses import dataclass
 from decimal import Decimal
+from types import MappingProxyType
 from typing import Any
 
+from crytobot.execution._fills import LiveReply, fee_entries
 from crytobot.execution._live_client import (
     BinanceLiveClient,
     LiveExchangeCallError,
 )
 from crytobot.execution._paper import OrderStatus
+
+_FILLED_STATUSES = ("closed", "filled")
+_ENDED_STATUSES = ("canceled", "cancelled", "expired", "rejected")
 
 
 def _is_stop_order(client_order_id: str) -> bool:
@@ -52,25 +57,64 @@ class LiveExchange:
         side: str = "",
         amount: object = None,
     ) -> OrderStatus:
-        """Piyasa emrini borsaya iletir (R-5, R-6)."""
+        """Piyasa emrini borsaya iletir (R-5, R-6); yalnız ham durum. Emir yolu `place_market`'i
+        kullanır: dolum bilgisi olmadan durum deftere yazılamaz (spec 0036 R-1)."""
+        return self.place_market(client_order_id, symbol=symbol, side=side, amount=amount).status
+
+    def place_market(
+        self,
+        client_order_id: str,
+        symbol: str = "",
+        side: str = "",
+        amount: object = None,
+    ) -> LiveReply:
+        """Spec 0036 R-1, R-7: piyasa emri ve borsanın dolum yanıtı. Yalnız kesin ret `REJECTED`;
+        ağ hatası, zaman aşımı ve tanınmayan her hata `UNKNOWN`."""
+        amt_str = str(amount) if isinstance(amount, (Decimal, float, int, str)) else ""
         try:
-            amt_str = str(amount) if isinstance(amount, (Decimal, float, int, str)) else ""
             res = self.client.place_market_order(
                 symbol=symbol,
                 side=side,
                 amount=amt_str,
                 client_order_id=client_order_id,
             )
-            raw_status = res.get("status") if isinstance(res, dict) else ""
-            if raw_status in ("closed", "filled"):
-                return OrderStatus.FILLED
-            if raw_status in ("canceled", "cancelled", "expired", "rejected"):
-                return OrderStatus.REJECTED
-            return OrderStatus.UNKNOWN
         except LiveExchangeCallError as err:
-            if err.is_unknown:
-                return OrderStatus.UNKNOWN
-            return OrderStatus.REJECTED
+            return LiveReply(OrderStatus.UNKNOWN if err.is_unknown else OrderStatus.REJECTED)
+        return self._reply(res, symbol)
+
+    def query_fill(self, client_order_id: str, symbol: str = "") -> LiveReply:
+        """Spec 0036 R-8, R-9: durumu bilinmeyen alım ya da kapanış emrinin yanıtı. Borsa "emir
+        yok" derse `missing`; sorgu hatası emir hakkında bir şey söylemez, `UNKNOWN` kalır."""
+        try:
+            res = self.fetch_order(client_order_id, symbol=symbol)
+        except LiveExchangeCallError:
+            return LiveReply(OrderStatus.UNKNOWN)
+        if res is None:
+            return LiveReply(OrderStatus.UNKNOWN, missing=True)
+        return self._reply(res, symbol)
+
+    def _reply(self, res: object, symbol: str) -> LiveReply:
+        """Ham yanıt → `LiveReply`. Yanıtta komisyon yoksa emrin işlemleri sorulur (plan 0036
+        Risk 2); dolan emir kayda geçmeden önce bu çağrının hiçbir hatası dışarı çıkmaz
+        (spec 0034 F-4)."""
+        if not isinstance(res, dict):
+            return LiveReply(OrderStatus.UNKNOWN)
+        raw_status = res.get("status")
+        if raw_status in _FILLED_STATUSES:
+            status = OrderStatus.FILLED
+        elif raw_status in _ENDED_STATUSES:
+            status = OrderStatus.REJECTED
+        else:
+            return LiveReply(OrderStatus.UNKNOWN, MappingProxyType(dict(res)))
+        trades: tuple[dict[str, Any], ...] | None = None
+        order_id = res.get("id")
+        wanted = status is OrderStatus.FILLED and fee_entries(res) is None
+        if wanted and isinstance(order_id, str) and order_id:
+            try:
+                trades = tuple(self.client.fetch_order_trades(symbol, order_id))
+            except Exception:  # the fill must reach the store first (spec 0034 F-4)
+                trades = None
+        return LiveReply(status, MappingProxyType(dict(res)), trades)
 
     def place_stop_order(
         self,

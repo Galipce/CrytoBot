@@ -327,6 +327,7 @@ lives in [`prompts/recovery/README.md`](../prompts/recovery/README.md).
 ## E — Application commands (CrytoBot CLI)
 
 - `python -m crytobot prepare` — paper deposunu açılış bakiyesiyle oluşturur.
+- `python -m crytobot prepare --live` — canlı depoyu borsanın serbest USDT bakiyesiyle oluşturur (spec 0033). Depo varsa hiçbir şey yazmaz. Spec 0036'dan önce açılmış (gerçek dolum bilgisi taşımayan) canlı depoyu `start --live`, `status` ve diğer komutlar `eski canlı depo` diye reddeder: bot dosyayı silmez; eski dosya kenara alınıp `prepare --live` ile yeniden açılır. İşletim notu (spec 0036 G-3): spec 0037 ship edilene kadar Binance hesabında "komisyonu BNB ile öde" kapalı olmalıdır; açıksa her dolum güvenli moda geçirir (`UNSUPPORTED_FILL`).
 - `python -m crytobot start` — BR-10 aşama onayı ve geçerli backtest raporuyla kanıtlı başlatma. Yapılandırmada `[reporting.telegram]` etkinse (`enabled = true`, bot token ve chat id tanımlı) döngü süresince anlık işlem dolumları, risk durdurma halleri ve UTC 00:00 günlük özet raporu Telegram üzerinden bildirilir; yapılandırma eksik veya kapalıysa bildirimsiz çalışır.
 - `python -m crytobot start --trial` — BR-10 kapısını atlar; deneme işaretiyle (`TRIAL_MARK`) başlatır.
 - `python -m crytobot download` — geçmiş veriyi indirir (`[history]`).

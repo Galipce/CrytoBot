@@ -3,11 +3,12 @@
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, DecimalException, localcontext
 from enum import Enum
 from types import MappingProxyType
 
+from crytobot.execution._fills import ExchangeFill, Settled, settle_reply
 from crytobot.execution._live import LiveExchange
 from crytobot.execution._numbers import (
     BOUNDED,
@@ -30,6 +31,8 @@ CLIENT_ID_PREFIX = "cb-"
 STOP_ID_PREFIX = "cs-"
 # ASCII only: exchanges accept at most 36 of [A-Za-z0-9_-] in a client order id (R-6)
 _INTENT_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
+# spec 0036 R-8: "no such order" refuses a buy or close only this long after it was placed; fixed
+NOT_FOUND_GRACE = timedelta(minutes=5)
 
 
 def stop_client_id(position_id: str) -> str:
@@ -72,7 +75,11 @@ class OrderOutcome(Enum):
 
 @dataclass(frozen=True)
 class Order:
-    """Emir kaydı (R-8); dolum fiyatı ve komisyon yalnızca `FILLED` iken dolu."""
+    """Emir kaydı (R-8); dolum fiyatı ve komisyon yalnızca `FILLED` iken dolu.
+
+    Spec 0036: canlı dolumda `fill_price` ve `fee` borsanın gerçek dolumudur (fee: USDT karşılığı,
+    plan Risk 1); `filled` dolan, `net` pozisyona giren miktar, `commission` ve `commission_asset`
+    borsanın kestiği komisyon, `dust` toz. Paper'da ve dolmamış emirde bu beşi `None`'dır."""
 
     client_order_id: str
     intent_id: str
@@ -86,12 +93,24 @@ class Order:
     fill_price: Decimal | None
     fee: Decimal | None
     created_at: datetime
+    filled: Decimal | None = None
+    net: Decimal | None = None
+    commission: Decimal | None = None
+    commission_asset: str | None = None
+    dust: Decimal | None = None
+
+    @property
+    def position_amount(self) -> Decimal:
+        """Defterdeki karşılığın miktarı (spec 0036 R-2, D-3): canlıda net, paper'da emrin
+        miktarı."""
+        return self.amount if self.net is None else self.net
 
 
 @dataclass(frozen=True)
 class CloseOrder:
     """Kapanış emri kaydı (spec 0009 R-10): yön `sell`; stop ve hedef yerine kapatılan pozisyonun
-    kimliği ve kapanış nedeni. Dolum fiyatı ve komisyon yalnızca `FILLED` iken dolu."""
+    kimliği ve kapanış nedeni. Dolum fiyatı ve komisyon yalnızca `FILLED` iken dolu; canlı
+    dolumun alanları `Order`'daki gibidir (spec 0036)."""
 
     client_order_id: str
     position_id: str
@@ -103,6 +122,17 @@ class CloseOrder:
     fill_price: Decimal | None
     fee: Decimal | None
     created_at: datetime
+    filled: Decimal | None = None
+    net: Decimal | None = None
+    commission: Decimal | None = None
+    commission_asset: str | None = None
+    dust: Decimal | None = None
+
+    @property
+    def position_amount(self) -> Decimal:
+        """Defterdeki karşılığın miktarı (spec 0036 R-2, D-3): canlıda net, paper'da emrin
+        miktarı."""
+        return self.amount if self.net is None else self.net
 
 
 @dataclass(frozen=True)
@@ -141,13 +171,15 @@ class Notification:
 
 @dataclass(frozen=True)
 class OrderResult:
-    """İstek sonrası durum; emir oluşmadıysa durum istekten öncekiyle aynıdır."""
+    """İstek sonrası durum; emir oluşmadıysa durum istekten öncekiyle aynıdır. `unsupported`:
+    henüz desteklenmeyen dolumun nedeni (spec 0036 R-5); emir `UNKNOWN` kalır."""
 
     state: ExecutionState
     outcome: OrderOutcome
     order: Order | None
     message: str
     notifications: tuple[Notification, ...] = ()
+    unsupported: str | None = None
 
     @property
     def created(self) -> bool:
@@ -163,13 +195,17 @@ class QueryOutcome(Enum):
 
 @dataclass(frozen=True)
 class QueryResult:
-    """Sorgu sonrası durum; yalnızca `UPDATED` durumu değiştirir."""
+    """Sorgu sonrası durum; yalnızca `UPDATED` durumu değiştirir. Canlıda `not_found`: borsa bu
+    sorguda "böyle emir yok" dedi (spec 0036 R-8; çağıran gözlemi sonraki tura taşır);
+    `unsupported`: henüz desteklenmeyen dolumun nedeni (R-5)."""
 
     state: ExecutionState
     outcome: QueryOutcome
     order: Order | CloseOrder | None
     message: str
     notifications: tuple[Notification, ...] = ()
+    not_found: bool = False
+    unsupported: str | None = None
 
 
 @dataclass(frozen=True)
@@ -418,13 +454,16 @@ def place_order(
             f"borsa kuralı: tutar {_brief(notional)} (miktar {_brief(amount)} * dolum fiyatı"
             f" {_brief(fill)}) asgari tutarın ({_brief(checked.min_notional)}) altında",
         )
+    settled: Settled | None = None
     if isinstance(exchange, LiveExchange):
-        status = exchange.place(
+        reply = exchange.place_market(
             client_order_id,
             symbol=checked.pair,
             side=checked.side,
             amount=amount,
         )
+        settled = settle_reply(reply, side=BUY, pair=checked.pair, amount=amount, step=checked.step)
+        status = settled.status
     else:
         status = exchange.place(client_order_id)
     filled = status is OrderStatus.FILLED
@@ -442,6 +481,9 @@ def place_order(
         fee if filled else None,
         now,
     )
+    if filled and settled is not None and settled.fill is not None:  # the real fill (R-1)
+        order = with_exchange_fill(order, settled.fill)
+        fill = settled.fill.price if settled.fill.price is not None else fill
     orders = dict(state.orders)
     orders[client_order_id] = order
     quotes = dict(state.quotes)
@@ -458,6 +500,21 @@ def place_order(
         f"{_show(pair)}: {client_order_id} {status.value}: miktar {_brief(amount)}"
         + (f", dolum fiyatı {_brief(fill)}" if filled else ""),
         notifications,
+        None if settled is None else settled.unsupported,
+    )
+
+
+def with_exchange_fill[T: Order | CloseOrder](order: T, fill: ExchangeFill) -> T:
+    """Spec 0036 R-1, R-9: dolan emrin kaydına borsanın gerçek dolumu yazılır."""
+    return replace(
+        order,
+        fill_price=fill.price,
+        fee=fill.fee,
+        filled=fill.filled,
+        net=fill.net,
+        commission=fill.commission,
+        commission_asset=fill.commission_asset,
+        dust=fill.dust,
     )
 
 
@@ -513,6 +570,37 @@ def _close_problem(order: CloseOrder) -> str | None:
     return None
 
 
+def _exchange_fill_problem(order: Order | CloseOrder) -> str | None:
+    """Spec 0036: borsa dolumunun alanları ya hiç yok ya da dolu emirde hepsi geçerli; net dolan
+    miktarı aşmaz, satışta coin komisyonu yoktur (R-4)."""
+    if (  # the paper path, once per stored order: kept cheap (spec 0011 R-11)
+        order.filled is None
+        and order.net is None
+        and order.commission is None
+        and order.commission_asset is None
+        and order.dust is None
+    ):
+        return None
+    if order.status is not OrderStatus.FILLED:
+        return "dolmamış emirde borsa dolumu var"
+    filled, net, commission, dust = order.filled, order.net, order.commission, order.dust
+    if not (
+        _valid_number(filled, digits=DIGITS)
+        and _valid_number(net, digits=DIGITS)
+        and _valid_number(commission, zero=True, digits=CALC_DIGITS)
+        and _valid_number(dust, zero=True, digits=CALC_DIGITS)
+        and type(order.commission_asset) is str
+        and order.commission_asset
+    ):
+        return "borsa dolumu geçersiz"
+    assert isinstance(filled, Decimal) and isinstance(net, Decimal)  # checked above
+    if net > filled or filled != order.amount:
+        return "borsa dolumunun miktarı emirle uyuşmuyor"
+    if isinstance(order, CloseOrder) and net != filled:
+        return "kapanışın net miktarı dolan miktar değil"
+    return None
+
+
 def _order_problem(key: object, order: object) -> str | None:
     """Tek emrin sorunu; yalnız sabit metin, ham girdi mesaja girmez (spec 0011 R-10)."""
     if isinstance(order, Order):
@@ -536,6 +624,9 @@ def _order_problem(key: object, order: object) -> str | None:
             return "dolu emrin dolum fiyatı ya da komisyonu geçersiz"
     elif order.fill_price is not None or order.fee is not None:
         return "dolmamış emirde dolum var"
+    problem = _exchange_fill_problem(order)
+    if problem is not None:
+        return problem
     created = order.created_at
     if not (isinstance(created, datetime) and created.utcoffset() is not None):
         return "oluşturma zamanı zaman dilimi taşımalı"
@@ -577,11 +668,62 @@ def _notify(
     )
 
 
+def _query_live(
+    state: ExecutionState,
+    order: Order | CloseOrder,
+    exchange: LiveExchange,
+    now: datetime,
+    step: Decimal | None,
+    missing_seen: bool,
+) -> QueryResult | tuple[OrderStatus, ExchangeFill | None]:
+    """Spec 0036 R-8, R-9: canlı sorgunun durumu ve gerçek dolumu ya da değişmeyen sonuç."""
+    reply = exchange.query_fill(order.client_order_id, symbol=order.pair)
+    if reply.missing:
+        if missing_seen and now - order.created_at >= NOT_FOUND_GRACE:
+            return OrderStatus.REJECTED, None
+        return QueryResult(
+            state,
+            QueryOutcome.UNCHANGED,
+            order,
+            f"{order.pair}: {order.client_order_id} borsada bulunamadı; durumu hâlâ bilinmiyor",
+            not_found=True,
+        )
+    is_buy = isinstance(order, Order)
+    settled = settle_reply(
+        reply,
+        side=BUY if is_buy else "sell",
+        pair=order.pair,
+        amount=order.amount,
+        step=step if is_buy else None,
+    )
+    if settled.status is OrderStatus.UNKNOWN:
+        detail = settled.unsupported or settled.problem or "durumu hâlâ bilinmiyor"
+        return QueryResult(
+            state,
+            QueryOutcome.UNCHANGED,
+            order,
+            f"{order.pair}: {order.client_order_id} {detail}",
+            unsupported=settled.unsupported,
+        )
+    return settled.status, settled.fill
+
+
 def query_order(
-    state: ExecutionState, client_order_id: object, exchange: Exchange, now: object
+    state: ExecutionState,
+    client_order_id: object,
+    exchange: Exchange,
+    now: object,
+    *,
+    step: Decimal | None = None,
+    missing_seen: bool = False,
 ) -> QueryResult:
     """R-9: durumu bilinmeyen emrin durumunu simülatörden veya borsadan sorar; son bilinmeyen emir
-    netleşince güvenli mod biter ve bir çıkış bildirimi üretilir."""
+    netleşince güvenli mod biter ve bir çıkış bildirimi üretilir.
+
+    Canlıda (spec 0036): dolan emre borsanın gerçek dolumu yazılır, kayıtlı tahmin değil (R-9,
+    D-1); alımın net miktarı için çiftin miktar adımı `step` gerekir. "Emir yok" yanıtı emri yalnız
+    verilişinden `NOT_FOUND_GRACE` sonra ve önceki turda da aynı yanıt alındıysa (`missing_seen`)
+    reddeder (R-8)."""
     if not isinstance(now, datetime) or now.utcoffset() is None:
         return QueryResult(
             state,
@@ -610,9 +752,12 @@ def query_order(
             f"geçersiz girdi: {order.client_order_id} için dolum tahmini yok",
         )
     if isinstance(exchange, LiveExchange):
-        status = exchange.query(order.client_order_id, symbol=order.pair)
+        live = _query_live(state, order, exchange, now, step, missing_seen)
+        if isinstance(live, QueryResult):
+            return live
+        status, exchange_fill = live
     else:
-        status = exchange.query(order.client_order_id)
+        status, exchange_fill = exchange.query(order.client_order_id), None
     if status is OrderStatus.UNKNOWN:
         return QueryResult(
             state,
@@ -625,6 +770,8 @@ def query_order(
     resolved = replace(
         order, status=status, fill_price=fill if filled else None, fee=fee if filled else None
     )
+    if exchange_fill is not None:
+        resolved = with_exchange_fill(resolved, exchange_fill)
     orders = dict(state.orders)
     orders[order.client_order_id] = resolved
     quotes = dict(state.quotes)

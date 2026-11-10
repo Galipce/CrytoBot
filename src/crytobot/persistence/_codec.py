@@ -3,11 +3,14 @@
 Okuma katıdır: `Decimal("1_000")`, `" 1 "` ya da gevşek bir ISO biçimi geri yazıma uymadığı için
 bozuk sayılır. Satırlar diziler; kapanış pozisyonu kimliğiyle gösterir, alım satırındaki nesneyi
 paylaşır (plan 0011 Risk 5). Bir emir dizisinin son altı alanı iki türde de aynıdır: durum, dolum,
-komisyon, oluşturma zamanı, tahmini dolum, tahmini komisyon.
+komisyon, oluşturma zamanı, tahmini dolum, tahmini komisyon. Canlı dolumun alanları (spec 0036:
+dolan, net, komisyon, komisyon varlığı, toz) yalnız doluysa en sona tek bir dizi olarak eklenir;
+paper satırı bayt bayt eskisi gibidir.
 """
 
 import json
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal, DecimalException
 from types import MappingProxyType
@@ -200,6 +203,22 @@ def _pick[T](known: Mapping[str, T], ids: list[str]) -> dict[str, T]:
     return {_text(i): known[i] for i in ids}
 
 
+def _exchange_fill(order: Order | CloseOrder) -> list[str | None] | None:
+    if order.filled is None and order.net is None and order.commission_asset is None:
+        return None  # validated: the five are set together or not at all
+    extra = (order.filled, order.net, order.commission, order.commission_asset, order.dust)
+    return [_optional_text(value) for value in extra]
+
+
+def _split(row: object) -> tuple[list[Any], list[Any] | None]:
+    """Satır ve (varsa) sondaki canlı dolum dizisi; başka hiçbir alan dizi değildir."""
+    if not isinstance(row, list):
+        raise CodecError
+    if row and isinstance(row[-1], list):
+        return row[:-1], row[-1]
+    return row, None
+
+
 def encode_order(order: Order | CloseOrder, quote: tuple[Decimal, Decimal] | None) -> str:
     tail = [
         order.status.value,
@@ -229,7 +248,8 @@ def encode_order(order: Order | CloseOrder, quote: tuple[Decimal, Decimal] | Non
             str(order.amount),
             order.reason,
         ]
-    return _dumps(head + tail)
+    extra = _exchange_fill(order)
+    return _dumps(head + tail + ([] if extra is None else [extra]))
 
 
 def encode_orders(state: ExecutionState) -> list[str]:
@@ -241,7 +261,7 @@ def decode_orders(rows: Iterable[object]) -> ExecutionState:
     quotes: dict[str, tuple[Decimal, Decimal]] = {}
     try:
         for text in rows:
-            row = _loads(text)
+            row, extra = _split(_loads(text))
             head, (status, fill, fee, created, quote_fill, quote_fee) = row[:-6], row[-6:]
             common = (
                 OrderStatus(status),
@@ -249,6 +269,7 @@ def decode_orders(rows: Iterable[object]) -> ExecutionState:
                 _optional_number(fee),
                 _time(created),
             )
+
             order: Order | CloseOrder
             if head[0] == _BUY_ORDER:
                 _, cid, intent, pair, entry, stop, target, amount = head
@@ -276,6 +297,16 @@ def decode_orders(rows: Iterable[object]) -> ExecutionState:
                 )
             else:
                 raise CodecError
+            if extra is not None:  # spec 0036: the exchange's real fill
+                filled, net, commission, asset, dust = extra
+                order = replace(
+                    order,
+                    filled=_number(filled),
+                    net=_number(net),
+                    commission=_number(commission),
+                    commission_asset=_text(asset),
+                    dust=_number(dust),
+                )
             orders[order.client_order_id] = order
             if quote_fill is not None or quote_fee is not None:
                 quotes[order.client_order_id] = (_number(quote_fill), _number(quote_fee))
@@ -284,17 +315,25 @@ def decode_orders(rows: Iterable[object]) -> ExecutionState:
     return ExecutionState(MappingProxyType(orders), MappingProxyType(quotes))
 
 
-def order_resolution_allowed(stored: str, new: str) -> bool:
-    """R-8: yalnız `bilinmiyor` emir netleşebilir; dolum, kayıtlı tahminin kendisidir."""
+def order_resolution_allowed(stored: str, new: str, mode: str = "paper") -> bool:
+    """R-8: yalnız `bilinmiyor` emir netleşebilir. Paper'da dolum kayıtlı tahminin kendisidir;
+    canlıda borsanın gerçek dolumudur ve tahmine eşit olmak zorunda değildir (spec 0036 R-9, D-1).
+    Dolum değerlerinin geçerliliğini `execution_problems` denetler."""
     try:
-        before, after = _loads(stored), _loads(new)
-        if before[:-6] != after[:-6] or before[-3] != after[-3]:
+        (before, before_fill), (after, after_fill) = _split(_loads(stored)), _split(_loads(new))
+        if before_fill is not None or before[:-6] != after[:-6] or before[-3] != after[-3]:
             return False
         if before[-6] != OrderStatus.UNKNOWN.value or after[-2:] != [None, None]:
             return False
         if after[-6] == OrderStatus.FILLED.value:
-            return bool(after[-5:-3] == before[-2:])
-        return bool(after[-6] == OrderStatus.REJECTED.value and after[-5:-3] == [None, None])
+            if mode == "live":
+                return after_fill is not None and None not in after[-5:-3]
+            return bool(after_fill is None and after[-5:-3] == before[-2:])
+        return bool(
+            after[-6] == OrderStatus.REJECTED.value
+            and after[-5:-3] == [None, None]
+            and after_fill is None
+        )
     except (CodecError, IndexError, KeyError, TypeError):
         return False
 

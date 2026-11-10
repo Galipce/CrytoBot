@@ -10,11 +10,15 @@ from crytobot.app._inputs import PairMarket
 from crytobot.app._notices import NoticeKind
 from crytobot.app._session import TurnRun, buy_fill
 from crytobot.execution import (
+    SELL,
     CloseOrder,
     CloseOrderRequest,
+    ExchangeFill,
+    FillVerdict,
     Order,
     OrderOutcome,
     OrderStatus,
+    judge_fill,
     place_close_order,
     query_order,
     record_stop_fill,
@@ -52,16 +56,41 @@ def _record_close(run: TurnRun, order: CloseOrder) -> Ledger:
     return res.ledger
 
 
+def _step(run: TurnRun, order: Order | CloseOrder) -> Decimal | None:
+    """Canlı alımın net miktarı için çiftin miktar adımı (spec 0036 R-2); yoksa `None`."""
+    if run.state.mode != "live" or not isinstance(order, Order):
+        return None
+    rules = run.rules_of(order.pair)
+    step = None if rules is None else rules.amount_step
+    return step if isinstance(step, Decimal) and step.is_finite() and step > 0 else None
+
+
 def resolve_unknown(run: TurnRun) -> None:
-    """R-17: durumu bilinmeyen emirleri sorar; dolu çıkanı deftere yazar."""
+    """R-17: durumu bilinmeyen emirleri sorar; dolu çıkanı deftere yazar. Spec 0036 R-8: "emir yok"
+    gözlemi süreç belleğinde sonraki tura taşınır; R-5: desteklenmeyen dolum bildirilir."""
+    missing = run.memory.missing_orders
     for client_order_id in run.state.execution.unknown:
         pending = run.state.execution.orders[client_order_id]
         if run.now < pending.created_at:  # the ledger would refuse the fill for good (plan Risk 3)
             continue
-        queried = query_order(run.state.execution, client_order_id, run.exchange, run.now)
+        queried = query_order(
+            run.state.execution,
+            client_order_id,
+            run.exchange,
+            run.now,
+            step=_step(run, pending),
+            missing_seen=client_order_id in missing,
+        )
+        if queried.not_found:
+            missing.add(client_order_id)
+        else:
+            missing.discard(client_order_id)
+        if queried.unsupported is not None:
+            run.unsupported_fill(client_order_id, pending.pair, queried.unsupported)
         order = queried.order
         if queried.state is run.state.execution or order is None:
             continue
+        run.notices.clear(NoticeKind.UNSUPPORTED_FILL, client_order_id)
         ledger = run.state.ledger
         if order.status is OrderStatus.FILLED:
             ledger = (
@@ -74,43 +103,42 @@ def resolve_unknown(run: TurnRun) -> None:
             run.closes.append(order)
 
 
-def _stop_fill_terms(
-    run: TurnRun, stop_id: str, pair: str, stop: Decimal, amount: Decimal
-) -> tuple[Decimal, Decimal]:
-    """Dolan stopun fiyatı ve komisyonu: borsa yanıtından, yoksa stop fiyatı ve ayardaki oran."""
-    fill_price, fee = stop, None
-    fetch_fn = getattr(run.exchange, "fetch_order", None)
-    if callable(fetch_fn):
-        try:
-            raw = fetch_fn(stop_id, symbol=pair)
-        except Exception as error:
-            run.raise_if_banned(error)
-            raw = None
-        if isinstance(raw, dict):
-            avg = raw.get("average") or raw.get("price")
-            if avg is not None:
-                fill_price = Decimal(str(avg))
-            raw_fee = raw.get("fee")
-            if isinstance(raw_fee, dict) and raw_fee.get("cost") is not None:
-                fee = Decimal(str(raw_fee["cost"]))
-    if fee is None:
-        fee = amount * fill_price * run.settings.fee
-    return fill_price, fee
+def _stop_fill(run: TurnRun, stop_id: str, pair: str, amount: Decimal) -> ExchangeFill:
+    """Spec 0036 (plan Risk 3): dolan stopun borsadaki gerçek dolumu; tahmin yedeği yoktur."""
+    query_fn = getattr(run.exchange, "query_fill", None)
+    if not callable(query_fn):
+        return ExchangeFill(FillVerdict.INCOMPLETE, "borsa dolumu sorulamıyor")
+    try:
+        reply = query_fn(stop_id, symbol=pair)
+    except Exception as error:
+        run.raise_if_banned(error)
+        reason = f"dolum sorgusu başarısız ({type(error).__name__})"
+        return ExchangeFill(FillVerdict.INCOMPLETE, reason)
+    order = getattr(reply, "order", None)
+    if getattr(reply, "missing", False) or order is None:
+        return ExchangeFill(FillVerdict.INCOMPLETE, "borsa dolumu bildirmedi")
+    trades = getattr(reply, "trades", None)
+    return judge_fill(order, trades, side=SELL, pair=pair, amount=amount, step=None)
 
 
 def _record_stop_fill(run: TurnRun, subject: str) -> None:
     """Spec 0034 R-6, F-1: dolan borsa stopu defterde kapanış, emir durumunda FILLED `cs-` kapanış
-    emri olarak tek kayıtta yazılır; mutabakat çelişki görmez."""
+    emri olarak tek kayıtta yazılır; mutabakat çelişki görmez. Spec 0036: borsanın gerçek dolumuyla;
+    eksik ya da desteklenmeyen dolum deftere yazılmaz, alım durur."""
     position = run.state.ledger.positions[subject]
     stop_id = stop_client_id(subject)
-    price, fee = _stop_fill_terms(run, stop_id, position.pair, position.stop, position.amount)
+    fill = _stop_fill(run, stop_id, position.pair, position.amount)
+    if fill.verdict is not FillVerdict.COMPLETE or fill.price is None or fill.fee is None:
+        run.stop_failed(subject, f"dolan borsa stopu deftere yazılamadı ({stop_id}): {fill.reason}")
+        return
+    price, fee = fill.price, fill.fee
     close = Close(stop_id, subject, position.amount, price, fee, CloseReason.STOP, run.now)
     res = close_position(run.state.ledger, close)
     if res.closure is None:  # never dropped in silence (F-9)
         run.stop_failed(subject, f"dolan borsa stopu deftere yazılamadı ({stop_id}): {res.message}")
         return
     order, execution = record_stop_fill(
-        run.state.execution, subject, position.pair, position.amount, price, fee, run.now
+        run.state.execution, subject, position.pair, position.amount, fill, run.now
     )
     run.closures.append(res.closure)
     run.save(ledger=res.ledger, execution=execution)
@@ -199,6 +227,8 @@ def _close_one(run: TurnRun, decision: Decision) -> None:
     if order is None:
         run.refuse_close(subject, placed.message)
         return
+    if placed.unsupported is not None:  # spec 0036 R-5: not in the ledger, never retried
+        run.unsupported_fill(order.client_order_id, decision.pair, placed.unsupported)
     if placed.outcome is OrderOutcome.ALREADY_EXISTS:
         # REJECTED cannot be retried under the same id (B-17); FILLED and missing from the ledger
         # stays as it is, or a clean turn would lift the flag (R-7, plan Risk 10)

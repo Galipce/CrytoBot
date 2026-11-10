@@ -19,6 +19,7 @@ from crytobot.app import (
 from crytobot.execution import (
     BannedError,
     LiveExchange,
+    LiveReply,
     OrderStatus,
     PaperExchange,
     stop_client_id,
@@ -26,12 +27,32 @@ from crytobot.execution import (
 from crytobot.persistence import load_store
 from crytobot.portfolio import CloseReason
 from tests.app.helpers import BTC, CROSS, ETH, FLAT, NOW, make_settings, pair_market
+from tests.app.test_live_loop import FillingLiveExchange
 from tests.app.test_live_start import FakeLiveClient
 
 PAIR = BTC
 
 
-class MockLiveExchange(LiveExchange):
+def stop_filled(amount: Decimal, average: str, fee: Decimal | None = None) -> dict[str, Any]:
+    """Spec 0036 (plan Risk 3, 6): borsada dolan stopun tam dolum yanıtı; komisyon USDT'den,
+    verilmezse ayardaki oranla (0.001), eski yedeğin değeriyle aynı."""
+    cost = amount * Decimal(average)
+    return {
+        "status": "closed",
+        "filled": str(amount),
+        "average": average,
+        "cost": str(cost),
+        "fee": {"cost": str(cost * Decimal("0.001") if fee is None else fee), "currency": "USDT"},
+    }
+
+
+def _position_amount(store_path: str) -> Decimal:
+    state = load_store(store_path, "live").state
+    assert state is not None
+    return next(iter(state.ledger.positions.values())).amount
+
+
+class MockLiveExchange(FillingLiveExchange):
     def __init__(
         self,
         free_balance: Decimal = Decimal("1000.00"),
@@ -96,6 +117,11 @@ class MockLiveExchange(LiveExchange):
         if client_order_id.startswith("cs-"):
             return self.stop_query_status
         return OrderStatus.FILLED
+
+    def query_fill(self, client_order_id: str, symbol: str = "") -> LiveReply:
+        if client_order_id.startswith("cs-"):  # the stop's fill comes from `fetch_order`
+            return LiveExchange.query_fill(self, client_order_id, symbol)
+        return super().query_fill(client_order_id, symbol)
 
     def fetch_order(self, client_order_id: str, symbol: str = "") -> dict[str, Any] | None:
         return self.stop_fetch_order
@@ -198,7 +224,7 @@ def test_pre_reconciliation_syncs_filled_exchange_stop(tmp_path: Path) -> None:
     ex_turn2 = MockLiveExchange(
         free_balance=expected_synced_balance,
         stop_query_status=OrderStatus.FILLED,
-        stop_fetch_order={"average": "8.00", "fee": {"cost": fee_cost_str}},
+        stop_fetch_order=stop_filled(pos.amount, "8.00", Decimal(fee_cost_str)),
     )
     notices2: list[TurnNotice] = []
     res2 = _run(
@@ -281,7 +307,7 @@ def test_close_cancels_pending_exchange_stop_before_market_sell(tmp_path: Path) 
     ex_race = MockLiveExchange(
         free_balance=Decimal("9500.00"),
         stop_cancel_status=OrderStatus.FILLED,
-        stop_fetch_order={"average": "8.00"},
+        stop_fetch_order=stop_filled(_position_amount(store_path_race), "8.00"),
     )
     _run(
         store_path=store_path_race,
@@ -382,7 +408,7 @@ def test_filled_exchange_stop_leaves_no_reconciliation_conflict(tmp_path: Path) 
     ex = MockLiveExchange(
         free_balance=_balance(store_path) + proceeds,
         stop_query_status=OrderStatus.FILLED,
-        stop_fetch_order={"average": "8", "fee": {"cost": str(pos.amount * Decimal("0.008"))}},
+        stop_fetch_order=stop_filled(pos.amount, "8", pos.amount * Decimal("0.008")),
     )
     res = _run(
         store_path=store_path,
@@ -405,7 +431,7 @@ def test_stop_filled_during_cancel_leaves_no_conflict(tmp_path: Path) -> None:
     ex = MockLiveExchange(
         free_balance=Decimal("9500.00"),
         stop_cancel_status=OrderStatus.FILLED,
-        stop_fetch_order={"average": "8.00"},
+        stop_fetch_order=stop_filled(_position_amount(store_path), "8.00"),
     )
     _run(
         store_path=store_path,

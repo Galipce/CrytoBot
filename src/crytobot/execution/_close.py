@@ -6,6 +6,7 @@ from datetime import datetime
 from decimal import Decimal, DecimalException, localcontext
 from types import MappingProxyType
 
+from crytobot.execution._fills import ExchangeFill, FillVerdict, Settled, settle_reply
 from crytobot.execution._live import LiveExchange
 from crytobot.execution._numbers import (
     BOUNDED,
@@ -27,6 +28,7 @@ from crytobot.execution._orders import (
     OrderOutcome,
     _notify,
     stop_client_id,
+    with_exchange_fill,
 )
 from crytobot.execution._paper import Exchange, OrderStatus
 from crytobot.risk import CloseApproval, CloseRequest, PairRules, close_request_problems
@@ -51,13 +53,15 @@ class CloseOrderRequest:
 @dataclass(frozen=True)
 class CloseOrderResult:
     """İstek sonrası durum; emir oluşmadıysa durum istekten öncekiyle aynıdır (R-15). Sonuç
-    `OrderOutcome`'dur; kapanış güvenli modda reddedilmediği için `STATUS_UNKNOWN` dönmez (R-11)."""
+    `OrderOutcome`'dur; kapanış güvenli modda reddedilmediği için `STATUS_UNKNOWN` dönmez (R-11).
+    `unsupported`: henüz desteklenmeyen dolumun nedeni (spec 0036 R-5)."""
 
     state: ExecutionState
     outcome: OrderOutcome
     order: CloseOrder | None
     message: str
     notifications: tuple[Notification, ...] = ()
+    unsupported: str | None = None
 
     @property
     def created(self) -> bool:
@@ -230,13 +234,11 @@ def place_close_order(
             f" {_brief(amount)} * dolum fiyatı {_brief(fill)}) asgari tutarın"
             f" ({_brief(numbers['asgari tutar'])}) altında",
         )
-    if isinstance(exchange, LiveExchange):
-        status = exchange.place(
-            client_order_id,
-            symbol=pair,
-            side=SELL,
-            amount=amount,
-        )
+    settled: Settled | None = None
+    if isinstance(exchange, LiveExchange):  # spec 0036 R-4: sells the position's net amount
+        reply = exchange.place_market(client_order_id, symbol=pair, side=SELL, amount=amount)
+        settled = settle_reply(reply, side=SELL, pair=pair, amount=amount, step=None)
+        status = settled.status
     else:
         status = exchange.place(client_order_id)
     filled = status is OrderStatus.FILLED
@@ -252,6 +254,9 @@ def place_close_order(
         fee if filled else None,
         now,
     )
+    if filled and settled is not None and settled.fill is not None:  # the real fill (R-4)
+        order = with_exchange_fill(order, settled.fill)
+        fill = settled.fill.price if settled.fill.price is not None else fill
     orders = {**state.orders, client_order_id: order}
     quotes = dict(state.quotes)
     notifications: tuple[Notification, ...] = ()
@@ -268,6 +273,7 @@ def place_close_order(
         f"{_show(pair)}: {client_order_id} {status.value}: {position_id} satışı, miktar"
         f" {_brief(amount)}" + (f", dolum fiyatı {_brief(fill)}" if filled else ""),
         notifications,
+        None if settled is None else settled.unsupported,
     )
 
 
@@ -276,12 +282,14 @@ def record_stop_fill(
     position_id: str,
     pair: str,
     amount: Decimal,
-    fill_price: Decimal,
-    fee: Decimal,
+    fill: ExchangeFill,
     now: datetime,
 ) -> tuple[CloseOrder, ExecutionState]:
     """Spec 0034 R-6, review round 1 F-1: borsada dolan şartlı stop emri, deftere yazılan kapanışla
-    aynı kimlikle (`cs-`) FILLED kapanış emri olur; mutabakat iki tarafı eşler. Kayıtlıysa aynen."""
+    aynı kimlikle (`cs-`) FILLED kapanış emri olur; mutabakat iki tarafı eşler. Kayıtlıysa aynen.
+    Spec 0036 (plan Risk 3): yalnız yargılanmış tam dolum yazılır, tahmin hiçbir zaman."""
+    if fill.verdict is not FillVerdict.COMPLETE or fill.price is None or fill.fee is None:
+        raise ValueError("borsa stop dolumu tam değil")
     client_order_id = stop_client_id(position_id)
     existing = state.orders.get(client_order_id)
     if isinstance(existing, CloseOrder):
@@ -294,9 +302,10 @@ def record_stop_fill(
         amount,
         "stop",
         OrderStatus.FILLED,
-        fill_price,
-        fee,
-        now,
+        fill.price,
+        fee=fill.fee,
+        created_at=now,
     )
+    order = with_exchange_fill(order, fill)
     orders = {**state.orders, client_order_id: order}
     return order, ExecutionState(MappingProxyType(orders), state.quotes)

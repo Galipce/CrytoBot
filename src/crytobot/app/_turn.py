@@ -27,8 +27,8 @@ def _unexpected(error: Exception, notices: Notices) -> str:
 
 def _trade(run: TurnRun) -> TurnResult:
     """R-1: kill isteği → sorgu → borsa stop senk. → mutabakat → gözlem → kapanış → gözlem →
-    alım → kill isteği. Spec 0035 AC-11: tur sırasında gelen istek turun son kaydından önce
-    işlenir."""
+    asgari altı pozisyon (spec 0036 R-2) → alım → kill isteği. Spec 0035 AC-11: tur sırasında
+    gelen istek turun son kaydından önce işlenir."""
     run.apply_kill_request()
     resolve_unknown(run)
     sync_exchange_stops(run)
@@ -40,6 +40,7 @@ def _trade(run: TurnRun) -> TurnResult:
     run.observe_equity()
     close_positions(run)
     run.observe_equity()
+    run.check_position_minimums()
     buy_pairs(run)
     run.apply_kill_request()
     run.notices.settle()

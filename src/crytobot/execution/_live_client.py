@@ -22,6 +22,39 @@ _HTTP_SERVER_ERRORS: Final = range(500, 600)
 _RETRY_AFTER: Final = re.compile(r"[0-9]{1,6}")
 _BINANCE_ORDER_NOT_EXIST: Final = -2013
 _BINANCE_UNKNOWN_ORDER: Final = -2011
+# Plan 0036 A-1: Binance order validation codes that ccxt raises as `BadRequest` (`-1121`:
+# `BadSymbol`), not `InvalidOrder`: filter failure (NOTIONAL included), bad or missing
+# parameter, precision, order type/side/time-in-force. Refused before the order is accepted.
+_BINANCE_ORDER_REFUSALS: Final = frozenset(
+    {-1013, *range(-1106, -1099), -1111, *range(-1121, -1113)}
+)
+
+
+def is_definite_refusal(err: BaseException, venue_code: object = None) -> bool:
+    """R-7: yalnız yetersiz bakiye, geçersiz emir (filtre dahil) ve yetki hatası kesin rettir;
+    ağ hatası, zaman aşımı, erişilemezlik, bakım, hız sınırı ve tanınmayan her hata değildir.
+    Sınıf `isinstance` ile denetlenir, adla değil. `DuplicateOrderId` ve "emir yok" türleri
+    `InvalidOrder` alt sınıfıdır ama emrin var olup olmadığını söylemez. ccxt'nin `BadRequest`
+    olarak fırlattığı Binance emir doğrulama reddi yalnız yanıt gövdesindeki kodla
+    (`venue_code`) kesin ret sayılır; `BadRequest`'in geri kalanı tanınmayan hatadır."""
+    import ccxt  # lazy: paper and backtest never load ccxt for execution
+
+    refusals = (ccxt.InsufficientFunds, ccxt.InvalidOrder, ccxt.AuthenticationError)
+    undecided = (ccxt.DuplicateOrderId, ccxt.OrderNotFound, ccxt.OrderNotCached)
+    if isinstance(err, ccxt.BadRequest):
+        return type(venue_code) is int and venue_code in _BINANCE_ORDER_REFUSALS
+    return isinstance(err, refusals) and not isinstance(err, undecided)
+
+
+def _venue_code(body: object) -> object:
+    """Binance hata gövdesindeki `code`; gövde JSON nesnesi değilse `None`."""
+    if not isinstance(body, str):
+        return None
+    try:
+        parsed = json.loads(body)
+    except (ValueError, RecursionError):
+        return None
+    return parsed.get("code") if isinstance(parsed, dict) else None
 
 
 class PermissionForbiddenError(ExecutionError):
@@ -185,14 +218,11 @@ class BinanceLiveClient:
         if status == _HTTP_BANNED:
             raise BannedError("Borsa IP/hesap banı (HTTP 418); fail-closed durduruldu") from None
 
-        is_rate_limited = status == _HTTP_TOO_MANY or "RateLimitExceeded" in type(err).__name__
+        # R-7: by ccxt class, never by name; a 5xx or 429 is unknown whatever the class says
         is_unknown = (
             status in _HTTP_SERVER_ERRORS
-            or is_rate_limited
-            or any(
-                name in type(err).__name__
-                for name in ("NetworkError", "RequestTimeout", "OperationFailed")
-            )
+            or status == _HTTP_TOO_MANY
+            or not is_definite_refusal(err, _venue_code(getattr(self._seen, "body", None)))
         )
         safe_msg = redact_secrets(str(err), self._credentials)
         return LiveExchangeCallError(
@@ -314,6 +344,18 @@ class BinanceLiveClient:
             if code == _BINANCE_ORDER_NOT_EXIST or "OrderNotFound" in type(err).__name__:
                 return None
             raise self._handle_call_error(err) from None
+
+    def fetch_order_trades(self, symbol: str, order_id: str) -> list[dict[str, Any]]:
+        """Plan 0036 Risk 2: emrin borsa işlemleri (`myTrades`, `orderId`); emir sorgusu
+        komisyonu vermez, işlemler verir."""
+        self._reset_seen()
+        try:
+            res = self._exchange.fetch_my_trades(symbol, params={"orderId": order_id})
+        except Exception as err:
+            raise self._handle_call_error(err) from None
+        if not isinstance(res, list) or not all(isinstance(t, dict) for t in res):
+            raise LiveExchangeCallError("Geçersiz işlem listesi", is_unknown=True)
+        return res
 
     def fetch_free_balance(self, asset: str = "USDT") -> Decimal:
         """Borsadan ilgili varlığın serbest (free) bakiyesini çeker."""

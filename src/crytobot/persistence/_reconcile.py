@@ -18,7 +18,9 @@ def conflicts(ledger: Ledger, execution: ExecutionState) -> tuple[str, ...]:
     for cid, order in execution.orders.items():
         if order.status is not OrderStatus.FILLED:
             continue
-        if _ledger_side(bought, closures, order) != (order.amount, order.fill_price, order.fee):
+        # spec 0036 D-3, R-10: a live fill is matched by its net amount
+        expected = (order.position_amount, order.fill_price, order.fee)
+        if _ledger_side(bought, closures, order) != expected:
             found[cid] = None
     for cid in bought:
         if not _filled(execution, cid, Order):
