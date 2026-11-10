@@ -26,6 +26,7 @@ from crytobot.execution._orders import (
     NotificationKind,
     OrderOutcome,
     _notify,
+    stop_client_id,
 )
 from crytobot.execution._paper import Exchange, OrderStatus
 from crytobot.risk import CloseApproval, CloseRequest, PairRules, close_request_problems
@@ -268,3 +269,34 @@ def place_close_order(
         f" {_brief(amount)}" + (f", dolum fiyatı {_brief(fill)}" if filled else ""),
         notifications,
     )
+
+
+def record_stop_fill(
+    state: ExecutionState,
+    position_id: str,
+    pair: str,
+    amount: Decimal,
+    fill_price: Decimal,
+    fee: Decimal,
+    now: datetime,
+) -> tuple[CloseOrder, ExecutionState]:
+    """Spec 0034 R-6, review round 1 F-1: borsada dolan şartlı stop emri, deftere yazılan kapanışla
+    aynı kimlikle (`cs-`) FILLED kapanış emri olur; mutabakat iki tarafı eşler. Kayıtlıysa aynen."""
+    client_order_id = stop_client_id(position_id)
+    existing = state.orders.get(client_order_id)
+    if isinstance(existing, CloseOrder):
+        return existing, state
+    order = CloseOrder(
+        client_order_id,
+        position_id,
+        pair,
+        SELL,
+        amount,
+        "stop",
+        OrderStatus.FILLED,
+        fill_price,
+        fee,
+        now,
+    )
+    orders = {**state.orders, client_order_id: order}
+    return order, ExecutionState(MappingProxyType(orders), state.quotes)

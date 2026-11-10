@@ -399,7 +399,8 @@ def _size(
             exact.traps[Inexact] = True
             budget = equity * limits.per_trade_risk
             slipped = entry * (1 + slippage)
-            unit_loss = (slipped - stop) + slipped * rate + stop * rate
+            slipped_stop = stop * (1 - slippage)
+            unit_loss = (slipped - slipped_stop) + slipped * rate + slipped_stop * rate
             unit_cost = entry * (1 + rate)
             # integer division is never rounded here: the quotient is the largest fitting step count
             by_risk = budget // (step * unit_loss)

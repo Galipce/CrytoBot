@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping
 from datetime import datetime
 
 from crytobot.app._buys import buy_pairs
-from crytobot.app._closes import close_positions, resolve_unknown
+from crytobot.app._closes import close_positions, resolve_unknown, sync_exchange_stops
 from crytobot.app._inputs import TurnSettings, aware, read_market, settings_problem
 from crytobot.app._notices import NoticeKind, Notices, TurnMemory, TurnNotice
 from crytobot.app._result import BuyHalt, TurnOutcome, TurnResult
@@ -26,10 +26,12 @@ def _unexpected(error: Exception, notices: Notices) -> str:
 
 
 def _trade(run: TurnRun) -> TurnResult:
-    """R-1: kill isteği → sorgu → bakiye mutabakatı → gözlem → kapanış → gözlem → alım → kill
-    isteği. Spec 0035 AC-11: tur sırasında gelen istek turun son kaydından önce işlenir."""
+    """R-1: kill isteği → sorgu → borsa stop senk. → mutabakat → gözlem → kapanış → gözlem →
+    alım → kill isteği. Spec 0035 AC-11: tur sırasında gelen istek turun son kaydından önce
+    işlenir."""
     run.apply_kill_request()
     resolve_unknown(run)
+    sync_exchange_stops(run)
     run.reconcile_balance()
     pairs = dict.fromkeys(
         (*run.settings.whitelist, *(p.pair for p in run.state.ledger.positions.values()))

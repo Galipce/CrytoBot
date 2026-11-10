@@ -17,7 +17,7 @@ from crytobot.app import (
     prepare_live_store,
     run_turn,
 )
-from crytobot.execution import Exchange, PaperExchange
+from crytobot.execution import STOP_ID_PREFIX, Exchange, OrderStatus, PaperExchange
 from crytobot.persistence import load_audit_records, load_store
 from crytobot.risk import ApprovalReason
 from tests.app.helpers import BTC, ETH, FLAT, NOW, make_settings, opened_store, pair_market
@@ -47,6 +47,16 @@ class Request:
         return KillRequest(self.pending, self.consume)
 
 
+class ProtectedLiveExchange(MockLiveExchange):
+    """Spec 0034 sonrası: pozisyonların borsa stopu sağlam (NEW); alımı yalnız kill switch
+    durdurur (her canlı turdaki stop denetimi belirsiz stopta da alımı durdururdu)."""
+
+    def query(self, client_order_id: str, symbol: str = "") -> OrderStatus:
+        if client_order_id.startswith(STOP_ID_PREFIX):
+            return OrderStatus.NEW
+        return super().query(client_order_id, symbol)
+
+
 def store_for(tmp_path: Path, mode: str) -> Path:
     path = tmp_path / f"{mode}.db"
     if mode == "paper":
@@ -61,7 +71,7 @@ def exchange_for(path: Path, mode: str) -> Exchange:
         return PaperExchange()
     loaded = load_store(path, "live")
     assert loaded.state is not None and loaded.state.ledger.balance is not None
-    return MockLiveExchange(free_balance=loaded.state.ledger.balance)
+    return ProtectedLiveExchange(free_balance=loaded.state.ledger.balance)
 
 
 def turn(path: Path, mode: str, market: dict[str, Any], now: Any, **kw: Any) -> TurnResult:
