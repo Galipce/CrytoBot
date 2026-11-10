@@ -68,8 +68,8 @@ def test_position_between_stop_and_target_stays_open(tmp_path: Path) -> None:
 
 
 def test_buy_approval_sees_balance_after_close(tmp_path: Path) -> None:
-    """AC-2: elle hesap: kapanış sonrası kasa bakiyedir; bütçe %1, birim kayıp 2.02801
-    (slippage'lı giriş 10.01, spec 0020 R-1), adım 0.001."""
+    """AC-2: elle hesap: kapanış sonrası kasa bakiyedir; bütçe %1, birim kayıp 2.036002
+    (giriş 10.01, stop 7.992, spec 0020 R-1, spec 0034 B-51), adım 0.001."""
     bot = two_pair_bot(tmp_path)
     entry_cost = FIRST_AMOUNT * Decimal("10.01") * (1 + FEE)
     proceeds = FIRST_AMOUNT * Decimal("6.993") * (1 - FEE)
@@ -78,7 +78,7 @@ def test_buy_approval_sees_balance_after_close(tmp_path: Path) -> None:
     result = bot.turn({BTC: later("7"), ETH: later("10")}, now=LATER)
 
     budget = balance * Decimal("0.01")
-    steps = budget // (Decimal("0.001") * Decimal("2.02801"))
+    steps = budget // (Decimal("0.001") * Decimal("2.036002"))
     assert [o.amount for o in result.buys] == [steps * Decimal("0.001")]
 
 

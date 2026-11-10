@@ -17,13 +17,15 @@ from decimal import (
 )
 
 from crytobot.app._inputs import PairMarket
-from crytobot.app._result import PairNote, PairOutcome
+from crytobot.app._notices import NoticeKind
+from crytobot.app._result import BuyHalt, PairNote, PairOutcome
 from crytobot.app._session import TurnRun, buy_fill
 from crytobot.execution import (
     CLIENT_ID_PREFIX,
     OrderRequest,
     OrderStatus,
     place_order,
+    stop_client_id,
 )
 from crytobot.portfolio import AccountSnapshot, SnapshotOutcome, account_state, record_fill
 from crytobot.risk import (
@@ -72,10 +74,11 @@ def _fill_gate(
     try:
         with localcontext(_BOUNDED):
             fill = price * (1 + slippage)
+            slipped_stop = stop * (1 - slippage)
             notional = amount * fill
             commission = notional * fee
             cost = notional + commission
-            loss = amount * (fill - stop) + commission + amount * stop * fee
+            loss = amount * (fill - slipped_stop) + commission + amount * slipped_stop * fee
             cap = account.equity * HARD_CAPS.per_trade_risk
             limit = account.equity * limits.per_trade_risk
     except DecimalException:  # R-9: a risk that does not fit is named as the cap
@@ -118,6 +121,32 @@ def _approved_buy(
     ledger = run.state.ledger
     if order.status is OrderStatus.FILLED:
         ledger = record_fill(ledger, buy_fill(order, run.now)).ledger
+        if run.state.mode == "live":
+            stop_id = stop_client_id(order.client_order_id)
+            limit_price = order.stop * (1 - run.settings.slippage)
+            place_stop = getattr(run.exchange, "place_stop_order", None)
+            if callable(place_stop):
+                stop_status = place_stop(
+                    client_order_id=stop_id,
+                    symbol=pair,
+                    amount=order.amount,
+                    stop_price=order.stop,
+                    limit_price=limit_price,
+                )
+                if stop_status not in (OrderStatus.NEW, OrderStatus.FILLED):
+                    run.halt(BuyHalt.STOP_ORDER_FAILED)
+                    run.notices.enter(
+                        NoticeKind.SAFE_MODE,
+                        "",
+                        f"güvenli mod: borsa stop emri başarısız ({stop_id})",
+                    )
+            else:
+                run.halt(BuyHalt.STOP_ORDER_FAILED)
+                run.notices.enter(
+                    NoticeKind.SAFE_MODE,
+                    "",
+                    f"güvenli mod: borsa stop adaptörü bulunamadı ({stop_id})",
+                )
     run.save(ledger=ledger, execution=placed.state)
     run.buys.append(order)
     if not run.buying_stopped:

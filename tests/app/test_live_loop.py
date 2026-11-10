@@ -44,6 +44,7 @@ class MockLiveExchange(LiveExchange):
         self.placements = placements or {}
         self.resolutions = resolutions or {}
         self.placed_calls: list[dict[str, Any]] = []
+        self.placed_stop_calls: list[dict[str, Any]] = []
 
     def fetch_free_balance(self, asset: str = "USDT") -> Decimal:
         if self.balance_error is not None:
@@ -64,6 +65,31 @@ class MockLiveExchange(LiveExchange):
 
     def query(self, client_order_id: str, symbol: str = "") -> OrderStatus:
         return self.resolutions.get(client_order_id, OrderStatus.UNKNOWN)
+
+    def place_stop_order(
+        self,
+        client_order_id: str,
+        symbol: str = "",
+        amount: object = None,
+        stop_price: object = None,
+        limit_price: object = None,
+    ) -> OrderStatus:
+        self.placed_stop_calls.append(
+            {
+                "id": client_order_id,
+                "symbol": symbol,
+                "side": "sell",
+                "amount": amount,
+                "stop_price": stop_price,
+            }
+        )
+        return self.placements.get(client_order_id, OrderStatus.NEW)
+
+    def cancel_order(self, client_order_id: str, symbol: str = "") -> OrderStatus:
+        return self.placements.get(client_order_id, OrderStatus.CANCELED)
+
+    def fetch_order(self, client_order_id: str, symbol: str = "") -> dict[str, Any] | None:
+        return None
 
 
 def test_balance_reconciliation_tolerance_and_halt(tmp_path: Path, monkeypatch: Any) -> None:

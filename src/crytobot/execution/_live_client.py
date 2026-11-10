@@ -21,6 +21,7 @@ _HTTP_TOO_MANY: Final = 429
 _HTTP_SERVER_ERRORS: Final = range(500, 600)
 _RETRY_AFTER: Final = re.compile(r"[0-9]{1,6}")
 _BINANCE_ORDER_NOT_EXIST: Final = -2013
+_BINANCE_UNKNOWN_ORDER: Final = -2011
 
 
 class PermissionForbiddenError(ExecutionError):
@@ -219,6 +220,77 @@ class BinanceLiveClient:
             )
             return res
         except Exception as err:
+            raise self._handle_call_error(err) from None
+
+    def place_stop_order(
+        self,
+        symbol: str,
+        side: str,
+        amount: str,
+        stop_price: str,
+        client_order_id: str,
+        limit_price: str | None = None,
+    ) -> dict[str, Any]:
+        """Koşullu stop emri iletir. Önce STOP_LOSS, desteklenmiyorsa STOP_LOSS_LIMIT."""
+        self._reset_seen()
+        try:
+            params: dict[str, Any] = {
+                "stopPrice": stop_price,
+                "newClientOrderId": client_order_id,
+            }
+            res: dict[str, Any] = self._exchange.create_order(
+                symbol,
+                "STOP_LOSS",
+                side,
+                amount,
+                params=params,
+            )
+            return res
+        except Exception as first_err:
+            call_err = self._handle_call_error(first_err)
+            if call_err.is_unknown:
+                raise call_err from None
+            if limit_price is not None:
+                try:
+                    fallback_params: dict[str, Any] = {
+                        "stopPrice": stop_price,
+                        "newClientOrderId": client_order_id,
+                    }
+                    fallback_res: dict[str, Any] = self._exchange.create_order(
+                        symbol,
+                        "STOP_LOSS_LIMIT",
+                        side,
+                        amount,
+                        price=limit_price,
+                        params=fallback_params,
+                    )
+                    return fallback_res
+                except Exception as fallback_err:
+                    raise self._handle_call_error(fallback_err) from None
+            raise call_err from None
+
+    def cancel_order(self, client_order_id: str, symbol: str) -> dict[str, Any] | None:
+        """origClientOrderId ile emri borsada iptal eder. Yoksa veya zaten kapandıysa None döner."""
+        self._reset_seen()
+        try:
+            res: dict[str, Any] = self._exchange.cancel_order(
+                None,
+                symbol=symbol,
+                params={"origClientOrderId": client_order_id},
+            )
+            return res
+        except Exception as err:
+            body = getattr(self._seen, "body", None)
+            code = None
+            if isinstance(body, str):
+                try:
+                    code = json.loads(body).get("code")
+                except (ValueError, RecursionError):
+                    code = None
+            if code in (_BINANCE_ORDER_NOT_EXIST, _BINANCE_UNKNOWN_ORDER) or any(
+                name in type(err).__name__ for name in ("OrderNotFound", "OrderImmediateFill")
+            ):
+                return None
             raise self._handle_call_error(err) from None
 
     def query_order(self, client_order_id: str, symbol: str) -> dict[str, Any] | None:

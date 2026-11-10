@@ -27,8 +27,19 @@ PAPER = "paper"
 LIVE = "live"
 BUY = "buy"
 CLIENT_ID_PREFIX = "cb-"
+STOP_ID_PREFIX = "cs-"
 # ASCII only: exchanges accept at most 36 of [A-Za-z0-9_-] in a client order id (R-6)
 _INTENT_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
+
+
+def stop_client_id(position_id: str) -> str:
+    """Pozisyon kimliğinden tekil şartlı borsa stop emri kimliği türetir (cs-<intent_id>)."""
+    return STOP_ID_PREFIX + position_id.removeprefix(CLIENT_ID_PREFIX)
+
+
+def position_id_from_stop_id(stop_order_id: str) -> str:
+    """Stop emri kimliğinden pozisyon kimliği türetir (cb-<intent_id>)."""
+    return CLIENT_ID_PREFIX + stop_order_id.removeprefix(STOP_ID_PREFIX)
 
 
 @dataclass(frozen=True)

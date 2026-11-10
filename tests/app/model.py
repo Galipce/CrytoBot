@@ -46,8 +46,10 @@ class Model:
         self.history.append(f"close@{price}")
 
     def _buy(self, price: Decimal) -> None:
-        slipped = ENTRY * (1 + self.slippage)  # spec 0020 R-1: sized at the slipped entry
-        unit_loss = (slipped - STOP) + slipped * self.fee + STOP * self.fee
+        # spec 0020 R-1, spec 0034 B-51: sized at slipped entry and stop
+        slipped = ENTRY * (1 + self.slippage)
+        slipped_stop = STOP * (1 - self.slippage)
+        unit_loss = (slipped - slipped_stop) + slipped * self.fee + slipped_stop * self.fee
         by_risk = (self.balance * RISK_SHARE) // (STEP * unit_loss)
         by_balance = self.balance // (STEP * ENTRY * (1 + self.fee))
         amount = min(by_risk, by_balance) * STEP
@@ -56,7 +58,7 @@ class Model:
         fill = price * (1 + self.slippage)
         commission = amount * fill * self.fee
         cost = amount * fill + commission
-        loss = amount * (fill - STOP) + commission + amount * STOP * self.fee
+        loss = amount * (fill - slipped_stop) + commission + amount * slipped_stop * self.fee
         if cost > self.balance or loss > self.balance * HARD_CAP:
             return
         if price <= STOP or fill >= TARGET:

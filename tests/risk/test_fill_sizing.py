@@ -1,9 +1,10 @@
 """Spec 0020 AC-1, AC-2: miktar slippage'lı girişle boyutlanır; spread ve bakiye sınırı etkilenmez.
+Spec 0034 AC-1 (B-51): satış slippage'ı ve komisyonu dahil edilerek korumacı boyutlama yapılır.
 AC-9, R-4, R-9: `edge_clears` onaydaki BR-8 formülüdür; sığmayan hesap kat sağlanmamış sayılır.
 
 Kasa 10000, işlem riski %1, ücret 0.001, slippage 0.001, spread 0.0005, adım 0.001, giriş 10,
-stop 8, hedef 14. Elle hesap: slippage'lı giriş 10.01, birim kayıp
-(10.01 - 8) + 10.01 * 0.001 + 8 * 0.001 = 2.02801; 100 // (0.001 * 2.02801) = 49309.
+stop 8, hedef 14. Elle hesap: slippage'lı giriş 10.01, slippage'lı stop 7.992, birim kayıp
+(10.01 - 7.992) + 10.01 * 0.001 + 7.992 * 0.001 = 2.036002; 100 // (0.001 * 2.036002) = 49115.
 """
 
 from dataclasses import replace
@@ -46,21 +47,22 @@ def approve(
     )
 
 
-def risk_at_slipped_entry(amount: Decimal) -> Fraction:
-    """R-1, bağımsız: tam kesirle miktar * birim kayıp (dolum = giriş * (1 + slippage))."""
+def risk_at_slipped_entry_and_stop(amount: Decimal) -> Fraction:
+    """Spec 0034 B-51: bağımsız tam kesirle miktar * birim kayıp (10 * 1.001, 8 * 0.999)."""
     fill = Fraction(10) * (1 + Fraction(SLIPPAGE))
-    unit = (fill - 8) + fill * Fraction(FEE) + 8 * Fraction(FEE)
+    stop = Fraction(8) * (1 - Fraction(SLIPPAGE))
+    unit = (fill - stop) + fill * Fraction(FEE) + stop * Fraction(FEE)
     return Fraction(amount) * unit
 
 
-def test_amount_is_sized_at_slipped_entry() -> None:
-    """AC-1 (R-1): miktar tam 49.309, risk ~99.999; bir adım fazlası (49.310) limiti aşar."""
+def test_amount_is_sized_with_stop_slippage() -> None:
+    """Spec 0034 AC-1: miktar 49.115, risk ~99.998 <= 100; bir adım fazlası (49.116) aşar."""
     result = approve()
 
-    assert result.approved and result.amount == Decimal("49.309")
+    assert result.approved and result.amount == Decimal("49.115")
     assert not result.limited_by_balance
-    assert risk_at_slipped_entry(Decimal("49.309")) <= 100
-    assert risk_at_slipped_entry(Decimal("49.310")) > 100
+    assert risk_at_slipped_entry_and_stop(Decimal("49.115")) <= 100
+    assert risk_at_slipped_entry_and_stop(Decimal("49.116")) > 100
 
 
 def test_zero_slippage_keeps_the_amount() -> None:
@@ -75,7 +77,7 @@ def test_spread_does_not_change_the_amount(spread: Decimal) -> None:
     """AC-2 (R-1): spread miktarı etkilemez."""
     result = approve(spread=spread)
 
-    assert result.approved and result.amount == Decimal("49.309")
+    assert result.approved and result.amount == Decimal("49.115")
 
 
 @pytest.mark.parametrize("slippage", [Decimal(0), SLIPPAGE, Decimal("0.01")])
