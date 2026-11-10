@@ -4,6 +4,7 @@ import io
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from crytobot.__main__ import EXIT_OK, EXIT_REFUSED, run
 from crytobot.app import (
@@ -70,6 +71,23 @@ class FakeLiveClient(BinanceLiveClient):
         if self.balance_error is not None:
             raise self.balance_error
         return self.free_balance
+
+    def place_stop_order(
+        self,
+        symbol: str,
+        side: str,
+        amount: str,
+        stop_price: str,
+        client_order_id: str,
+        limit_price: str | None = None,
+    ) -> dict[str, Any]:
+        return {"status": "open", "id": client_order_id}
+
+    def cancel_order(self, client_order_id: str, symbol: str) -> dict[str, Any] | None:
+        return {"status": "canceled", "id": client_order_id}
+
+    def query_order(self, client_order_id: str, symbol: str) -> dict[str, Any] | None:
+        return None
 
 
 def write_test_config(

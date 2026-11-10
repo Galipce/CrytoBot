@@ -24,8 +24,8 @@ ASSUMPTIONS: tuple[str, ...] = (
     "çift kuralları: indirme anındaki hâliyle, dönem boyunca sabit",
     "stop ve hedef yalnız tur anlarında, tur fiyatıyla denetlenir; mum içi en yüksek ve en düşük"
     " değere bakılmaz",
-    "B-51: risk, stop fiyatında, satış slippage'ı ve boşluklu düşüş olmadan hesaplanır;"
-    " gerçekleşen zarar işlem başına risk sınırını aşabilir",
+    "risk, stop fiyatında satış slippage'ı ve komisyonuyla hesaplanır; stopun altına"
+    " boşluklu düşüş hesaba katılmaz, gerçekleşen zarar işlem başına risk sınırını aşabilir",
     "mum boşlukları doldurulmaz",
 )
 

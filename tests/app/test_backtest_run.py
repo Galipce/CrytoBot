@@ -1,15 +1,16 @@
 """Spec 0025 AC-1, AC-5, AC-6, AC-8, AC-9, AC-10: koşu, gerçek okuyucu ve rapor yazıcısıyla.
+Spec 0034 B-51: satış slippage ve komisyonu eklenmiş yeni boyutlama (49.115).
 
 Mutlu yol (tek çift BTC, 1h, `candle_count` 4, açılış 10000, ayrım 2. saat), el hesabı:
 - Tur 0: kapanmış 10, 8, 9, 10 → öneri giriş 10, stop 8, hedef 14; fiyat 10, dolum 10.01, miktar
-  49.309 (helpers.FIRST_AMOUNT). Komisyon 49.309 * 10.01 * 0.001 = 0.49358309; bedel
-  494.07667309; bakiye 9505.92332691; kasa 9505.92332691 + 49.309 * 10 = 9999.01332691.
-- Tur 1: fiyat 12 (pozisyon açık: `position_open`); kasa 9505.92332691 + 591.708 = 10097.63132691.
-- Tur 2 (ayrım): fiyat 15 ≥ hedef 14 → kapanış, dolum 14.985; satış 738.895365, komisyon
-  0.738895365, gelir 738.156469635, gerçekleşen 244.079796545; kasa 10244.079796545. Seri 9, 10,
+  49.115 (helpers.FIRST_AMOUNT). Komisyon 49.115 * 10.01 * 0.001 = 0.49164115; bedel
+  492.13279115; bakiye 9507.86720885; kasa 9507.86720885 + 49.115 * 10 = 9999.01720885.
+- Tur 1: fiyat 12 (pozisyon açık: `position_open`); kasa 9507.86720885 + 589.38 = 10097.24720885.
+- Tur 2 (ayrım): fiyat 15 ≥ hedef 14 → kapanış, dolum 14.985; satış 735.988275, komisyon
+  0.735988275, gelir 735.252286725, gerçekleşen 243.119495575; kasa 10243.119495575. Seri 9, 10,
   10, 12: kesişme yok (`no_crossover`).
 - Tur 3: fiyat 15; seri 10, 10, 12, 15: kesişme yok; kasa aynı.
-Slippage: alımda 49.309 * 0.01 = 0.49309, kapanışta 49.309 * 0.015 = 0.739635.
+Slippage: alımda 49.115 * 0.01 = 0.49115, kapanışta 49.115 * 0.015 = 0.736725.
 """
 
 import json
@@ -76,39 +77,39 @@ def test_happy_path_matches_hand_computation(tmp_path: Path) -> None:
     inside = report_lines(report, IN)
     assert inside["turlar"] == "2 (ilk 2026-01-01T00:00:00+00:00, son 2026-01-01T01:00:00+00:00)"
     assert inside["başlangıç kasası"] == "10000.00000000 USDT"
-    assert inside["bitiş kasası"] == "10097.63132691 USDT"
-    assert inside["net kâr/zarar"] == "97.63132691 USDT (getiri %0.9763)"
+    assert inside["bitiş kasası"] == "10097.24720885 USDT"
+    assert inside["net kâr/zarar"] == "97.24720885 USDT (getiri %0.9725)"
     assert inside["gerçekleşen kâr/zarar"] == "0.00000000 USDT"
-    assert inside["gerçekleşmemiş kâr/zarar"] == "97.63132691 USDT"
+    assert inside["gerçekleşmemiş kâr/zarar"] == "97.24720885 USDT"
     assert inside["işlem"] == "0 (kazanan 0, zararlı 0)"
     assert inside["kazanma oranı"] == "tanımsız"
     assert inside["kâr faktörü"] == "tanımsız"
-    assert inside["en büyük drawdown"] == "%0.0099"  # 0.98667309 / 10000
-    assert inside["ortalama günlük getiri"] == "%0.9763"
-    assert inside["ödenen komisyon"] == "0.49358309 USDT"
-    assert inside["ödenen slippage"] == "0.49309000 USDT"
+    assert inside["en büyük drawdown"] == "%0.0098"  # 0.98279115 / 10000
+    assert inside["ortalama günlük getiri"] == "%0.9725"
+    assert inside["ödenen komisyon"] == "0.49164115 USDT"
+    assert inside["ödenen slippage"] == "0.49115000 USDT"
     assert inside["öneri yok (nedene göre)"] == "position_open 1"
     assert inside["ret (nedene göre)"] == "yok"
 
     outside = report_lines(report, OUT)
-    assert outside["başlangıç kasası"] == "10097.63132691 USDT"
-    assert outside["bitiş kasası"] == "10244.07979654 USDT"  # ...6545: half-even keeps the 4
-    assert outside["net kâr/zarar"] == "146.44846964 USDT (getiri %1.4503)"
-    assert outside["gerçekleşen kâr/zarar"] == "244.07979654 USDT"
-    assert outside["gerçekleşmemiş kâr/zarar"] == "-97.63132691 USDT"
+    assert outside["başlangıç kasası"] == "10097.24720885 USDT"
+    assert outside["bitiş kasası"] == "10243.11949558 USDT"
+    assert outside["net kâr/zarar"] == "145.87228672 USDT (getiri %1.4447)"
+    assert outside["gerçekleşen kâr/zarar"] == "243.11949558 USDT"
+    assert outside["gerçekleşmemiş kâr/zarar"] == "-97.24720885 USDT"
     assert outside["işlem"] == "1 (kazanan 1, zararlı 0)"
     assert outside["kazanma oranı"] == "%100.0000"
     assert outside["en büyük drawdown"] == "%0.0000"
-    assert outside["ödenen komisyon"] == "0.73889536 USDT"  # ...365: half-even keeps the 6
-    assert outside["ödenen slippage"] == "0.73963500 USDT"
+    assert outside["ödenen komisyon"] == "0.73598828 USDT"
+    assert outside["ödenen slippage"] == "0.73672500 USDT"
     assert outside["öneri yok (nedene göre)"] == "no_crossover 2"
 
     whole = report_lines(report, WHOLE)
-    assert whole["bitiş kasası"] == "10244.07979654 USDT"
-    assert whole["net kâr/zarar"] == "244.07979654 USDT (getiri %2.4408)"
+    assert whole["bitiş kasası"] == "10243.11949558 USDT"
+    assert whole["net kâr/zarar"] == "243.11949558 USDT (getiri %2.4312)"
     assert whole["gerçekleşmemiş kâr/zarar"] == "0.00000000 USDT"
-    assert whole["ödenen komisyon"] == "1.23247846 USDT"
-    assert whole["ödenen slippage"] == "1.23272500 USDT"
+    assert whole["ödenen komisyon"] == "1.22762942 USDT"
+    assert whole["ödenen slippage"] == "1.22787500 USDT"
     for part in (inside, outside, whole):
         assert part["fiyatı ya da verisi eksik tur (çift başına)"] == "BTC/USDT 0"
         assert part["günlük zarar durdurmalı gün"] == "0"
@@ -147,8 +148,8 @@ def test_end_equity_uses_last_known_price(tmp_path: Path) -> None:
     assert exit_.outcome is BacktestOutcome.COMPLETED, exit_.message
     report = run.report(chosen)
     whole = report_lines(report, WHOLE)
-    assert whole["bitiş kasası"] == "10097.63132691 USDT"  # 9505.92332691 + 49.309 * 12
-    assert whole["gerçekleşmemiş kâr/zarar"] == "97.63132691 USDT"
+    assert whole["bitiş kasası"] == "10097.24720885 USDT"  # 9507.86720885 + 49.115 * 12
+    assert whole["gerçekleşmemiş kâr/zarar"] == "97.24720885 USDT"
     assert whole["fiyatı ya da verisi eksik tur (çift başına)"] == "BTC/USDT 1"
 
 

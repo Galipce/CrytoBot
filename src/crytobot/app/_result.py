@@ -36,6 +36,7 @@ class BuyHalt(Enum):
     OBSERVATION_REJECTED = "observation_rejected"
     DRAWDOWN = "drawdown"
     KILL_SWITCH = "kill_switch"
+    STOP_ORDER_FAILED = "stop_order_failed"
 
 
 class PairNote(Enum):

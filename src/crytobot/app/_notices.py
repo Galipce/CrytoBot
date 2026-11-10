@@ -24,6 +24,7 @@ class NoticeKind(Enum):
     UNEXPECTED_ERROR = "unexpected_error"
     DRAWDOWN_HALT = "drawdown_halt"
     DAILY_LOSS_LIMIT = "daily_loss_limit"
+    STOP_ORDER_FAILED = "stop_order_failed"
 
 
 # Absence ends only these: every completed turn evaluates them. Any other state ends with `clear`
@@ -35,6 +36,7 @@ _EVALUATED_EVERY_TURN = frozenset(
         NoticeKind.RECONCILIATION,
         NoticeKind.CLOSE_REFUSED,
         NoticeKind.UNEXPECTED_ERROR,
+        NoticeKind.STOP_ORDER_FAILED,  # spec 0034 F-3: derived from the stops every live turn
     }
 )
 # about the account, not a pair: evaluated only when the ledger is asked for the equity

@@ -11,7 +11,15 @@ from decimal import Decimal
 from crytobot.app._inputs import DataIssue, DataReport, TurnSettings
 from crytobot.app._notices import NoticeKind, Notices, TurnMemory
 from crytobot.app._result import BuyHalt, PairOutcome, TurnOutcome, TurnResult
-from crytobot.execution import CloseOrder, Exchange, ExecutionState, Order
+from crytobot.execution import (
+    BannedError,
+    CloseOrder,
+    Exchange,
+    ExecutionState,
+    Order,
+    OrderStatus,
+    stop_client_id,
+)
 from crytobot.persistence import StoredState, StoreOutcome, save_store
 from crytobot.portfolio import Closure, Fill, Ledger, SnapshotOutcome, account_state
 from crytobot.risk import RiskState, observe
@@ -75,6 +83,40 @@ class TurnRun:
         """R-7: işaret depodan türer; temiz turla ya da yeniden başlatmayla kalkmaz."""
         self.halt(BuyHalt.RECONCILIATION)
         self.notices.enter(NoticeKind.RECONCILIATION, "", message)
+
+    def stop_failed(self, subject: str, message: str) -> None:
+        """Spec 0034 R-5, F-2, F-3: pozisyonun borsa stopu yok ya da belirsiz; alım durur. Bildirim
+        pozisyona özgüdür ve her canlı turda stoplardan yeniden türer (yokluk çıkışı getirir)."""
+        self.halt(BuyHalt.STOP_ORDER_FAILED)
+        self.notices.enter(NoticeKind.STOP_ORDER_FAILED, subject, f"güvenli mod: {message}")
+
+    def raise_if_banned(self, error: Exception) -> None:
+        """Spec 0034 F-4: ban (418) yutulmaz; döngü `BANNED` ile durur (`_loop`)."""
+        if isinstance(error, BannedError):
+            raise error
+
+    def place_exchange_stop(
+        self, position_id: str, pair: str, amount: Decimal, stop: Decimal
+    ) -> None:
+        """Spec 0034 R-4, R-5: pozisyon için borsaya şartlı stop. Çağıran dolumu önceden kaydetti
+        (F-4): borsa çağrısı ne olursa olsun alım defterde kalır."""
+        stop_id = stop_client_id(position_id)
+        try:
+            status = self.exchange.place_stop_order(
+                client_order_id=stop_id,
+                symbol=pair,
+                amount=amount,
+                stop_price=stop,
+                limit_price=stop * (1 - self.settings.slippage),
+            )
+        except Exception as error:
+            self.raise_if_banned(error)
+            self.stop_failed(
+                position_id, f"borsa stop emri başarısız ({stop_id}, {type(error).__name__})"
+            )
+            return
+        if status not in (OrderStatus.NEW, OrderStatus.FILLED):
+            self.stop_failed(position_id, f"borsa stop emri başarısız ({stop_id}, {status.value})")
 
     def reconcile_balance(self) -> None:
         """Spec 0033 R-6: Canlı modda tur başı bakiye mutabakatı (tolerans <= 0.05 USDT)."""

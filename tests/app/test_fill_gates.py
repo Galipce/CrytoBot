@@ -1,9 +1,11 @@
 """Spec 0020 AC-3…AC-12: dolum fiyatında config risk limiti ve BR-8 kapıları.
+Spec 0034 AC-2: alım dolum kapısında satış bacağı slippage ve komisyon denetimi.
 
 Aksi yazılmadıkça `helpers`'ın senaryosu: kasa 10000, işlem riski %1, sabit üst sınır %2, ücret
 0.001, slippage 0.001, spread 0.0005, kat 2, adım 0.001, giriş 10, stop 8, hedef 14; onaylı miktar
-49.309. Dolumdaki risk = miktar * ((dolum - stop) + dolum * ücret + stop * ücret); tutarlar elle
-hesaplanmıştır.
+49.115. Dolumdaki risk =
+miktar * ((dolum - stop * (1 - slippage)) + dolum * ücret + stop * (1 - slippage) * ücret);
+tutarlar elle hesaplanmıştır.
 """
 
 from dataclasses import replace
@@ -63,19 +65,35 @@ def assert_no_trace(bot: Bot, result: TurnResult) -> None:
 
 
 def test_price_at_entry_buys_the_sized_amount(tmp_path: Path) -> None:
-    """AC-3 (R-1, R-2): fiyat 10, dolum 10.01, risk 49.309 * 2.02801 = 99.998... <= 100."""
+    """AC-3 (R-1, R-2): fiyat 10, dolum 10.01, risk 49.115 * 2.036002 = 99.998... <= 100."""
     bot = fresh(tmp_path)
 
     result = bot.turn({BTC: pair_market(price=Decimal(10))})
 
-    assert [o.amount for o in result.buys] == [Decimal("49.309")] == [FIRST_AMOUNT]
+    assert [o.amount for o in result.buys] == [Decimal("49.115")] == [FIRST_AMOUNT]
     assert [o.fill_price for o in result.buys] == [Decimal("10.01")]
+
+
+def test_fill_gate_evaluates_stop_slippage_and_fee(tmp_path: Path) -> None:
+    """Spec 0034 AC-2: alım dolum kapısında satış bacağı slippage ve komisyon denetimi."""
+    bot = fresh(tmp_path)
+
+    # Giriş fiyatında (10) dolum riski bütçeyi (100) aşmaz
+    result = bot.turn({BTC: pair_market(price=Decimal(10))})
+    assert [o.amount for o in result.buys] == [FIRST_AMOUNT]
+
+    # Fiyat 10.005: eski formülle 99.85 ile geçerdi, yeni formülle 100.24 ile
+    # bütçe aşılır ve reddedilir (formül değişikliğini ayırt eden sınır)
+    bot_over = fresh(tmp_path, name="over.db")
+    result_over = bot_over.turn({BTC: pair_market(price=Decimal("10.005"))})
+    assert reasons(result_over) == [LIMIT]
+    assert_no_trace(bot_over, result_over)
 
 
 @pytest.mark.parametrize("price", [Decimal("10.01"), Decimal(11)])
 def test_risk_over_config_limit_places_no_order(tmp_path: Path, price: Decimal) -> None:
-    """AC-4 (R-2): 10.01'de dolum 10.02001, risk 49.309 * 2.03803001 ~ 100.49; 11'de dolum 11.011,
-    risk 49.309 * 3.030011 ~ 149.41 (sabit üst sınır 200'ün altında)."""
+    """AC-4 (R-2): 10.01'de dolum 10.02001, risk 49.115 * 2.04602201 ~ 100.49; 11'de dolum 11.011,
+    risk 49.115 * 3.038003 ~ 149.21 (sabit üst sınır 200'ün altında)."""
     bot = fresh(tmp_path)
 
     result = bot.turn({BTC: pair_market(price=price)})
@@ -108,12 +126,25 @@ def test_risk_just_over_limit_places_no_order(tmp_path: Path) -> None:
 
 
 def test_limit_equal_to_hard_cap_names_the_cap(tmp_path: Path) -> None:
-    """AC-6 (R-3, R-5): limit %2 = üst sınır: miktar 200 // (0.001 * 2.02801) * 0.001 = 98.618;
-    fiyat 11'de risk 98.618 * 3.030011 ~ 298.8 > 200: neden sabit üst sınırdır."""
+    """AC-6 (R-3, R-5): limit %2 = üst sınır: miktar 200 // (0.001 * 2.036002) * 0.001 = 98.231;
+    fiyat 11'de risk 98.231 * 3.038003 ~ 298.4 > 200: neden sabit üst sınırdır."""
     settings = make_settings(limits=limits(per_trade_risk=Decimal("0.02")))
     bot = fresh(tmp_path, settings=settings)
 
     result = bot.turn({BTC: pair_market(price=Decimal(11))})
+
+    assert reasons(result) == [PairNote.RISK_CAP_AT_FILL]
+    assert_no_trace(bot, result)
+
+
+def test_cap_boundary_discriminates_stop_slippage_formula(tmp_path: Path) -> None:
+    """Spec 0034 AC-2, review round 2 L-1: limit %2 = üst sınır, miktar 98.231. Fiyat 10.005'te
+    eski formülle risk ~199.70 <= 200 (geçerdi), satış slippage'ı ve komisyonuyla ~200.49 > 200:
+    neden sabit üst sınırdır. Formül yalnız limit karşılaştırmasına uygulansaydı bu test kırılır."""
+    settings = make_settings(limits=limits(per_trade_risk=Decimal("0.02")))
+    bot = fresh(tmp_path, settings=settings)
+
+    result = bot.turn({BTC: pair_market(price=Decimal("10.005"))})
 
     assert reasons(result) == [PairNote.RISK_CAP_AT_FILL]
     assert_no_trace(bot, result)
@@ -178,7 +209,7 @@ def test_approved_edge_at_entry_passes_the_gate(tmp_path: Path) -> None:
 
 
 def test_limit_outranks_edge(tmp_path: Path) -> None:
-    """AC-10 (R-5): hedef 12, fiyat 11.9, miktar 49.309: risk 49.309 * 3.9318119 ~ 193.9 (> 100,
+    """AC-10 (R-5): hedef 12, fiyat 11.9, miktar 49.115: risk 49.115 * 3.9398 ~ 193.5 (> 100,
     < 200) ve kat da bozulur (AC-7); ilk tutmayan koşul config limitidir."""
     bot = fresh(tmp_path, settings=EDGE_SETTINGS)
 
@@ -244,7 +275,7 @@ def test_refused_turn_changes_nothing(
 
 
 def test_other_pair_trades_in_the_same_turn(tmp_path: Path) -> None:
-    """AC-11 (R-7): BTC fiyat 11'de döner, ETH aynı turda fiyat 10'da 49.309 alır."""
+    """AC-11 (R-7): BTC fiyat 11'de döner, ETH aynı turda fiyat 10'da 49.115 alır."""
     bot = fresh(tmp_path, settings=make_settings((BTC, ETH)))
 
     result = bot.turn({BTC: pair_market(price=Decimal(11)), ETH: pair_market(price=Decimal(10))})
@@ -255,7 +286,7 @@ def test_other_pair_trades_in_the_same_turn(tmp_path: Path) -> None:
 
 
 def test_same_candle_retry_buys(tmp_path: Path) -> None:
-    """AC-11 (R-8): aynı mumda fiyat 11 ile dönen çift, sonraki turda fiyat 10 ile 49.309 alır."""
+    """AC-11 (R-8): aynı mumda fiyat 11 ile dönen çift, sonraki turda fiyat 10 ile 49.115 alır."""
     bot = fresh(tmp_path)
 
     refused = bot.turn({BTC: pair_market(price=Decimal(11))})

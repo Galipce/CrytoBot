@@ -72,10 +72,11 @@ def _fill_gate(
     try:
         with localcontext(_BOUNDED):
             fill = price * (1 + slippage)
+            slipped_stop = stop * (1 - slippage)
             notional = amount * fill
             commission = notional * fee
             cost = notional + commission
-            loss = amount * (fill - stop) + commission + amount * stop * fee
+            loss = amount * (fill - slipped_stop) + commission + amount * slipped_stop * fee
             cap = account.equity * HARD_CAPS.per_trade_risk
             limit = account.equity * limits.per_trade_risk
     except DecimalException:  # R-9: a risk that does not fit is named as the cap
@@ -118,8 +119,10 @@ def _approved_buy(
     ledger = run.state.ledger
     if order.status is OrderStatus.FILLED:
         ledger = record_fill(ledger, buy_fill(order, run.now)).ledger
-    run.save(ledger=ledger, execution=placed.state)
+    run.save(ledger=ledger, execution=placed.state)  # F-4: the fill is on disk before the stop
     run.buys.append(order)
+    if order.status is OrderStatus.FILLED and run.state.mode == "live":
+        run.place_exchange_stop(order.client_order_id, pair, order.amount, order.stop)
     if not run.buying_stopped:
         run.observe_equity()
 

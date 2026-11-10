@@ -6,6 +6,7 @@ from crytobot.execution._close import (
     CloseOrderRequest,
     CloseOrderResult,
     place_close_order,
+    record_stop_fill,
 )
 from crytobot.execution._credentials import (
     CREDENTIALS_MISSING,
@@ -34,6 +35,7 @@ from crytobot.execution._orders import (
     EMPTY_EXECUTION,
     LIVE,
     PAPER,
+    STOP_ID_PREFIX,
     CloseOrder,
     ExecutionState,
     Notification,
@@ -46,7 +48,9 @@ from crytobot.execution._orders import (
     QueryResult,
     execution_problems,
     place_order,
+    position_id_from_stop_id,
     query_order,
+    stop_client_id,
 )
 from crytobot.execution._paper import Exchange, OrderStatus, PaperExchange
 
@@ -61,6 +65,7 @@ __all__: list[str] = [
     "REDACTED",
     "SELL",
     "SPOT_TRADING_DISABLED",
+    "STOP_ID_PREFIX",
     "WITHDRAWAL_PERMISSION_FORBIDDEN",
     "BannedError",
     "BinanceLiveClient",
@@ -91,7 +96,10 @@ __all__: list[str] = [
     "load_credentials",
     "place_close_order",
     "place_order",
+    "position_id_from_stop_id",
     "query_order",
+    "record_stop_fill",
     "redact_secrets",
+    "stop_client_id",
     "verify_permissions",
 ]

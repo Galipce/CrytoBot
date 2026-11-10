@@ -120,6 +120,9 @@
 - mypy yalnız koştuğu makinenin platformunu denetler: Windows'ta yeşil olan kod CI'da (ubuntu) kırmızı olabilir. Platforma
   özgü ad (`signal.SIGBREAK`, `msvcrt`, `fcntl`) koşullu ifadede değil, `if sys.platform == "win32":` bloğunda kullanılır; yerelde
   `mypy --platform linux src tests tools` ile denenir — from spec 0022, ship PR CI (`tests/main/test_entry.py`, A-3)
+- Canlı borsa çağrısını saran `except Exception` `BannedError`'ı (HTTP 418) yutar ve döngü banı uzatarak çağırmayı sürdürür;
+  ayrıca dolan emir borsaya ikinci çağrıdan önce kaydedilmezse istisna kaydı kaybettirir — yeni `except` bloğu banı
+  `TurnRun.raise_if_banned` ile yeniden fırlatır, dolumu önce `save` eder — from spec 0034, review round 1 F-4 (A-4)
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
