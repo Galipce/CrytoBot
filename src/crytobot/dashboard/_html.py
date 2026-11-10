@@ -120,6 +120,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       border: 1px solid var(--red);
       color: #fecdd3;
     }
+    .banner-live {
+      background-color: var(--red-bg);
+      border: 2px solid var(--red);
+      color: #fff;
+      font-weight: 700;
+      font-size: 1.125rem;
+      text-align: center;
+    }
     .grid-metrics {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -223,13 +231,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
   <div class="container">
+    <div id="mode-banner" class="banner banner-live" role="status"></div>
+    <div id="mode-warning" class="banner banner-error" role="alert"></div>
     <div id="error-banner" class="banner banner-error"></div>
 
     <header>
       <div class="header-title">
         <h1>CrytoBot</h1>
         <span id="badge-process" class="badge badge-stopped">Durdu</span>
-        <span id="badge-mode" class="badge badge-mode">paper</span>
+        <span id="badge-mode" class="badge badge-mode">—</span>
         <span id="badge-halt" class="badge badge-halt-none">Normal</span>
       </div>
       <div class="controls">
@@ -355,8 +365,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           procBadge.className = "badge badge-stopped";
         }
 
+        // Spec 0035 R-3: mod metin olarak; canlıda ilk satır sabit uyarı metni
         const modeBadge = document.getElementById("badge-mode");
-        modeBadge.textContent = data.mode || "paper";
+        modeBadge.textContent = data.mode || "—";
+        const modeBanner = document.getElementById("mode-banner");
+        if (data.mode === "live") {
+          modeBanner.textContent = "CANLI MOD — gerçek para";
+          modeBanner.style.display = "block";
+        } else {
+          modeBanner.textContent = "";
+          modeBanner.style.display = "none";
+        }
+        const modeWarning = document.getElementById("mode-warning");
+        if (data.mode_mismatch) {
+          modeWarning.textContent = "UYARI: " + data.mode_mismatch;
+          modeWarning.style.display = "block";
+        } else {
+          modeWarning.textContent = "";
+          modeWarning.style.display = "none";
+        }
 
         const haltBadge = document.getElementById("badge-halt");
         if (data.kill_switch) {

@@ -102,3 +102,30 @@ def test_dashboard_handles_missing_or_corrupt_store(tmp_path: Path) -> None:
     err_corrupt = data["error"]
     assert isinstance(err_corrupt, str)
     assert "Depo okunamıyor" in err_corrupt
+
+
+def test_live_store_status_has_live_mode(tmp_path: Path) -> None:
+    """Spec 0035 AC-4 (R-1, R-3): pano canlı depoyu okur, modu `live` döner."""
+    import dataclasses
+
+    from tests.app.test_control_live import store_in
+
+    db_path = store_in(tmp_path / "bot.db", "live")
+    config = dataclasses.replace(make_bot_config(db_path, tmp_path / "bot.log"), mode="live")
+    code, data = get_dashboard_status(config, clock=lambda: T0)
+    assert code == 200
+    assert data["mode"] == "live"
+    assert data["mode_mismatch"] is None
+    assert data["free_balance"] == float(DEPOSIT)
+
+
+def test_mismatch_warning(tmp_path: Path) -> None:
+    """Spec 0035 AC-7 (R-2): uyuşmazlıkta pano deponun gerçek modunu ve uyarıyı döner."""
+    from tests.app.test_control_live import store_in
+
+    db_path = store_in(tmp_path / "bot.db", "live")
+    config = make_bot_config(db_path, tmp_path / "bot.log")  # ayar: paper
+    code, data = get_dashboard_status(config, clock=lambda: T0)
+    assert code == 200
+    assert data["mode"] == "live"
+    assert data["mode_mismatch"] == "mod uyuşmazlığı: ayar=paper, depo=live"

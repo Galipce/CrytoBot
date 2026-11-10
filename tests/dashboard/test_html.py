@@ -66,3 +66,16 @@ def test_logs_rendering_escapes_html_using_text_content() -> None:
     # Finding 1: Loglar HTML kaçışı için textContent ile güvenli eklenir
     assert "item.textContent = l" in html
     assert "createElement" in html
+
+
+def test_live_mode_line_is_text() -> None:
+    """Spec 0035 AC-4 (R-3): canlı mod ilk satırda metin olarak yazılır; renk yalnız ek."""
+    html = render_dashboard_html()
+    body = html[html.index("<body>") :]
+    container = body[body.index('<div class="container">') :]
+    first_element = container.split("\n")[1].strip()
+    assert first_element.startswith('<div id="mode-banner"')
+    assert '"CANLI MOD — gerçek para"' in html
+    assert 'modeBanner.textContent = "CANLI MOD — gerçek para"' in html
+    assert 'modeWarning.textContent = "UYARI: " + data.mode_mismatch' in html
+    assert "innerHTML" not in html.split("// Spec 0035 R-3")[1].split("haltBadge")[0]
