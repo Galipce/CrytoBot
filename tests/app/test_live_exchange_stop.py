@@ -548,3 +548,65 @@ def test_close_sells_only_after_confirmed_cancel(
     )
     assert any(c.startswith("place:cx-") for c in ex.call_order) is sells
     assert (BuyHalt.STOP_ORDER_FAILED in res.halts) is not sells
+
+
+class BanAt(MockLiveExchange):
+    """Review round 2 L-3: ban yalnız seçilen çağrıda (`cancel`, `fetch`)."""
+
+    def __init__(self, where: str, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.where = where
+
+    def cancel_order(self, client_order_id: str, symbol: str = "") -> OrderStatus:
+        if self.where == "cancel":
+            raise BannedError("418")
+        return super().cancel_order(client_order_id, symbol)
+
+    def fetch_order(self, client_order_id: str, symbol: str = "") -> dict[str, Any] | None:
+        if self.where == "fetch":
+            raise BannedError("418")
+        return super().fetch_order(client_order_id, symbol)
+
+
+@pytest.mark.parametrize(
+    ("where", "query", "price"),
+    [
+        ("cancel", OrderStatus.NEW, Decimal(15)),  # _stop_cancelled: closing at the target
+        ("fetch", OrderStatus.REJECTED, Decimal(10)),  # _stop_missing: is the stop there at all
+        ("fetch", OrderStatus.FILLED, Decimal(8)),  # _stop_fill_terms: the filled stop's terms
+    ],
+)
+def test_ban_in_every_stop_call_is_not_swallowed(
+    tmp_path: Path, where: str, query: OrderStatus, price: Decimal
+) -> None:
+    """Review round 2 L-3 (F-4): iptal, varlık sorgusu ve dolum ayrıntısı çağrısındaki ban da
+    döngüye çıkar; hiçbir stop çağrısı banı yutmaz."""
+    store_path, _ = _opened(tmp_path, "ban.db")
+    ex = BanAt(where, free_balance=_balance(store_path), stop_query_status=query)
+    with pytest.raises(BannedError):
+        _run(
+            store_path=store_path,
+            exchange=ex,
+            market={BTC: pair_market(closes=FLAT, price=price, closed_at=LATER)},
+            now=LATER,
+        )
+
+
+def test_unknown_stop_status_halts_without_replacing(tmp_path: Path) -> None:
+    """Review round 2 L-3 (F-2): durumu belirsiz stop alımı durdurur, bildirim girer; stop yeniden
+    verilmez (çift stop riski)."""
+    store_path, position_id = _opened(tmp_path, "unknown.db")
+    notices: list[TurnNotice] = []
+    ex = MockLiveExchange(free_balance=_balance(store_path), stop_query_status=OrderStatus.UNKNOWN)
+    res = _run(
+        store_path=store_path,
+        exchange=ex,
+        market={BTC: pair_market(closes=FLAT, price=Decimal(10), closed_at=LATER)},
+        now=LATER,
+        sink=notices.append,
+    )
+    assert BuyHalt.STOP_ORDER_FAILED in res.halts
+    assert ex.placed_stop_calls == []
+    assert [(n.kind, n.subject, n.entering) for n in notices if n.subject == position_id] == [
+        (NoticeKind.STOP_ORDER_FAILED, position_id, True)
+    ]

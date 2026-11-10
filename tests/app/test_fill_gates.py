@@ -137,6 +137,19 @@ def test_limit_equal_to_hard_cap_names_the_cap(tmp_path: Path) -> None:
     assert_no_trace(bot, result)
 
 
+def test_cap_boundary_discriminates_stop_slippage_formula(tmp_path: Path) -> None:
+    """Spec 0034 AC-2, review round 2 L-1: limit %2 = üst sınır, miktar 98.231. Fiyat 10.005'te
+    eski formülle risk ~199.70 <= 200 (geçerdi), satış slippage'ı ve komisyonuyla ~200.49 > 200:
+    neden sabit üst sınırdır. Formül yalnız limit karşılaştırmasına uygulansaydı bu test kırılır."""
+    settings = make_settings(limits=limits(per_trade_risk=Decimal("0.02")))
+    bot = fresh(tmp_path, settings=settings)
+
+    result = bot.turn({BTC: pair_market(price=Decimal("10.005"))})
+
+    assert reasons(result) == [PairNote.RISK_CAP_AT_FILL]
+    assert_no_trace(bot, result)
+
+
 def test_edge_below_multiple_places_no_order(tmp_path: Path) -> None:
     """AC-7 (R-4): fiyat 11.9: dolum 11.9119 < 12, risk 25 * 3.9318119 ~ 98.30 <= 100;
     kâr 0.1, maliyet 23.9 * 0.001 + 11.9 * 0.0005 + 23.9 * 0.001 = 0.05375, 2 * 0.05375 >= 0.1."""

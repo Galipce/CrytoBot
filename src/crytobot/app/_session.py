@@ -91,11 +91,8 @@ class TurnRun:
         self.notices.enter(NoticeKind.STOP_ORDER_FAILED, subject, f"güvenli mod: {message}")
 
     def raise_if_banned(self, error: Exception) -> None:
-        """Spec 0034 F-4: ban (418) yutulmaz; bekleme süresi döngüye taşınır, döngü durur."""
+        """Spec 0034 F-4: ban (418) yutulmaz; döngü `BANNED` ile durur (`_loop`)."""
         if isinstance(error, BannedError):
-            retry_after = getattr(error, "retry_after", None)
-            if isinstance(retry_after, (int, float)) and retry_after > 0:
-                self.memory.retry_after = float(retry_after)
             raise error
 
     def place_exchange_stop(

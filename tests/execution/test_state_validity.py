@@ -186,3 +186,26 @@ def test_broken_state_is_named_without_raw_input(case: str) -> None:
 
     assert problems
     assert all(len(problem) < 200 for problem in problems)
+
+
+@pytest.mark.parametrize(
+    ("reason", "problem"),
+    [("stop", None), ("hedef", "emir 0: borsa stop emrinin nedeni stop değil")],
+)
+def test_exchange_stop_fill_order_needs_stop_reason(reason: str, problem: str | None) -> None:
+    """Spec 0034 review round 1 F-1, round 2 L-3: `cs-` kimlikli FILLED kapanış emri geçerlidir
+    (borsa stop dolumu), ama yalnız nedeni `stop` iken; aksi hâlde adıyla reddedilir."""
+    order = CloseOrder(
+        "cs-a",
+        CID,
+        "BTC/USDT",
+        "sell",
+        Decimal("1"),
+        reason,
+        OrderStatus.FILLED,
+        Decimal("95"),
+        Decimal("0.095"),
+        NOW,
+    )
+    state = ExecutionState(MappingProxyType({"cs-a": order}), MappingProxyType({}))
+    assert execution_problems(state) == ([] if problem is None else [problem])
