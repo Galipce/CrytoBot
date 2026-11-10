@@ -123,6 +123,11 @@
 - Canlı borsa çağrısını saran `except Exception` `BannedError`'ı (HTTP 418) yutar ve döngü banı uzatarak çağırmayı sürdürür;
   ayrıca dolan emir borsaya ikinci çağrıdan önce kaydedilmezse istisna kaydı kaybettirir — yeni `except` bloğu banı
   `TurnRun.raise_if_banned` ile yeniden fırlatır, dolumu önce `save` eder — from spec 0034, review round 1 F-4 (A-4)
+- ccxt binance emir doğrulama reddinin çoğunu `InvalidOrder` değil `BadRequest` olarak fırlatır: `-1013`
+  (`Filter failure: NOTIONAL`/`MIN_NOTIONAL`), `-1100…-1106`, `-1111`, `-1114…-1121` (`-1121`: `BadSymbol`);
+  yalnız `LOT_SIZE`/`PRICE_FILTER` gibi birkaçı `InvalidOrder` olur — kesin ret yanıt gövdesindeki koddan
+  okunur, hata sınıfı testleri elle kurulmuş istisnayla değil ccxt'nin gerçek `handle_errors` eşlemesinden
+  üretilir — from spec 0036, review round 1 F-1
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
