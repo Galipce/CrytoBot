@@ -19,6 +19,7 @@ from crytobot.execution import (
     CREDENTIALS_MISSING,
     SPOT_TRADING_DISABLED,
     WITHDRAWAL_PERMISSION_FORBIDDEN,
+    AssetBalance,
     BinanceLiveClient,
     PermissionCheckFailedError,
     PermissionForbiddenError,
@@ -50,6 +51,17 @@ en büyük drawdown: %0.0109
 """
 
 
+# spec 0037 Amendment A-1: plenty of every coin; R-5 ignores a surplus, so no shortfall appears
+PLENTY = AssetBalance(Decimal(10**9), Decimal(10**9))
+
+
+class PlentyOfCoins(dict[str, AssetBalance]):
+    """Bakiye yanıtı: listelenmeyen her coinden bol."""
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return super().get(key, PLENTY)
+
+
 class FakeLiveClient(BinanceLiveClient):
     def __init__(
         self,
@@ -71,6 +83,12 @@ class FakeLiveClient(BinanceLiveClient):
         if self.balance_error is not None:
             raise self.balance_error
         return self.free_balance
+
+    def fetch_balances(self) -> dict[str, AssetBalance]:
+        """Spec 0037 Amendment A-1: coin mutabakatının sorgusu; USDT ve her coinden bol."""
+        if self.balance_error is not None:
+            raise self.balance_error
+        return PlentyOfCoins(USDT=AssetBalance(self.free_balance, self.free_balance))
 
     def place_stop_order(
         self,

@@ -23,11 +23,13 @@ from crytobot.app import (
     run_turn,
 )
 from crytobot.execution import (
+    AssetBalance,
     CloseOrder,
     LiveExchange,
     LiveReply,
     Order,
     OrderStatus,
+    client_id_part,
     stop_client_id,
 )
 from crytobot.persistence import load_store
@@ -76,6 +78,16 @@ def fill(
     return LiveReply(OrderStatus.FILLED, order, trades)
 
 
+def ended(
+    cid: str, filled: Decimal, average: str, fee: str | None, asset: str = "USDT"
+) -> LiveReply:
+    """Spec 0037: bir kısmı dolup kalanı borsada sona eren emrin yanıtı (adaptör `REJECTED` +
+    ham emir verir)."""
+    order = dict(fill(cid, filled, average, fee, asset).order or {})
+    order["status"] = "expired"
+    return LiveReply(OrderStatus.REJECTED, order)
+
+
 def usdt_buy(average: str = "10.01", fee: str = "0.5") -> Replier:
     return lambda cid, amount: fill(cid, amount, average, fee)
 
@@ -89,7 +101,9 @@ def usdt_sell(average: str = "14.97", fee: str = "0.73") -> Replier:
 
 
 class Venue(LiveExchange):
-    """Senaryolu canlı borsa: alım/satış yanıtı, sorgu yanıtları, stoplar, serbest bakiye."""
+    """Senaryolu canlı borsa: alım/satış yanıtı, sorgu yanıtları, stoplar, serbest bakiye. Spec
+    0037: `prices` üçüncü varlık fiyatları (yoksa okunamaz); `coins` verilirse coin bakiyeleri
+    yalnız bunlardır (yoksa her coinden bol), `balances_error` coin sorgusunun hatası."""
 
     def __init__(
         self,
@@ -97,19 +111,38 @@ class Venue(LiveExchange):
         buy: Replier | None = None,
         sell: Replier | None = None,
         stop_query: OrderStatus = OrderStatus.NEW,
+        prices: dict[str, Decimal] | None = None,
+        coins: dict[str, Decimal] | None = None,
+        balances_error: Exception | None = None,
     ) -> None:
         super().__init__(client=FakeLiveClient(free_balance=balance))
         self.balance = balance
         self.buy = buy or usdt_buy()
         self.sell = sell or usdt_sell()
         self.stop_query = stop_query
+        self.prices = prices or {}
+        self.coins = coins
+        self.balances_error = balances_error
         self.fills: dict[str, LiveReply] = {}
         self.markets: list[dict[str, Any]] = []
         self.stops: list[dict[str, Any]] = []
         self.queried: list[str] = []
+        self.priced: list[str] = []
 
     def fetch_free_balance(self, asset: str = "USDT") -> Decimal:
         return self.balance
+
+    def fetch_balances(self) -> dict[str, AssetBalance]:
+        if self.balances_error is not None:
+            raise self.balances_error
+        if self.coins is None:
+            return super().fetch_balances()
+        found = {coin: AssetBalance(total, total) for coin, total in self.coins.items()}
+        return {"USDT": AssetBalance(self.balance, self.balance), **found}
+
+    def last_price(self, symbol: str) -> Decimal | None:
+        self.priced.append(symbol)
+        return self.prices.get(symbol)
 
     def place_market(
         self, client_order_id: str, symbol: str = "", side: str = "", amount: object = None
@@ -123,7 +156,8 @@ class Venue(LiveExchange):
         return self.fills.get(client_order_id, LiveReply(OrderStatus.UNKNOWN))
 
     def query(self, client_order_id: str, symbol: str = "") -> OrderStatus:
-        if client_order_id.startswith("cs-"):
+        parsed = client_id_part(client_order_id)
+        if parsed is not None and parsed[0] == "cs":  # every stop generation (spec 0037)
             return self.stop_query
         return OrderStatus.UNKNOWN
 
@@ -304,64 +338,66 @@ def test_incomplete_exchange_stop_fill_is_not_recorded(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("case", ["partial_buy", "third_asset_buy", "partial_close"])
-def test_unsupported_fill_not_recorded_safe_mode(tmp_path: Path, case: str) -> None:
-    """AC-5 (R-5): kısmi dolan alım, kısmi dolan kapanış ve üçüncü varlıktan komisyonlu dolumun
-    her biri deftere yazılmaz; emir `UNKNOWN` kalır, güvenli mod devreye girer, alım durur, çift ve
-    emir kimliğiyle bildirim üretilir."""
+def test_partial_and_bnb_fills_recorded_without_safe_mode(tmp_path: Path, case: str) -> None:
+    """Spec 0037 AC-6 (R-6; plan Risk 6): 0036'da güvenli moda geçiren üç vaka — kalanı sona eren
+    kısmi alım, kısmi kapanış, üçüncü varlıktan (BNB) komisyonlu alım — artık deftere yazılır:
+    emir `FILLED`, durumu bilinmeyen emir yok, güvenli mod ve "desteklenmeyen dolum" bildirimi
+    yok; ikinci çiftin alımı aynı turda sürer."""
     path = live_store(tmp_path)
     notices: list[TurnNotice] = []
     both = (BTC, ETH)
     order: Order | CloseOrder
     if case == "partial_close":
         turn(path, Venue(), BUY_MARKET)
-        partial: Replier = lambda cid, amount: fill(cid, amount - 1, "14.97", "0.7")  # noqa: E731
+        partial: Replier = lambda cid, amount: ended(cid, amount - 1, "14.97", "0.7")  # noqa: E731
         venue = Venue(balance=ledger_balance(path), sell=partial)
         market = {**target_market(T1), ETH: pair_market(closes=CROSS, closed_at=T1)}
         result = turn(path, venue, market, T1, notices=notices, whitelist=both)
+        (closure,) = result.closures
+        assert closure.amount == FIRST_AMOUNT - 1
+        assert stored(path).ledger.positions[closure.position.client_order_id].amount == 1
         order = result.closes[0]
-        assert result.closures == ()
-        assert order.position_id in stored(path).ledger.positions
+        assert [o.pair for o in result.buys] == [ETH]
     else:
         replier: Replier = (
-            (lambda cid, amount: fill(cid, amount - 1, "10.01", "0.5"))
+            (lambda cid, amount: ended(cid, amount - 1, "10.01", "0.5"))
             if case == "partial_buy"
             else (lambda cid, amount: fill(cid, amount, "10.01", "0.02", "BNB"))
         )
         market = {BTC: pair_market(closes=CROSS), ETH: pair_market(closes=CROSS)}
         result = turn(path, Venue(buy=replier), market, notices=notices, whitelist=both)
         order = result.buys[0]
-        assert stored(path).ledger.positions == {}
-    assert order.status is OrderStatus.UNKNOWN
-    assert order.fill_price is None and order.net is None
-    assert BuyHalt.UNKNOWN_ORDERS in result.halts
-    assert [o.pair for o in result.buys] == ([] if case == "partial_close" else [BTC])
-    unsupported = [n for n in notices if n.kind is NoticeKind.UNSUPPORTED_FILL]
-    assert [(n.subject, n.entering) for n in unsupported] == [(order.client_order_id, True)]
-    assert BTC in unsupported[0].message and order.client_order_id in unsupported[0].message
-    assert stored(path).execution.unknown == (order.client_order_id,)
+        position = stored(path).ledger.positions[order.client_order_id]
+        assert position.amount == (FIRST_AMOUNT - 1 if case == "partial_buy" else FIRST_AMOUNT)
+        assert [o.pair for o in result.buys] == [BTC, ETH]
+    assert order.status is OrderStatus.FILLED
+    assert BuyHalt.UNKNOWN_ORDERS not in result.halts
+    assert stored(path).execution.unknown == ()
+    assert not any(n.kind is NoticeKind.UNSUPPORTED_FILL for n in notices)
+    assert not any(n.kind is NoticeKind.SAFE_MODE for n in notices)
 
 
-def test_partial_close_not_retried_next_turn(tmp_path: Path) -> None:
-    """AC-5 (R-5, G-2): kısmi dolan kapanıştan sonraki turda o pozisyon için yeni kapanış emri
-    verilmez; "elle bakılmalı" bildirimi sürer (çıkış yok)."""
+def test_partial_close_rest_retried_next_turn(tmp_path: Path) -> None:
+    """Spec 0037 AC-6 (R-3, R-6; plan Risk 6 — 0036'nın "yeniden denenmez" testi): kısmi dolan
+    kapanıştan sonraki turda kalan pozisyon yeniden değerlendirilir ve hedefteyse sonraki nesil
+    kimlikle (`cx2-`) kalan miktar satılır; "elle bakılmalı" bildirimi yoktur."""
     path = live_store(tmp_path)
     turn(path, Venue(), BUY_MARKET)
     memory = TurnMemory()
     notices: list[TurnNotice] = []
-    partial: Replier = lambda cid, amount: fill(cid, amount - 1, "14.97", "0.7")  # noqa: E731
+    partial: Replier = lambda cid, amount: ended(cid, amount - 1, "14.97", "0.7")  # noqa: E731
     venue = Venue(balance=ledger_balance(path), sell=partial)
-    cid = turn(path, venue, target_market(T1), T1, memory=memory, notices=notices).closes[0]
-    close_id = cid.client_order_id
+    close_id = turn(path, venue, target_market(T1), T1, memory=memory, notices=notices).closes[0]
+    assert close_id.client_order_id.startswith("cx-")
 
-    again = Venue(balance=ledger_balance(path), sell=partial)
-    again.fills[close_id] = partial(close_id, FIRST_AMOUNT)
+    again = Venue(balance=ledger_balance(path))
     later = turn(path, again, target_market(T2), T2, memory=memory, notices=notices)
-    assert again.queried == [close_id]
-    assert not any(m["side"] == "sell" for m in again.markets)
-    assert BuyHalt.UNKNOWN_ORDERS in later.halts
-    unsupported = [n for n in notices if n.kind is NoticeKind.UNSUPPORTED_FILL]
-    assert [(n.subject, n.entering) for n in unsupported] == [(close_id, True)]
-    assert stored(path).execution.unknown == (close_id,)
+    assert again.queried == []
+    sells = [m for m in again.markets if m["side"] == "sell"]
+    assert [(m["id"][:4], m["amount"]) for m in sells] == [("cx2-", Decimal(1))]
+    assert BuyHalt.UNKNOWN_ORDERS not in later.halts
+    assert stored(path).ledger.positions == {}
+    assert not any(n.kind is NoticeKind.UNSUPPORTED_FILL for n in notices)
 
 
 def test_exchange_stop_uses_net_amount(tmp_path: Path) -> None:

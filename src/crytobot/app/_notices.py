@@ -27,6 +27,10 @@ class NoticeKind(Enum):
     STOP_ORDER_FAILED = "stop_order_failed"
     UNSUPPORTED_FILL = "unsupported_fill"
     POSITION_BELOW_MINIMUM = "position_below_minimum"
+    # spec 0037: events (`Notices.event`, sent once, never a lasting state) and the coin shortfall
+    PARTIAL_FILL = "partial_fill"
+    ESTIMATED_FEE = "estimated_fee"
+    COIN_SHORTFALL = "coin_shortfall"
 
 
 # Absence ends only these: every completed turn evaluates them. Any other state ends with `clear`
@@ -40,6 +44,7 @@ _EVALUATED_EVERY_TURN = frozenset(
         NoticeKind.UNEXPECTED_ERROR,
         NoticeKind.STOP_ORDER_FAILED,  # spec 0034 F-3: derived from the stops every live turn
         NoticeKind.POSITION_BELOW_MINIMUM,  # spec 0036 R-2: from the positions every live turn
+        NoticeKind.COIN_SHORTFALL,  # spec 0037 R-5: from the exchange balance every live turn
     }
 )
 # about the account, not a pair: evaluated only when the ledger is asked for the equity
@@ -97,6 +102,11 @@ class Notices:
         if key not in self._memory.active:
             self._memory.active.add(key)
             self._send(key, True, message)
+
+    def event(self, kind: NoticeKind, subject: str, message: str) -> None:
+        """Spec 0037: bir olayın tek bildirimi (kısmi dolum, tahmini ücret); süren bir durum
+        değildir, hafızaya girmez ve çıkışı olmaz."""
+        self._send((kind, subject), True, message)
 
     def clear(self, kind: NoticeKind, subject: str = "") -> None:
         """Durum bitti; hafızadaysa çıkış bildirimi."""

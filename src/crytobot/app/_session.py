@@ -13,6 +13,7 @@ from crytobot.app._inputs import DataIssue, DataReport, PairMarket, TurnSettings
 from crytobot.app._notices import NoticeKind, Notices, TurnMemory
 from crytobot.app._result import BuyHalt, PairOutcome, TurnOutcome, TurnResult
 from crytobot.execution import (
+    PARTS,
     BannedError,
     CloseOrder,
     Exchange,
@@ -48,6 +49,28 @@ class KillRequest:
 
 # what stays visible without stopping the buys: risk refuses them itself (R-8)
 _INFORMATIONAL = frozenset({BuyHalt.DRAWDOWN, BuyHalt.KILL_SWITCH})
+# spec 0033 R-6: the USDT reconciliation tolerance
+_BALANCE_TOLERANCE = Decimal("0.05")
+
+
+def third_asset_fees(execution: ExecutionState) -> Decimal:
+    """Spec 0037 R-4 (plan Risk 2): dolan emirlerde üçüncü varlıktan (ör. BNB) kesilen komisyonların
+    defterdeki USDT değerlerinin toplamı. Defter bu değeri USDT bakiyesinden düşer (alım) ya da
+    gelirden keser (satış); borsa ise USDT'den değil o varlıktan keser: borsanın USDT bakiyesi
+    defterinkinden bu toplam kadar fazladır. Değer emrin ücretidir, alımdaki toz hariç (ücret
+    `ödenen + değer - net * fiyat`tır; fark yalnız 28 basamaklık fiyat yuvarlamasıdır)."""
+    total = Decimal(0)
+    for order in execution.orders.values():
+        asset = order.commission_asset
+        if order.status is not OrderStatus.FILLED or asset is None or order.fee is None:
+            continue
+        base, _, quote = order.pair.partition("/")
+        if asset in (base, quote):
+            continue
+        dust = order.dust if isinstance(order, Order) and order.dust is not None else Decimal(0)
+        price = order.fill_price if order.fill_price is not None else Decimal(0)
+        total += order.fee - dust * price
+    return total
 
 
 def buy_fill(order: Order, at: datetime) -> Fill:
@@ -133,11 +156,18 @@ class TurnRun:
             raise error
 
     def place_exchange_stop(
-        self, position_id: str, pair: str, amount: Decimal, stop: Decimal
+        self, position_id: str, pair: str, amount: Decimal, stop: Decimal, part: int = 0
     ) -> None:
         """Spec 0034 R-4, R-5: pozisyon için borsaya şartlı stop. Çağıran dolumu önceden kaydetti
-        (F-4): borsa çağrısı ne olursa olsun alım defterde kalır."""
-        stop_id = stop_client_id(position_id)
+        (F-4): borsa çağrısı ne olursa olsun alım defterde kalır. Spec 0037 (plan Risk 3): kısmi
+        kapanıştan sonraki stop `part` neslinin kimliğiyle; nesil kalmadıysa elle bakılmalı."""
+        if part >= PARTS:
+            self.stop_failed(
+                position_id,
+                f"pozisyon {part} kez kısmen kapandı, yeni stop kimliği yok; elle bakılmalı",
+            )
+            return
+        stop_id = stop_client_id(position_id, part)
         try:
             status = self.exchange.place_stop_order(
                 client_order_id=stop_id,
@@ -154,6 +184,28 @@ class TurnRun:
             return
         if status not in (OrderStatus.NEW, OrderStatus.FILLED):
             self.stop_failed(position_id, f"borsa stop emri başarısız ({stop_id}, {status.value})")
+
+    def note_fill(self, order: Order | CloseOrder) -> None:
+        """Spec 0037 R-1, R-3, R-4: dolan canlı emrin olay bildirimleri: kısmi dolum (dolan, emir)
+        ve tahmini ücret. Bir kez gider; durum değildir."""
+        if order.status is not OrderStatus.FILLED or order.filled is None:
+            return
+        cid, pair = order.client_order_id, order.pair
+        if order.filled < order.amount:
+            self.notices.event(
+                NoticeKind.PARTIAL_FILL,
+                cid,
+                f"{pair}: {cid} kısmen doldu: dolan {order.filled}, emir {order.amount}; dolan"
+                " kısım deftere yazıldı",
+            )
+        if order.fee_estimated:
+            self.notices.event(
+                NoticeKind.ESTIMATED_FEE,
+                cid,
+                f"{pair}: {cid} komisyonu {order.commission} {order.commission_asset};"
+                f" {order.commission_asset}/USDT fiyatı okunamadı, ücret ayardaki oranla tahmin"
+                f" edildi ({order.fee} USDT)",
+            )
 
     def unsupported_fill(self, client_order_id: str, pair: str, reason: str) -> None:
         """Spec 0036 R-5: henüz desteklenmeyen dolum deftere yazılmadı; emir `UNKNOWN` kalır
@@ -207,7 +259,12 @@ class TurnRun:
         return position.amount * price < min_notional
 
     def reconcile_balance(self) -> None:
-        """Spec 0033 R-6: Canlı modda tur başı bakiye mutabakatı (tolerans <= 0.05 USDT)."""
+        """Spec 0033 R-6: Canlı modda tur başı bakiye mutabakatı (tolerans <= 0.05 USDT).
+
+        Spec 0037 (plan Risk 2): beklenen USDT, defter bakiyesi + üçüncü varlık komisyonlarının USDT
+        değeridir. Ardından coin mutabakatı (R-5; Amendment A-1: açık pozisyon varken ikinci çağrı,
+        `fetch_balances`). Sorgulardan biri başarısızsa güvenli mod (G-8); coin bildirimleri
+        sürer."""
         if self.state.mode != "live":
             return
         fetch_bal = getattr(self.exchange, "fetch_free_balance", None)
@@ -216,38 +273,86 @@ class TurnRun:
         try:
             ex_balance = fetch_bal(asset="USDT")
         except Exception as err:
-            retry_after = getattr(err, "retry_after", None)
-            if retry_after is not None and retry_after > 0:
-                self.memory.retry_after = retry_after
-            if type(err).__name__ == "BannedError":
-                raise
-            self.halt(BuyHalt.BALANCE_CHECK_FAILED)
-            self.notices.enter(
-                NoticeKind.SAFE_MODE,
-                "",
-                f"güvenli mod: borsa bakiye sorgusu başarısız ({type(err).__name__})",
-            )
+            self._balance_error(err)
             return
 
         if ex_balance is None:
-            self.halt(BuyHalt.BALANCE_CHECK_FAILED)
-            self.notices.enter(
-                NoticeKind.SAFE_MODE, "", "güvenli mod: borsa serbest bakiyesi alınamadı"
-            )
+            self._balance_failed("güvenli mod: borsa serbest bakiyesi alınamadı")
             return
 
         ledger_balance = self.state.ledger.balance
         if ledger_balance is None:
             return
-        diff = abs(ledger_balance - ex_balance)
-        if diff > Decimal("0.05"):
+        expected = ledger_balance + third_asset_fees(self.state.execution)
+        diff = abs(expected - ex_balance)
+        if diff > _BALANCE_TOLERANCE:
             self.halt(BuyHalt.RECONCILIATION_HALT)
             self.notices.enter(
                 NoticeKind.RECONCILIATION,
                 "",
                 f"bakiye mutabakat farkı toleransı aştı: "
-                f"defter={ledger_balance}, borsa={ex_balance}, fark={diff}",
+                f"defter={expected}, borsa={ex_balance}, fark={diff}",
             )
+        self._reconcile_coins()
+
+    def _balance_error(self, err: Exception) -> None:
+        """Bakiye sorgusu hatası: 429 bekleme süresi saklanır, ban yutulmaz, kalanı güvenli mod."""
+        retry_after = getattr(err, "retry_after", None)
+        if retry_after is not None and retry_after > 0:
+            self.memory.retry_after = retry_after
+        if type(err).__name__ == "BannedError":
+            raise err
+        self._balance_failed(f"güvenli mod: borsa bakiye sorgusu başarısız ({type(err).__name__})")
+
+    def _balance_failed(self, message: str) -> None:
+        """G-8: bakiye bilinmiyor; alım durur, coin eksikliği değerlendirilmedi (sürer)."""
+        self.halt(BuyHalt.BALANCE_CHECK_FAILED)
+        self.notices.enter(NoticeKind.SAFE_MODE, "", message)
+        for kind, subject in tuple(self.memory.active):
+            if kind is NoticeKind.COIN_SHORTFALL:
+                self.notices.keep(kind, subject)
+
+    def _reconcile_coins(self) -> None:
+        """Spec 0037 R-5 (A-15): açık pozisyonu olan her coinde borsadaki toplam (serbest + emirde
+        bekleyen) o coindeki açık pozisyonların net toplamından bir miktar adımından fazla azsa
+        alım durur, bildirim çift adıyla. Fazla coin yok sayılır. Adım yoksa önceki bildirim sürer.
+        Kalıcı durum yoktur: koşul düzelince bildirim yokluğuyla biter (çıkış bildirimi)."""
+        held: dict[str, Decimal] = {}
+        for position in self.state.ledger.positions.values():
+            held[position.pair] = held.get(position.pair, Decimal(0)) + position.amount
+        if not held:
+            return
+        fetch = getattr(self.exchange, "fetch_balances", None)
+        if not callable(fetch):
+            return
+        try:
+            balances = fetch()
+        except Exception as err:
+            self._balance_error(err)
+            return
+        if not isinstance(balances, Mapping):
+            self._balance_failed("güvenli mod: borsa coin bakiyeleri alınamadı")
+            return
+        for pair, expected in held.items():
+            rules = self.rules_of(pair)
+            step = rules.amount_step if rules is not None else None
+            if not (isinstance(step, Decimal) and step.is_finite() and step > 0):
+                self.notices.keep(NoticeKind.COIN_SHORTFALL, pair)
+                if (NoticeKind.COIN_SHORTFALL, pair) in self.memory.active:
+                    self.halt(BuyHalt.COIN_SHORTFALL)
+                continue
+            coin = pair.partition("/")[0]
+            total = getattr(balances.get(coin), "total", Decimal(0))
+            if not isinstance(total, Decimal):
+                total = Decimal(0)
+            if expected - total > step:
+                self.halt(BuyHalt.COIN_SHORTFALL)
+                self.notices.enter(
+                    NoticeKind.COIN_SHORTFALL,
+                    pair,
+                    f"güvenli mod: {pair}: borsadaki {coin} ({total}) açık pozisyonların net"
+                    f" toplamından ({expected}) az; yeni alım durdu, kapanışlar sürer",
+                )
 
     def sync_safe_mode(self) -> None:
         """R-17: durumu bilinmeyen emir kaldıkça alım olmaz; bildirim durumdan türer (Risk 11)."""
