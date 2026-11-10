@@ -174,6 +174,21 @@ class Output:
             raise LogWriteError from None
 
 
+LOCK_BUSY = "depo başka bir bot sürecinde kullanılıyor"
+
+
+def _locked_control[T](store_path: str, command: Callable[[bool], T]) -> T:
+    """Spec 0035 review round 1 L-2: depoya doğrudan yazan kontrol komutu kilidi tutarak çalışır.
+    Kilit alınamıyorsa bot çalışıyordur (`is_running=True`): kontrol ile yazım arasında bot kilidi
+    alıp depoyu yükleyemez, eski yazım (STALE_WRITE) oluşmaz."""
+    lock = StoreLock(store_path)
+    refused = lock.acquire()
+    try:
+        return command(refused == LOCK_BUSY)
+    finally:
+        lock.release()
+
+
 class StoreLock:
     """R-6: `<depo>.lock` üzerinde işletim sistemi kilidi; süreç ölünce kalkar (plan Risk 5).
 
@@ -195,7 +210,7 @@ class StoreLock:
             _lock(handle)
         except OSError:
             handle.close()
-            return "depo başka bir bot sürecinde kullanılıyor"
+            return LOCK_BUSY
         self._file = handle
         return None
 
@@ -606,11 +621,11 @@ def run(
         def _request_kill() -> None:
             set_kill_flag(config.store_path)
 
-        res = engage_kill_switch(
-            config,
-            clock=clock,
-            is_running=is_lock_held(config.store_path),
-            request_kill=_request_kill,
+        res = _locked_control(
+            config.store_path,
+            lambda running: engage_kill_switch(
+                config, clock=clock, is_running=running, request_kill=_request_kill
+            ),
         )
         msg = res.message if res.success else f"reddedildi: {res.message}"
         output.say(line(clock(), "kill-switch", msg))
@@ -618,7 +633,10 @@ def run(
 
     if argv[0] == "resume":
         # spec 0035 R-7: çalışan botta resume reddedilir
-        res = resume_operations(config, clock=clock, is_running=is_lock_held(config.store_path))
+        res = _locked_control(
+            config.store_path,
+            lambda running: resume_operations(config, clock=clock, is_running=running),
+        )
         msg = res.message if res.success else f"reddedildi: {res.message}"
         output.say(line(clock(), "resume", msg))
         return EXIT_OK if res.success else EXIT_REFUSED

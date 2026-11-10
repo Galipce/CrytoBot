@@ -284,3 +284,69 @@ def test_control_commands_need_no_credentials(tmp_path: Path, monkeypatch: objec
     assert loaded.config is not None, loaded.message
     code, data = get_dashboard_status(loaded.config, clock=lambda: T0)
     assert code == 200 and data["mode"] == "live"
+
+
+def test_kill_flag_reaches_running_loop_end_to_end(tmp_path: Path) -> None:
+    """Spec 0035 AC-1, AC-11 (R-4), review round 1 M-1: `kill-switch` bot çalışırken bayrağa
+    yazılır; `start` döngüsü onu turunda kendi kaydıyla işler, bayrak silinir, denetim kaydı
+    `engaged`. Bağlantı (`__main__` → `LoopParts` → tur) gerçek CLI yolundan sınanır."""
+    from crytobot.control import kill_flag_path
+    from tests.main.test_entry import Bot
+
+    bot = Bot(tmp_path / "bot")
+    assert bot.run("prepare")[0] == EXIT_OK
+    lock = StoreLock(str(bot.store))
+    assert lock.acquire() is None  # a running bot holds the lock
+    try:
+        console = io.StringIO()
+        code = run(["kill-switch"], config_path=bot.config_path, console=console, clock=bot.clock)
+        assert code == EXIT_OK and "çalışan bota iletildi" in console.getvalue()
+    finally:
+        lock.release()
+    assert kill_flag_path(bot.store).exists()
+
+    code, _ = bot.run("start")
+
+    assert code == EXIT_OK
+    loaded = load_store(bot.store, "paper")
+    assert loaded.state is not None and loaded.state.risk.kill_switch
+    assert not kill_flag_path(bot.store).exists()
+    rows = load_audit_records(bot.store)
+    assert any('"result":"requested"' in r for r in rows)
+    assert any('"result":"engaged"' in r and "çalışan bot isteği" in r for r in rows)
+
+
+def test_stop_flag_ends_loop_after_turn_and_is_cleared(tmp_path: Path) -> None:
+    """Spec 0035 AC-3 (R-4), review round 1 M-2: tur sürerken gelen `stop` bayrağını botun
+    beklemesi görür; bot turunu tamamlayıp temiz çıkar, bayrak çıkışta silinir."""
+    from crytobot.app import StopRequest
+    from crytobot.market_data import MarketRead, ReadSettings
+    from tests.main.test_entry import Bot
+
+    bot = Bot(tmp_path / "bot", stop_on_read=None)
+    assert bot.run("prepare")[0] == EXIT_OK
+    flag = stop_flag_path(bot.store)
+    turns: list[int] = []
+
+    def read_then_stop(pairs: tuple[str, ...], settings: ReadSettings) -> MarketRead:
+        turns.append(1)
+        if len(turns) == 1:  # the `stop` command arrives while the first turn runs
+            assert run(["stop"], config_path=bot.config_path, console=io.StringIO()) == EXIT_OK
+            assert flag.exists()
+        return bot.read(pairs, settings)
+
+    console = io.StringIO()
+    code = run(
+        ["start", "--trial"],
+        config_path=bot.config_path,
+        console=console,
+        clock=bot.clock,
+        stop=StopRequest(),
+        read=read_then_stop,
+        wait=None,  # the real wait: it is what watches the flag
+    )
+
+    assert code == EXIT_OK
+    assert turns == [1]  # one turn completed, no second read
+    assert "durdurma isteği" in console.getvalue()
+    assert not flag.exists()
