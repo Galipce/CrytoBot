@@ -82,9 +82,10 @@ def test_fill_gate_evaluates_stop_slippage_and_fee(tmp_path: Path) -> None:
     result = bot.turn({BTC: pair_market(price=Decimal(10))})
     assert [o.amount for o in result.buys] == [FIRST_AMOUNT]
 
-    # Fiyat 10.01 olduğunda artan alış ve satış slippage'ı ile bütçe aşılır ve alım engellenir
+    # Fiyat 10.005: eski formülle 99.85 ile geçerdi, yeni formülle 100.24 ile
+    # bütçe aşılır ve reddedilir (formül değişikliğini ayırt eden sınır)
     bot_over = fresh(tmp_path, name="over.db")
-    result_over = bot_over.turn({BTC: pair_market(price=Decimal("10.01"))})
+    result_over = bot_over.turn({BTC: pair_market(price=Decimal("10.005"))})
     assert reasons(result_over) == [LIMIT]
     assert_no_trace(bot_over, result_over)
 

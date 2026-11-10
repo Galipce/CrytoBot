@@ -48,6 +48,7 @@
 - Strateji kodu backtest, paper ve live'da aynıdır; yalnızca `execution` adaptörü değişir.
 - Defter (ledger) kayıtları silinmez/değiştirilmez; düzeltme yeni kayıtla yapılır.
 - Para çekme (withdrawal) hiçbir kod yolunda yoktur.
+- **Borsa şartlı stop emri (live, spec 0034):** Canlı modda bir alım dolunca borsaya `cs-<alım id>` kimlikli şartlı stop emri verilir. Kapanıştan önce borsa stopunun iptali teyit edilir; tur başında borsada dolmuş stop deftere işlenerek senkronize edilir. Başarısızlık ve belirsizlikte bot fail-closed güvenli moda geçer (`STOP_ORDER_FAILED`); kısmi dolum kesinliği olmayan durumdur ve fail-closed güvenli mod uygulanır.
 
 ## Sensitive areas
 

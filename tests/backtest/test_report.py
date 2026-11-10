@@ -41,11 +41,11 @@ def sections(report: str) -> dict[str, str]:
 
 
 def test_report_states_every_assumption_and_marks_only_out_of_sample() -> None:
-    """R-11: her varsayım (B-51 dahil), koşu bilgisi; işaret yalnız örneklem dışında."""
+    """R-11: her varsayım (boşluklu düşüş dahil, F-11), koşu bilgisi; işaret örneklem dışında."""
     report = text()
     for assumption in ASSUMPTIONS:
         assert f"- {assumption}\n" in report
-    assert any(assumption.startswith("B-51:") for assumption in ASSUMPTIONS)
+    assert any("boşluklu düşüş hesaba katılmaz" in assumption for assumption in ASSUMPTIONS)
     for fact in (
         "dönem: 2026-01-01T00:00:00+00:00 .. 2026-01-03T00:00:00+00:00 (bitiş hariç)",
         "mum aralığı: 1h",

@@ -256,3 +256,42 @@ def test_cancel_order_and_race_condition_resolution() -> None:
 
     res_filled = venue_filled.cancel_order("cs-pos-2", PAIR)
     assert res_filled is OrderStatus.FILLED
+
+
+def test_cancel_order_unrecognized_or_empty_status_returns_unknown() -> None:
+    """Spec 0034 review round 1 F-5: Tanınmayan veya boş iptal yanıtı fail-open değil
+    OrderStatus.UNKNOWN döner."""
+    fake_ccxt = FakeCcxtExchange(cancel_order_result={"status": "PARTIALLY_FILLED"})
+    client = BinanceLiveClient(CREDS, exchange=fake_ccxt)
+    venue = LiveExchange(client)
+
+    assert venue.cancel_order("cs-f5-1", PAIR) is OrderStatus.UNKNOWN
+
+    fake_ccxt.cancel_order_result = {}
+    assert venue.cancel_order("cs-f5-2", PAIR) is OrderStatus.UNKNOWN
+
+
+def test_cancel_order_partial_fill_returns_unknown_and_zero_fill_canceled() -> None:
+    """Spec 0034 review round 1 F-6 (Amendment A-3): İptal yanıtında kısmi dolum (filled > 0)
+    durum closed/filled değilse UNKNOWN döner; filled 0 ise CANCELED kalır."""
+    fake_ccxt = FakeCcxtExchange(cancel_order_result={"status": "canceled", "filled": 0.5})
+    client = BinanceLiveClient(CREDS, exchange=fake_ccxt)
+    venue = LiveExchange(client)
+
+    assert venue.cancel_order("cs-f6-1", PAIR) is OrderStatus.UNKNOWN
+
+    fake_ccxt.cancel_order_result = {"status": "canceled", "filled": 0}
+    assert venue.cancel_order("cs-f6-2", PAIR) is OrderStatus.CANCELED
+
+
+def test_query_stop_order_partial_fill_returns_unknown_and_closed_filled() -> None:
+    """Spec 0034 review round 1 F-6 (Amendment A-3): cs- stop sorgusunda kısmi dolum (filled > 0)
+    durum closed/filled değilse UNKNOWN döner; closed durumunda filled olsa da FILLED döner."""
+    fake_ccxt = FakeCcxtExchange(fetch_order_result={"status": "open", "filled": 0.3})
+    client = BinanceLiveClient(CREDS, exchange=fake_ccxt)
+    venue = LiveExchange(client)
+
+    assert venue.query("cs-f6-3", PAIR) is OrderStatus.UNKNOWN
+
+    fake_ccxt.fetch_order_result = {"status": "closed", "filled": 1}
+    assert venue.query("cs-f6-4", PAIR) is OrderStatus.FILLED

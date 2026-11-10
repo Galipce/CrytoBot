@@ -9,6 +9,8 @@ adaptöründedir. Seçim gerekçesi: kişisel bot için mikroservis operasyon y�
 pandas / LLM ekosisteminin en olgun olduğu dil. Kalıcı veri SQLite'ta, repository katmanı arkasında.
 Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 
+**Borsa şartlı stop emri yaşam döngüsü (live, spec 0034):** Canlı modda bir alım dolunca borsaya tekil kimlikli (`cs-<alım id>`) şartlı piyasa stop emri verilir. Kapanıştan önce borsa stopunun iptali teyit edilir; tur başında bakiye mutabakatı öncesinde borsada dolmuş stop senkronize edilir. Başarısızlıkta ve belirsizlikte fail-closed güvenli moda geçilir (`STOP_ORDER_FAILED`); kısmi dolum kesinliği olmayan durumdur ve fail-closed güvenli modla alımlar durdurulur.
+
 ## Modules / components and ownership
 
 | Module | Single responsibility | Owns |
