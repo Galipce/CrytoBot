@@ -291,7 +291,7 @@ class TurnRun:
                 NoticeKind.RECONCILIATION,
                 "",
                 f"bakiye mutabakat farkı toleransı aştı: "
-                f"defter={expected}, borsa={ex_balance}, fark={diff}",
+                f"beklenen={expected}, borsa={ex_balance}, fark={diff}",
             )
         self._reconcile_coins()
 
