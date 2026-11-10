@@ -141,3 +141,56 @@ def test_service_disabled_config_is_noop() -> None:
     assert err is None
     assert not called
     assert len(service.queue) == 0
+
+
+def _closure(part: Decimal, proceeds: Decimal, realized: Decimal) -> Any:
+    from datetime import UTC, datetime
+
+    from crytobot.portfolio import CloseReason, Closure, Position
+
+    at = datetime(2026, 11, 11, tzinfo=UTC)
+    position = Position(
+        client_order_id="buy-1",
+        pair="BTC/USDT",
+        amount=Decimal("10"),
+        cost_price=Decimal("100"),
+        fee=Decimal("0.3"),
+        stop=Decimal("90"),
+        target=Decimal("110"),
+        opened_at=at,
+    )
+    return Closure(
+        client_order_id="cx-buy-1",
+        position=position,
+        amount=part,
+        price=Decimal("110"),
+        fee=Decimal("0.1"),
+        reason=CloseReason.TARGET,
+        closed_at=at,
+        proceeds=proceeds,
+        realized=realized,
+    )
+
+
+def test_partial_close_notice_shows_part_rate_and_rest() -> None:
+    # Spec 0037 R-3, review F-1: kısmi kapanış "KISMEN KAPANDI" der, oran kapanan kısmın
+    # maliyetine (300.09) göre hesaplanır ve kalan miktar yazılır; tam kapanış metni değişmez.
+    texts: list[str] = []
+
+    def transport(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        texts.append(payload["text"])
+        return 200, '{"ok":true}'
+
+    service = ReportingService(CONFIG, transport=transport)
+    service.send_close_notice(_closure(Decimal("3"), Decimal("329.9"), Decimal("29.81")))
+    service.send_close_notice(_closure(Decimal("10"), Decimal("1099.9"), Decimal("99.6")))
+
+    partial, full = texts
+    assert "[POZİSYON KISMEN KAPANDI]" in partial
+    assert "+29.81" in partial
+    assert "+9.93%" in partial
+    assert "Kalan Miktar: <code>7</code>" in partial
+    assert "[POZİSYON KAPANDI]" in full
+    assert "KISMEN" not in full
+    assert "Kalan Miktar" not in full
+    assert "+9.96%" in full

@@ -65,17 +65,25 @@ def format_close_notice(
     reason: str,
     realized_pnl: Decimal,
     pnl_pct: Decimal,
+    remaining: Decimal | None = None,
 ) -> str:
-    """Pozisyon kapanış bildirimini biçimlendirir (R-5)."""
+    """Pozisyon kapanış bildirimini biçimlendirir (R-5).
+
+    `remaining` verilirse kısmi kapanıştır (spec 0037 R-3): başlık "KISMEN KAPANDI" olur ve
+    açık kalan miktar yazılır; oran yalnız kapanan kısma aittir.
+    """
     safe_pair = escape_html(pair)
     safe_reason = escape_html(reason)
     emoji = "🟢" if realized_pnl >= 0 else "🔴"
     sign = "+" if realized_pnl > 0 else ""
     pct_sign = "+" if pnl_pct > 0 else ""
+    title = "POZİSYON KAPANDI" if remaining is None else "POZİSYON KISMEN KAPANDI"
+    rest = "" if remaining is None else f"\n• Kalan Miktar: <code>{remaining}</code>"
     return (
-        f"{emoji} <b>[POZİSYON KAPANDI]</b> {safe_pair} ({safe_reason})\n"
+        f"{emoji} <b>[{title}]</b> {safe_pair} ({safe_reason})\n"
         f"• Gerçekleşen PnL: <code>{sign}{realized_pnl}</code> USDT\n"
         f"• Kâr/Zarar Oranı: <code>{pct_sign}{pnl_pct}%</code>"
+        f"{rest}"
     )
 
 
