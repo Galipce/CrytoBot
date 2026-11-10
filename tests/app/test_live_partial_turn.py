@@ -223,3 +223,48 @@ def test_bnb_fee_notice_no_safe_mode_balance_reconciles(tmp_path: Path) -> None:
     assert BuyHalt.UNKNOWN_ORDERS not in after.halts
     assert not any(n.kind is NoticeKind.SAFE_MODE for n in notices)
     assert not any(n.kind is NoticeKind.RECONCILIATION for n in notices)
+
+
+def test_ninth_partial_close_fails_closed(tmp_path: Path) -> None:
+    """Plan Risk 3, review F-2: pozisyon 8 kez kısmen kapandıktan sonra 9. kapanış `cx9-` ile
+    verilir; o da kısmen dolarsa kalan için stop kimliği kalmaz: stop verilmez, `stop_failed`
+    bildirimi "elle bakılmalı" der, alım durur. Sonraki turda stop eşitlemesi stopu yok sayar,
+    kapanış "kimliği kalmadı" ile reddedilir; satış emri gitmez, pozisyon açık kalır."""
+    path = live_store(tmp_path)
+    subject = turn(path, Venue(), BUY_MARKET).buys[0].client_order_id
+    suffix = subject.removeprefix("cb-")
+    memory = TurnMemory()
+    one: Replier = lambda cid, amount: ended(cid, Decimal(1), "14.97", "0.01")  # noqa: E731
+    at = T1
+    for part in range(8):
+        venue = Venue(balance=ledger_balance(path), sell=one)
+        turn(path, venue, target_market(at), at, memory=memory)
+        assert venue.stops == [
+            {"id": stop_client_id(subject, part + 1), "amount": FIRST_AMOUNT - part - 1}
+        ]
+        at += T2 - T1
+    assert stored(path).ledger.parts(subject) == 8
+
+    notices: list[TurnNotice] = []
+    ninth = Venue(balance=ledger_balance(path), sell=one)
+    result = turn(path, ninth, target_market(at), at, memory=memory, notices=notices)
+    sells = [m["id"] for m in ninth.markets if m["side"] == "sell"]
+    assert sells == ["cx9-" + suffix]
+    assert ninth.stops == []
+    assert BuyHalt.STOP_ORDER_FAILED in result.halts
+    failed = [n for n in notices if n.kind is NoticeKind.STOP_ORDER_FAILED and n.entering]
+    assert [n.subject for n in failed] == [subject]
+    assert "9 kez kısmen kapandı" in failed[0].message and "elle bakılmalı" in failed[0].message
+    assert stored(path).ledger.positions[subject].amount == FIRST_AMOUNT - 9
+
+    at += T2 - T1
+    notices = []
+    tenth = Venue(balance=ledger_balance(path), sell=one)
+    after = turn(path, tenth, target_market(at), at, memory=memory, notices=notices)
+    assert [m for m in tenth.markets if m["side"] == "sell"] == []
+    assert tenth.stops == []
+    assert BuyHalt.STOP_ORDER_FAILED in after.halts
+    refused = [n for n in notices if n.kind is NoticeKind.CLOSE_REFUSED]
+    assert [n.subject for n in refused] == [subject]
+    assert "kapanış kimliği kalmadı" in refused[0].message
+    assert stored(path).ledger.positions[subject].amount == FIRST_AMOUNT - 9
