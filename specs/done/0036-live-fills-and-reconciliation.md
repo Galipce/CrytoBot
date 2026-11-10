@@ -1,6 +1,6 @@
 # Spec 0036 — Canlı modda gerçek dolum, coinden komisyon ve kesinliği olmayan emir
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0036-plan.md`
 - Self-critique: done
@@ -58,31 +58,33 @@ none — no user interface. Kullanıcı yalnız konsol ve kayıt satırlarını 
 - Size: 12 kriter, tek kullanıcı yeteneği (tam dolumda defter ↔ borsa doğruluğu); bölmeden sonra kalan çekirdek, daha fazla bölünürse parçalar tek başına doğru defter üretmez.
 
 ## Acceptance criteria
-- [ ] AC-1 — Alımda gerçek dolum (R-1): borsa ortalama fiyatı tahminden farklı bildirdiğinde defterdeki maliyet fiyatı ve ücret borsanın değerleridir.
-- [ ] AC-2 — Coinden komisyon (R-2): miktar adımı 0,01 iken 1 coin dolup 0,001 coin komisyon kesildiğinde pozisyon miktarı 0,99'dur; 0,009 toz olarak kayıtlıdır, satılmaz ve kasaya katılmaz; defter USDT bakiyesinden dolan miktar × ortalama fiyat düşer. Net miktar asgarinin altındaysa pozisyon kaydedilir, güvenli mod devreye girer, alım durur, bildirim üretilir.
-- [ ] AC-3 — USDT'den komisyon (R-3): komisyon USDT ise pozisyon miktarı dolan miktardır, komisyon maliyete eklenir.
-- [ ] AC-4 — Satış ve kapanış (R-4): kapanış satışı net miktarla verilir; tam dolan kapanış ortalama fiyat ve gerçek komisyonla deftere geçer.
-- [ ] AC-5 — Henüz desteklenmeyen dolum (R-5): kısmi dolan alım, kısmi dolan kapanış ve üçüncü varlıktan komisyonlu dolumun her biri deftere yazılmaz; güvenli mod devreye girer, alım durur, bildirim üretilir; kısmi dolan kapanıştan sonraki turda o pozisyon için yeni kapanış emri verilmez.
-- [ ] AC-6 — Borsa stop miktarı (R-6): 0034 borsa stop emri net miktarla verilir.
-- [ ] AC-7 — Hata sınıfları (R-7): ağ hatası, zaman aşımı, borsa erişilemezliği, bakım, hız sınırı ve tanınmayan hata türlerinin her biri `UNKNOWN` verir; yetersiz bakiye, geçersiz emir ve yetki hatası `REJECTED` verir.
-- [ ] AC-8 — "Emir yok" bekleme süresi (R-8): verilişten 5 dakikadan az sonra ya da yalnız bir sorguda gelen "emir yok" yanıtı `UNKNOWN` bırakır; 5 dakika geçmiş ve sonraki turda tekrarlanmışsa `REJECTED` olur (sınır değerler: 4 dk 59 s ve 5 dk); bot yeniden başlarsa ilk "emir yok" gözlemi yine `UNKNOWN` bırakır; borsa stop emirleri (`cs-`) bu kurala girmez, 0034'teki gibi kalır (G-6).
-- [ ] AC-9 — Netleşen emirde gerçek dolum (R-9, R-10): `UNKNOWN` kalan canlı alım sonraki turda dolmuş çıktığında deftere borsanın gerçek dolumu yazılır ve depo çelişki taşımaz; paper'da netleşme kayıtlı tahminle sürer.
-- [ ] AC-10 — Eksik dolum bilgisi (R-11): "doldu" yanıtında ortalama fiyat, dolan miktar ya da komisyon yoksa emir `UNKNOWN` olur, defter tahmin yazmaz; sıfır komisyonlu dolum geçerlidir ve deftere yazılır.
-- [ ] AC-11 — USDT mutabakatı gerçek dolumla (R-10, R-12): coinden komisyonlu bir alım ve bir kapanıştan sonra, borsa bakiyesi gerçek dolumlara uyduğunda mutabakat durdurması ve defter ↔ emir çelişkisi oluşmaz.
-- [ ] AC-12 — Eski canlı depo ve paper değişmezliği (R-13, R-14): gerçek dolum bilgisi taşımayan canlı depo adıyla reddedilir ve `prepare --live` istenir; paper ve backtest testleri değişmeden yeşildir.
+- [x] AC-1 — Alımda gerçek dolum (R-1): borsa ortalama fiyatı tahminden farklı bildirdiğinde defterdeki maliyet fiyatı ve ücret borsanın değerleridir.
+- [x] AC-2 — Coinden komisyon (R-2): miktar adımı 0,01 iken 1 coin dolup 0,001 coin komisyon kesildiğinde pozisyon miktarı 0,99'dur; 0,009 toz olarak kayıtlıdır, satılmaz ve kasaya katılmaz; defter USDT bakiyesinden dolan miktar × ortalama fiyat düşer. Net miktar asgarinin altındaysa pozisyon kaydedilir, güvenli mod devreye girer, alım durur, bildirim üretilir.
+- [x] AC-3 — USDT'den komisyon (R-3): komisyon USDT ise pozisyon miktarı dolan miktardır, komisyon maliyete eklenir.
+- [x] AC-4 — Satış ve kapanış (R-4): kapanış satışı net miktarla verilir; tam dolan kapanış ortalama fiyat ve gerçek komisyonla deftere geçer.
+- [x] AC-5 — Henüz desteklenmeyen dolum (R-5): kısmi dolan alım, kısmi dolan kapanış ve üçüncü varlıktan komisyonlu dolumun her biri deftere yazılmaz; güvenli mod devreye girer, alım durur, bildirim üretilir; kısmi dolan kapanıştan sonraki turda o pozisyon için yeni kapanış emri verilmez.
+- [x] AC-6 — Borsa stop miktarı (R-6): 0034 borsa stop emri net miktarla verilir.
+- [x] AC-7 — Hata sınıfları (R-7): ağ hatası, zaman aşımı, borsa erişilemezliği, bakım, hız sınırı ve tanınmayan hata türlerinin her biri `UNKNOWN` verir; yetersiz bakiye, geçersiz emir ve yetki hatası `REJECTED` verir.
+- [x] AC-8 — "Emir yok" bekleme süresi (R-8): verilişten 5 dakikadan az sonra ya da yalnız bir sorguda gelen "emir yok" yanıtı `UNKNOWN` bırakır; 5 dakika geçmiş ve sonraki turda tekrarlanmışsa `REJECTED` olur (sınır değerler: 4 dk 59 s ve 5 dk); bot yeniden başlarsa ilk "emir yok" gözlemi yine `UNKNOWN` bırakır; borsa stop emirleri (`cs-`) bu kurala girmez, 0034'teki gibi kalır (G-6).
+- [x] AC-9 — Netleşen emirde gerçek dolum (R-9, R-10): `UNKNOWN` kalan canlı alım sonraki turda dolmuş çıktığında deftere borsanın gerçek dolumu yazılır ve depo çelişki taşımaz; paper'da netleşme kayıtlı tahminle sürer.
+- [x] AC-10 — Eksik dolum bilgisi (R-11): "doldu" yanıtında ortalama fiyat, dolan miktar ya da komisyon yoksa emir `UNKNOWN` olur, defter tahmin yazmaz; sıfır komisyonlu dolum geçerlidir ve deftere yazılır.
+- [x] AC-11 — USDT mutabakatı gerçek dolumla (R-10, R-12): coinden komisyonlu bir alım ve bir kapanıştan sonra, borsa bakiyesi gerçek dolumlara uyduğunda mutabakat durdurması ve defter ↔ emir çelişkisi oluşmaz.
+- [x] AC-12 — Eski canlı depo ve paper değişmezliği (R-13, R-14): gerçek dolum bilgisi taşımayan canlı depo adıyla reddedilir ve `prepare --live` istenir; paper ve backtest testleri değişmeden yeşildir.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 1 (plan öncesi bölünme: kısmi dolum ve coin mutabakatı 0037'ye, df5da4d) |
+| Fix rounds | 2 (fix-1: round 1 F-1, F-2; fix-2: round 2 Info-1, Info-2) |
+| Review findings: real / noise / deferred | 4 / 2 / 3 (review round 1–3; deferred: B-70, B-71, B-72) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi: yerel kanıt `CHECK GREEN (fast)` @c211542 (sonrası yalnız `specs/`); full koşu bu PR'ın CI işidir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). VERIFY @c13faf7: 12 kriterin 12'si kanıtlı, 30 kasıtlı bozmanın hepsi kırmızı. VERIFY Info-1 (kısmi dolan alımda coin hesapta kalır, borsa stopu yok) R-5 ile bilerek kabul edildi; deftere işlenmesi 0037'de.
