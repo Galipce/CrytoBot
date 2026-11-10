@@ -53,3 +53,28 @@ def is_lock_held(store_path: str | Path) -> bool:
                     return True
     except OSError:
         return True
+
+
+def kill_flag_path(store_path: str | Path) -> Path:
+    """<depo>.kill: çalışan bota kill switch isteği bayrağı (spec 0035, plan Risk 1)."""
+    p = Path(store_path)
+    return p.with_suffix(p.suffix + ".kill")
+
+
+def set_kill_flag(store_path: str | Path) -> Path:
+    """Kill switch isteğini yazar. Bayrak kalıcıdır: bot onu kendi kaydıyla işleyene kadar durur."""
+    flag = kill_flag_path(store_path)
+    flag.write_text("kill-switch", encoding="utf-8")
+    return flag
+
+
+def kill_flag_set(store_path: str | Path) -> bool:
+    """Bekleyen kill switch isteği var mı?"""
+    return kill_flag_path(store_path).exists()
+
+
+def clear_kill_flag(store_path: str | Path) -> None:
+    """İstek bot tarafından depoya işlendikten sonra silinir; silinemezse bir sonraki tur yeniden
+    dener (kill switch zaten devrede olduğu için tekrar yazmaz)."""
+    with suppress(OSError):
+        kill_flag_path(store_path).unlink(missing_ok=True)

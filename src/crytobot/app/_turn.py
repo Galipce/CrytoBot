@@ -8,7 +8,7 @@ from crytobot.app._closes import close_positions, resolve_unknown
 from crytobot.app._inputs import TurnSettings, aware, read_market, settings_problem
 from crytobot.app._notices import NoticeKind, Notices, TurnMemory, TurnNotice
 from crytobot.app._result import BuyHalt, TurnOutcome, TurnResult
-from crytobot.app._session import SaveRefusedError, TurnRun
+from crytobot.app._session import KillRequest, SaveRefusedError, TurnRun
 from crytobot.execution import LIVE, PAPER, BannedError, Exchange, LiveExchange
 from crytobot.persistence import load_store
 
@@ -26,7 +26,9 @@ def _unexpected(error: Exception, notices: Notices) -> str:
 
 
 def _trade(run: TurnRun) -> TurnResult:
-    """R-1: sorgu → bakiye mutabakatı → gözlem → kapanış → gözlem → alım."""
+    """R-1: kill isteği → sorgu → bakiye mutabakatı → gözlem → kapanış → gözlem → alım → kill
+    isteği. Spec 0035 AC-11: tur sırasında gelen istek turun son kaydından önce işlenir."""
+    run.apply_kill_request()
     resolve_unknown(run)
     run.reconcile_balance()
     pairs = dict.fromkeys(
@@ -37,6 +39,7 @@ def _trade(run: TurnRun) -> TurnResult:
     close_positions(run)
     run.observe_equity()
     buy_pairs(run)
+    run.apply_kill_request()
     run.notices.settle()
     return run.result(TurnOutcome.COMPLETED, "tur tamamlandı")
 
@@ -51,6 +54,7 @@ def _begin(
     notices: Notices,
     memory: TurnMemory,
     mode: str = PAPER,
+    kill_request: KillRequest | None = None,
 ) -> TurnResult:
     if not aware(now):
         notices.enter(NoticeKind.INVALID_TIME, "", "turun zamanı zaman dilimi taşımalı")
@@ -71,6 +75,7 @@ def _begin(
     notices.clear(NoticeKind.LEDGER_NOT_OPENED)
     plain = dict(market) if isinstance(market, Mapping) else {}  # not a mapping: all data missing
     run = TurnRun(store_path, settings, plain, now, exchange, notices, memory, loaded.state)
+    run.kill_request = kill_request
     run.note_drawdown()
     run.sync_safe_mode()
     if loaded.conflicts:
@@ -97,11 +102,13 @@ def run_turn(
     exchange: Exchange,
     sink: Callable[[TurnNotice], None],
     memory: TurnMemory,
+    kill_request: KillRequest | None = None,
 ) -> TurnResult:
     """Tek geçiş: açık pozisyonları kapatır, risk onaylı alım yapar, her adımı kaydeder.
 
     İstisna fırlatmaz (R-11). Kâr hedefi ve kâr-zarar girdi değildir
     (R-14). `memory` süreç belleğidir: aynı süreçte aynı nesne verilir (plan Risk 5).
+    `kill_request` çalışan bota gelen kill switch isteğidir (spec 0035 R-4, AC-11).
     """
     for name, valid in (
         ("memory", isinstance(memory, TurnMemory)),
@@ -122,6 +129,7 @@ def run_turn(
             notices=notices,
             memory=memory,
             mode=turn_mode,
+            kill_request=kill_request,
         )
     except BannedError:
         raise

@@ -172,3 +172,23 @@ def test_kill_switch_while_running_without_channel_is_refused(tmp_path: Path) ->
     res = engage_kill_switch(config, clock=lambda: T0, is_running=True)
     assert not res.success
     assert not kill_switch_of(config, "live")
+
+
+def test_audit_row_is_valid_json_with_escapes() -> None:
+    """R-6: elle üretilen denetim satırı geçerli JSON'dur; tırnak, ters bölü, satır sonu kaçışlı."""
+    import json
+
+    from crytobot.app._control import format_audit_row
+
+    detail = 'hata: "salt-okunur" \\ yol\nikinci satır\tsekme — ç'
+    row = format_audit_row(T0, "resume", "refused", detail, mode="live", config_mode="paper")
+    assert json.loads(row) == {
+        "action": "resume",
+        "channel": "cli",
+        "config_mode": "paper",
+        "detail": detail,
+        "mode": "live",
+        "result": "refused",
+        "timestamp": "2026-11-10T12:00:00+00:00",
+    }
+    assert "\n" not in row

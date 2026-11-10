@@ -6,7 +6,6 @@ Bot çalışırken kontrol depoya yazmaz (plan 0035 Risk 1, 2): `kill-switch` is
 `resume` reddedilir. Hiçbir komut borsaya çıkmaz (R-5).
 """
 
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -78,7 +77,21 @@ def load_for_mode(config: BotConfig, *, readonly: bool = False) -> ModeLoad:
     return ModeLoad(result, store_mode, config_mode)
 
 
-def _format_audit_row(
+def _json_text(value: str) -> str:
+    """JSON metin değeri (çift tırnaklı): ters bölü, tırnak ve kontrol karakterleri kaçışlıdır.
+    `app` `json` import etmez (tests/app/test_boundaries.py izin listesi)."""
+    out = []
+    for char in value:
+        if char in ('"', "\\"):
+            out.append("\\" + char)
+        elif ord(char) < 0x20:
+            out.append(f"\\u{ord(char):04x}")
+        else:
+            out.append(char)
+    return '"' + "".join(out) + '"'
+
+
+def format_audit_row(
     now_dt: datetime,
     action: str,
     result: str,
@@ -87,7 +100,7 @@ def _format_audit_row(
     mode: str = "",
     config_mode: str = "",
 ) -> str:
-    """R-6: alanlar alfabetik sırada; uyuşmazlıkta `config_mode` da yazılır (spec 0035 R-6)."""
+    """R-6: tek satır JSON, alanlar alfabetik; uyuşmazlıkta `config_mode` da yazılır (spec 0035)."""
     data: dict[str, str] = {
         "action": action,
         "channel": "cli",
@@ -100,7 +113,8 @@ def _format_audit_row(
         data["mode"] = mode
     if config_mode:
         data["config_mode"] = config_mode
-    return json.dumps(data, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    fields = ",".join(f"{_json_text(key)}:{_json_text(data[key])}" for key in sorted(data))
+    return "{" + fields + "}"
 
 
 def _format_log_line(
@@ -125,7 +139,7 @@ def _write_audit(
     if loaded.mismatch:
         config_mode = loaded.config_mode
         detail = f"{detail}; {loaded.mismatch_text()}" if detail else loaded.mismatch_text()
-    row = _format_audit_row(
+    row = format_audit_row(
         now_dt, action, result, detail, mode=loaded.mode, config_mode=config_mode
     )
     append_audit_record(config.store_path, row)
