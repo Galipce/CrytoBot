@@ -1,6 +1,6 @@
 # Spec 0037 — Canlı modda kısmi dolum, üçüncü varlıktan komisyon ve coin mutabakatı
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0037-plan.md`
 - Self-critique: done
