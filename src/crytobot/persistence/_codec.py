@@ -5,7 +5,9 @@ bozuk sayılır. Satırlar diziler; kapanış pozisyonu kimliğiyle gösterir, a
 paylaşır (plan 0011 Risk 5). Bir emir dizisinin son altı alanı iki türde de aynıdır: durum, dolum,
 komisyon, oluşturma zamanı, tahmini dolum, tahmini komisyon. Canlı dolumun alanları (spec 0036:
 dolan, net, komisyon, komisyon varlığı, toz) yalnız doluysa en sona tek bir dizi olarak eklenir;
-paper satırı bayt bayt eskisi gibidir.
+ücret tahminiyse (spec 0037 R-4) dizinin sonuna `true` eklenir. Paper satırı bayt bayt eskisi
+gibidir. Kısmi kapanış (spec 0037 R-3) satır biçimini değiştirmez: kapanış satırı kapattığı kısmı
+taşır, kalan pozisyon okurken `remaining_position` ile türetilir.
 """
 
 import json
@@ -17,7 +19,15 @@ from types import MappingProxyType
 from typing import Any, NoReturn
 
 from crytobot.execution import CloseOrder, ExecutionState, Order, OrderStatus
-from crytobot.portfolio import CloseReason, Closure, Entry, EntryKind, Ledger, Position
+from crytobot.portfolio import (
+    CloseReason,
+    Closure,
+    Entry,
+    EntryKind,
+    Ledger,
+    Position,
+    remaining_position,
+)
 from crytobot.risk import RiskState
 
 _OPENING, _FILL, _CLOSE = "o", "f", "c"
@@ -144,7 +154,7 @@ def encode_summary(ledger: Ledger) -> str:
 def decode_ledger(rows: Iterable[object], summary: object) -> Ledger:
     """Doğrulamaz: bakiye ve toplamı `ledger_problems` kayıtlardan türetilenle karşılaştırır."""
     entries: list[Entry] = []
-    bought: dict[str, Position] = {}
+    bought: dict[str, Position] = {}  # the position as it stands after the rows read so far
     closed: dict[str, Closure] = {}
     try:
         for text in rows:
@@ -185,6 +195,8 @@ def decode_ledger(rows: Iterable[object], summary: object) -> Ledger:
                 entries.append(
                     Entry(EntryKind.CLOSE, closure.closed_at, closure.proceeds, position, closure)
                 )
+                if closure.amount < position.amount:  # a live partial close (spec 0037 R-3)
+                    bought[position.client_order_id] = remaining_position(position, closure.amount)
             else:
                 raise CodecError
         balance, realized_total, open_ids, closed_ids = _loads(summary)
@@ -195,7 +207,8 @@ def decode_ledger(rows: Iterable[object], summary: object) -> Ledger:
             MappingProxyType(_pick(closed, closed_ids)),
             _number(realized_total),
         )
-    except (IndexError, KeyError, TypeError, ValueError) as error:
+    except (IndexError, KeyError, TypeError, ValueError, DecimalException) as error:
+        # DecimalException: a NaN read from a row cannot be compared (spec 0037 partial close)
         raise CodecError from error
 
 
@@ -203,11 +216,14 @@ def _pick[T](known: Mapping[str, T], ids: list[str]) -> dict[str, T]:
     return {_text(i): known[i] for i in ids}
 
 
-def _exchange_fill(order: Order | CloseOrder) -> list[str | None] | None:
+def _exchange_fill(order: Order | CloseOrder) -> list[str | bool | None] | None:
     if order.filled is None and order.net is None and order.commission_asset is None:
         return None  # validated: the five are set together or not at all
     extra = (order.filled, order.net, order.commission, order.commission_asset, order.dust)
-    return [_optional_text(value) for value in extra]
+    row: list[str | bool | None] = [_optional_text(value) for value in extra]
+    if order.fee_estimated:  # spec 0037 R-4: only then, so a 0036 row stays as it was
+        row.append(True)
+    return row
 
 
 def _split(row: object) -> tuple[list[Any], list[Any] | None]:
@@ -298,7 +314,9 @@ def decode_orders(rows: Iterable[object]) -> ExecutionState:
             else:
                 raise CodecError
             if extra is not None:  # spec 0036: the exchange's real fill
-                filled, net, commission, asset, dust = extra
+                filled, net, commission, asset, dust, *estimated = extra
+                if estimated not in ([], [True]):  # spec 0037 R-4: written only when true
+                    raise CodecError
                 order = replace(
                     order,
                     filled=_number(filled),
@@ -306,6 +324,7 @@ def decode_orders(rows: Iterable[object]) -> ExecutionState:
                     commission=_number(commission),
                     commission_asset=_text(asset),
                     dust=_number(dust),
+                    fee_estimated=bool(estimated),
                 )
             orders[order.client_order_id] = order
             if quote_fill is not None or quote_fee is not None:

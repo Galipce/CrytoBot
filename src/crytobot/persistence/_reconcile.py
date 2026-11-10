@@ -10,9 +10,9 @@ from crytobot.portfolio import Closure, Ledger, Position
 def conflicts(ledger: Ledger, execution: ExecutionState) -> tuple[str, ...]:
     """Çelişen kimlikler, bulunma sırasıyla. Karşılaştırma sayısaldır: `1.10` ile `1.1` para farkı
     değildir. Yeni alımı durdurmak `app`'in işidir (spec 0011 Constraints)."""
-    bought = dict(ledger.positions)
-    for closure in ledger.closures.values():
-        bought[closure.position.client_order_id] = closure.position
+    # spec 0037 (plan Risk 5): a buy is matched by its recorded position, not by the rest a
+    # partial close left open
+    bought = ledger.filled_positions()
     closures = ledger.closures
     found: dict[str, None] = {}
     for cid, order in execution.orders.items():
