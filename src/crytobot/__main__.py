@@ -43,6 +43,7 @@ from crytobot.app import (
     DownloadParts,
     ExitReason,
     ForcedStop,
+    KillRequest,
     LogWriteError,
     LoopParts,
     PrepareOutcome,
@@ -69,8 +70,11 @@ from crytobot.app import (
 )
 from crytobot.backtest import read_report, report_exists, write_report
 from crytobot.control import (
+    clear_kill_flag,
     clear_stop_flag,
     is_lock_held,
+    kill_flag_set,
+    set_kill_flag,
     set_stop_flag,
     stop_flag_path,
 )
@@ -597,13 +601,24 @@ def run(
         return EXIT_OK if res.success else EXIT_REFUSED
 
     if argv[0] == "kill-switch":
-        res = engage_kill_switch(config, clock=clock)
+        # spec 0035 plan Risk 1: çalışan bota doğrudan yazılmaz, istek bayrağına gider
+
+        def _request_kill() -> None:
+            set_kill_flag(config.store_path)
+
+        res = engage_kill_switch(
+            config,
+            clock=clock,
+            is_running=is_lock_held(config.store_path),
+            request_kill=_request_kill,
+        )
         msg = res.message if res.success else f"reddedildi: {res.message}"
         output.say(line(clock(), "kill-switch", msg))
         return EXIT_OK if res.success else EXIT_REFUSED
 
     if argv[0] == "resume":
-        res = resume_operations(config, clock=clock)
+        # spec 0035 R-7: çalışan botta resume reddedilir
+        res = resume_operations(config, clock=clock, is_running=is_lock_held(config.store_path))
         msg = res.message if res.success else f"reddedildi: {res.message}"
         output.say(line(clock(), "resume", msg))
         return EXIT_OK if res.success else EXIT_REFUSED
@@ -697,6 +712,10 @@ def run(
             make_read(clock) if read is None else read,
             output,
             stop,
+            KillRequest(
+                pending=lambda: kill_flag_set(config.store_path),
+                consume=lambda: clear_kill_flag(config.store_path),
+            ),
         )
         if reporter is None:
             document = _load_toml(config_path)
