@@ -5,6 +5,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from crytobot.app import (
     BuyHalt,
     NoticeKind,
@@ -15,6 +17,7 @@ from crytobot.app import (
     run_turn,
 )
 from crytobot.execution import (
+    BannedError,
     LiveExchange,
     OrderStatus,
     PaperExchange,
@@ -150,7 +153,9 @@ def test_stop_order_failure_enters_safe_mode_and_halts_buys(tmp_path: Path) -> N
 
     # 2. Stop emri başarısızlığı fail-closed durdurma ve güvenli mod üretmeli
     assert BuyHalt.STOP_ORDER_FAILED in res.halts
-    assert any(n.kind is NoticeKind.SAFE_MODE for n in notices)
+    # review round 1 F-3: pozisyona özgü bildirim; aynı turda "düzeldi" çıkışı yok
+    stop_notices = [n for n in notices if n.kind is NoticeKind.STOP_ORDER_FAILED]
+    assert [(n.subject, n.entering) for n in stop_notices] == [(buy_order.client_order_id, True)]
 
 
 def test_pre_reconciliation_syncs_filled_exchange_stop(tmp_path: Path) -> None:
@@ -336,3 +341,210 @@ def test_paper_and_backtest_modes_do_not_call_exchange_stop_api(tmp_path: Path) 
     assert len(res2.closures) == 1
     # Borsa stop iptali çağrılmamış olmalı
     assert len(spy_exchange.cancel_calls) == 0
+
+
+def _opened(tmp_path: Path, name: str) -> tuple[str, str]:
+    """Canlı depo, tur 1'de BTC alımı (stop NEW). Dönüş: depo yolu, pozisyon kimliği."""
+    store_path = str(tmp_path / name)
+    prepare_live_store(
+        store_path, NOW, live_client=FakeLiveClient(free_balance=Decimal("10000.00"))
+    )
+    res = _run(
+        store_path=store_path,
+        exchange=MockLiveExchange(free_balance=Decimal("10000.00")),
+        market={BTC: pair_market(closes=CROSS, price=Decimal(10))},
+        now=NOW,
+    )
+    return store_path, res.buys[0].client_order_id
+
+
+LATER = datetime(2026, 11, 10, 11, 0, tzinfo=UTC)
+LATEST = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
+
+
+def _balance(store_path: str) -> Decimal:
+    state = load_store(store_path, "live").state
+    assert state is not None and state.ledger.balance is not None
+    return state.ledger.balance
+
+
+def test_filled_exchange_stop_leaves_no_reconciliation_conflict(tmp_path: Path) -> None:
+    """Review round 1 F-1 (AC-5): dolan stop emir durumunda FILLED `cs-` kapanış emri olur; depo
+    çelişki taşımaz, tur RECONCILIATION ile durmaz."""
+    store_path, position_id = _opened(tmp_path, "f1.db")
+    stored = load_store(store_path, "live").state
+    assert stored is not None
+    pos = stored.ledger.positions[position_id]
+    proceeds = pos.amount * Decimal(8) * (Decimal(1) - Decimal("0.001"))
+    ex = MockLiveExchange(
+        free_balance=_balance(store_path) + proceeds,
+        stop_query_status=OrderStatus.FILLED,
+        stop_fetch_order={"average": "8", "fee": {"cost": str(pos.amount * Decimal("0.008"))}},
+    )
+    res = _run(
+        store_path=store_path,
+        exchange=ex,
+        market={BTC: pair_market(closes=FLAT, price=Decimal(8), closed_at=LATER)},
+        now=LATER,
+    )
+    loaded = load_store(store_path, "live")
+    assert loaded.conflicts == ()
+    assert BuyHalt.RECONCILIATION not in res.halts
+    assert loaded.state is not None
+    stop_id = stop_client_id(position_id)
+    assert loaded.state.execution.orders[stop_id].status is OrderStatus.FILLED
+    assert [c.client_order_id for c in res.closes] == [stop_id]
+
+
+def test_stop_filled_during_cancel_leaves_no_conflict(tmp_path: Path) -> None:
+    """Review round 1 F-1 (AC-6): iptal sırasında dolmuş stop da çelişkisiz yazılır, satış yok."""
+    store_path, _ = _opened(tmp_path, "f1race.db")
+    ex = MockLiveExchange(
+        free_balance=Decimal("9500.00"),
+        stop_cancel_status=OrderStatus.FILLED,
+        stop_fetch_order={"average": "8.00"},
+    )
+    _run(
+        store_path=store_path,
+        exchange=ex,
+        market={BTC: pair_market(closes=FLAT, price=Decimal(15), closed_at=LATER)},
+        now=LATER,
+    )
+    assert not any(c.startswith("place:cx-") for c in ex.call_order)
+    assert load_store(store_path, "live").conflicts == ()
+
+
+def test_rejected_stop_keeps_halting_on_later_turns(tmp_path: Path) -> None:
+    """Review round 1 F-2 (R-5): borsada bu kimlikle reddedilmiş stop durdukça sonraki turlarda da
+    alım durur, bildirim sürer (tek giriş, çıkış yok); kimlik dolu olduğundan yeniden verilmez."""
+    store_path, position_id = _opened(tmp_path, "f2.db")
+    notices: list[TurnNotice] = []
+    memory = TurnMemory()
+    for at in (LATER, LATEST):
+        ex = MockLiveExchange(
+            free_balance=_balance(store_path),
+            stop_query_status=OrderStatus.REJECTED,
+            stop_fetch_order={"status": "rejected"},
+        )
+        res = _run(
+            store_path=store_path,
+            exchange=ex,
+            market={BTC: pair_market(closes=FLAT, price=Decimal(10), closed_at=at)},
+            now=at,
+            memory=memory,
+            sink=notices.append,
+        )
+        assert BuyHalt.STOP_ORDER_FAILED in res.halts
+        assert ex.placed_stop_calls == []
+    stop_notices = [n for n in notices if n.kind is NoticeKind.STOP_ORDER_FAILED]
+    assert [(n.subject, n.entering) for n in stop_notices] == [(position_id, True)]
+
+
+def test_missing_stop_is_placed_again_and_notice_ends(tmp_path: Path) -> None:
+    """Review round 1 F-2: borsada hiç olmayan stop (ör. ilk deneme ağda kayboldu) yeniden verilir;
+    verilince durdurma kalkar, önceki bildirim çıkışla biter."""
+    store_path, position_id = _opened(tmp_path, "f2miss.db")
+    notices: list[TurnNotice] = []
+    memory = TurnMemory()
+    failing = MockLiveExchange(
+        free_balance=_balance(store_path),
+        stop_query_status=OrderStatus.REJECTED,
+        stop_placement_status=OrderStatus.UNKNOWN,
+    )
+    first = _run(
+        store_path=store_path,
+        exchange=failing,
+        market={BTC: pair_market(closes=FLAT, price=Decimal(10), closed_at=LATER)},
+        now=LATER,
+        memory=memory,
+        sink=notices.append,
+    )
+    assert BuyHalt.STOP_ORDER_FAILED in first.halts
+    assert [c["id"] for c in failing.placed_stop_calls] == [stop_client_id(position_id)]
+
+    placing = MockLiveExchange(
+        free_balance=_balance(store_path), stop_query_status=OrderStatus.REJECTED
+    )
+    second = _run(
+        store_path=store_path,
+        exchange=placing,
+        market={BTC: pair_market(closes=FLAT, price=Decimal(10), closed_at=LATEST)},
+        now=LATEST,
+        memory=memory,
+        sink=notices.append,
+    )
+    assert BuyHalt.STOP_ORDER_FAILED not in second.halts
+    assert len(placing.placed_stop_calls) == 1
+    stop_notices = [n for n in notices if n.kind is NoticeKind.STOP_ORDER_FAILED]
+    assert [n.entering for n in stop_notices] == [True, False]
+
+
+class BannedStopExchange(MockLiveExchange):
+    def place_stop_order(self, *args: Any, **kwargs: Any) -> OrderStatus:
+        raise BannedError("418")
+
+
+def test_ban_on_stop_placement_keeps_the_filled_buy(tmp_path: Path) -> None:
+    """Review round 1 F-4: stop verilirken ban (418) yutulmaz, döngüye çıkar; dolan alım ondan
+    önce kaydedilmiştir (defterde pozisyon, depo çelişkisiz)."""
+    store_path = str(tmp_path / "f4.db")
+    prepare_live_store(
+        store_path, NOW, live_client=FakeLiveClient(free_balance=Decimal("10000.00"))
+    )
+    with pytest.raises(BannedError):
+        _run(
+            store_path=store_path,
+            exchange=BannedStopExchange(free_balance=Decimal("10000.00")),
+            market={BTC: pair_market(closes=CROSS, price=Decimal(10))},
+            now=NOW,
+        )
+    loaded = load_store(store_path, "live")
+    assert loaded.state is not None
+    assert len(loaded.state.ledger.positions) == 1
+    assert loaded.conflicts == ()
+
+
+class BannedQueryExchange(MockLiveExchange):
+    def query(self, client_order_id: str, symbol: str = "") -> OrderStatus:
+        raise BannedError("418")
+
+
+def test_ban_on_stop_query_is_not_swallowed(tmp_path: Path) -> None:
+    """Review round 1 F-4: tur başı stop sorgusundaki ban da döngüye çıkar."""
+    store_path, _ = _opened(tmp_path, "f4q.db")
+    with pytest.raises(BannedError):
+        _run(
+            store_path=store_path,
+            exchange=BannedQueryExchange(free_balance=_balance(store_path)),
+            market={BTC: pair_market(closes=FLAT, price=Decimal(10), closed_at=LATER)},
+            now=LATER,
+        )
+
+
+@pytest.mark.parametrize(
+    ("cancel", "fetched", "sells"),
+    [
+        (OrderStatus.NEW, {"status": "open"}, False),
+        (OrderStatus.UNKNOWN, None, False),
+        (OrderStatus.REJECTED, {"status": "open"}, False),
+        (OrderStatus.REJECTED, None, True),
+        (OrderStatus.CANCELED, None, True),
+    ],
+)
+def test_close_sells_only_after_confirmed_cancel(
+    tmp_path: Path, cancel: OrderStatus, fetched: dict[str, Any] | None, sells: bool
+) -> None:
+    """Review round 1 F-5 (R-7): satış yalnız iptal teyidiyle ya da borsada stop hiç yoksa; aksi
+    hâlde kapanış reddedilir ve alım durur."""
+    store_path, _ = _opened(tmp_path, "f5.db")
+    ex = MockLiveExchange(
+        free_balance=Decimal("9500.00"), stop_cancel_status=cancel, stop_fetch_order=fetched
+    )
+    res = _run(
+        store_path=store_path,
+        exchange=ex,
+        market={BTC: pair_market(closes=FLAT, price=Decimal(15), closed_at=LATER)},
+        now=LATER,
+    )
+    assert any(c.startswith("place:cx-") for c in ex.call_order) is sells
+    assert (BuyHalt.STOP_ORDER_FAILED in res.halts) is not sells

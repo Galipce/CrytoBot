@@ -500,7 +500,11 @@ def _close_problem(order: CloseOrder) -> str | None:
         return "pozisyon kimliği geçersiz"
     if not _INTENT_ID.fullmatch(position_id.removeprefix(CLIENT_ID_PREFIX)):
         return "pozisyon kimliği geçersiz"
-    if order.client_order_id != "cx-" + position_id.removeprefix(CLIENT_ID_PREFIX):
+    suffix = position_id.removeprefix(CLIENT_ID_PREFIX)
+    if order.client_order_id == STOP_ID_PREFIX + suffix:  # an exchange stop's fill (spec 0034)
+        if order.reason != "stop":
+            return "borsa stop emrinin nedeni stop değil"
+    elif order.client_order_id != "cx-" + suffix:
         return "kimlik pozisyon kimliğinden türemiyor"
     if order.side != "sell":
         return "kapanış emrinin yönü satış değil"

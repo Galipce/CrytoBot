@@ -8,7 +8,6 @@ from decimal import Decimal
 
 from crytobot.app._inputs import PairMarket
 from crytobot.app._notices import NoticeKind
-from crytobot.app._result import BuyHalt
 from crytobot.app._session import TurnRun, buy_fill
 from crytobot.execution import (
     CloseOrder,
@@ -18,6 +17,7 @@ from crytobot.execution import (
     OrderStatus,
     place_close_order,
     query_order,
+    record_stop_fill,
     stop_client_id,
 )
 from crytobot.portfolio import (
@@ -74,67 +74,93 @@ def resolve_unknown(run: TurnRun) -> None:
             run.closes.append(order)
 
 
+def _stop_fill_terms(
+    run: TurnRun, stop_id: str, pair: str, stop: Decimal, amount: Decimal
+) -> tuple[Decimal, Decimal]:
+    """Dolan stopun fiyatı ve komisyonu: borsa yanıtından, yoksa stop fiyatı ve ayardaki oran."""
+    fill_price, fee = stop, None
+    fetch_fn = getattr(run.exchange, "fetch_order", None)
+    if callable(fetch_fn):
+        try:
+            raw = fetch_fn(stop_id, symbol=pair)
+        except Exception as error:
+            run.raise_if_banned(error)
+            raw = None
+        if isinstance(raw, dict):
+            avg = raw.get("average") or raw.get("price")
+            if avg is not None:
+                fill_price = Decimal(str(avg))
+            raw_fee = raw.get("fee")
+            if isinstance(raw_fee, dict) and raw_fee.get("cost") is not None:
+                fee = Decimal(str(raw_fee["cost"]))
+    if fee is None:
+        fee = amount * fill_price * run.settings.fee
+    return fill_price, fee
+
+
+def _record_stop_fill(run: TurnRun, subject: str) -> None:
+    """Spec 0034 R-6, F-1: dolan borsa stopu defterde kapanış, emir durumunda FILLED `cs-` kapanış
+    emri olarak tek kayıtta yazılır; mutabakat çelişki görmez."""
+    position = run.state.ledger.positions[subject]
+    stop_id = stop_client_id(subject)
+    price, fee = _stop_fill_terms(run, stop_id, position.pair, position.stop, position.amount)
+    close = Close(stop_id, subject, position.amount, price, fee, CloseReason.STOP, run.now)
+    res = close_position(run.state.ledger, close)
+    if res.closure is None:  # never dropped in silence (F-9)
+        run.stop_failed(subject, f"dolan borsa stopu deftere yazılamadı ({stop_id}): {res.message}")
+        return
+    order, execution = record_stop_fill(
+        run.state.execution, subject, position.pair, position.amount, price, fee, run.now
+    )
+    run.closures.append(res.closure)
+    run.save(ledger=res.ledger, execution=execution)
+    run.closes.append(order)
+
+
+def _stop_missing(run: TurnRun, stop_id: str, pair: str) -> bool:
+    """Borsada bu kimlikle emir hiç yok mu (verilmemiş stop). Belirsizse `False`: fail-closed."""
+    fetch_fn = getattr(run.exchange, "fetch_order", None)
+    if not callable(fetch_fn):
+        return False
+    try:
+        return fetch_fn(stop_id, symbol=pair) is None
+    except Exception as error:
+        run.raise_if_banned(error)
+        return False
+
+
 def sync_exchange_stops(run: TurnRun) -> None:
-    """Spec 0034 R-6, AC-5: Canlı modda tur başında borsa stop emirlerini denetler.
-    Dolan stopları deftere CloseReason.STOP ile işler; mutabakat öncesi bakiye eşitlenir."""
+    """Spec 0034 R-5, R-6, review round 1 F-1, F-2: her canlı turda her açık pozisyonun borsa
+    stopu denetlenir. Dolan stop kapanış olarak yazılır; hiç verilmemiş stop (ör. durumu sonradan
+    netleşen alım) yeniden verilir; belirsiz, iptal ya da reddedilmiş stop alımı durdurur."""
     if run.state.mode != "live":
         return
     query_fn = getattr(run.exchange, "query", None)
     if not callable(query_fn):
         return
-    fetch_fn = getattr(run.exchange, "fetch_order", None)
-
     for subject, position in list(run.state.ledger.positions.items()):
         stop_id = stop_client_id(subject)
+        if run.now < position.opened_at:  # the ledger would refuse the close (plan Risk 3)
+            run.notices.keep(NoticeKind.STOP_ORDER_FAILED, subject)
+            continue
         try:
             status = query_fn(stop_id, symbol=position.pair)
-        except Exception as err:
-            run.halt(BuyHalt.STOP_ORDER_FAILED)
-            run.notices.enter(
-                NoticeKind.SAFE_MODE,
-                "",
-                f"güvenli mod: stop sorgusu başarısız ({stop_id}, {type(err).__name__})",
-            )
+        except Exception as error:
+            run.raise_if_banned(error)
+            run.stop_failed(subject, f"stop sorgusu başarısız ({stop_id}, {type(error).__name__})")
             continue
-
-        if status is OrderStatus.UNKNOWN:
-            run.halt(BuyHalt.STOP_ORDER_FAILED)
-            run.notices.enter(
-                NoticeKind.SAFE_MODE,
-                "",
-                f"güvenli mod: stop emri durumu belirsiz ({stop_id})",
+        if status is OrderStatus.NEW:
+            continue
+        if status is OrderStatus.FILLED:
+            _record_stop_fill(run, subject)
+        elif status is OrderStatus.UNKNOWN:
+            run.stop_failed(subject, f"stop emri durumu belirsiz ({stop_id})")
+        elif _stop_missing(run, stop_id, position.pair):
+            run.place_exchange_stop(subject, position.pair, position.amount, position.stop)
+        else:  # canceled or rejected under this id: the id cannot be reused safely
+            run.stop_failed(
+                subject, f"pozisyonun borsa stopu yok ({stop_id}, {status.value}); elle bakılmalı"
             )
-        elif status is OrderStatus.FILLED:
-            fill_price = position.stop
-            fee = None
-            if callable(fetch_fn):
-                try:
-                    raw = fetch_fn(stop_id, symbol=position.pair)
-                    if isinstance(raw, dict):
-                        avg = raw.get("average") or raw.get("price")
-                        if avg is not None:
-                            fill_price = Decimal(str(avg))
-                        raw_fee = raw.get("fee")
-                        if isinstance(raw_fee, dict) and raw_fee.get("cost") is not None:
-                            fee = Decimal(str(raw_fee["cost"]))
-                except Exception:
-                    pass
-            if fee is None:
-                fee = position.amount * fill_price * run.settings.fee
-
-            close = Close(
-                stop_id,
-                subject,
-                position.amount,
-                fill_price,
-                fee,
-                CloseReason.STOP,
-                run.now,
-            )
-            res = close_position(run.state.ledger, close)
-            if res.closure is not None:
-                run.closures.append(res.closure)
-            run.save(ledger=res.ledger)
 
 
 def _close_one(run: TurnRun, decision: Decision) -> None:
@@ -154,67 +180,8 @@ def _close_one(run: TurnRun, decision: Decision) -> None:
     if not approval.approved:
         run.refuse_close(subject, approval.message)
         return
-    if run.state.mode == "live":
-        stop_id = stop_client_id(subject)
-        cancel_fn = getattr(run.exchange, "cancel_order", None)
-        if callable(cancel_fn):
-            try:
-                cancel_status = cancel_fn(stop_id, symbol=decision.pair)
-            except Exception as err:
-                run.halt(BuyHalt.STOP_ORDER_FAILED)
-                run.notices.enter(
-                    NoticeKind.SAFE_MODE,
-                    "",
-                    f"güvenli mod: stop iptali başarısız ({stop_id}, {type(err).__name__})",
-                )
-                run.refuse_close(
-                    subject, f"{decision.pair}: {subject}: borsa stop iptali başarısız"
-                )
-                return
-
-            if cancel_status is OrderStatus.UNKNOWN:
-                run.halt(BuyHalt.STOP_ORDER_FAILED)
-                run.notices.enter(
-                    NoticeKind.SAFE_MODE,
-                    "",
-                    f"güvenli mod: stop emri iptali belirsiz ({stop_id})",
-                )
-                run.refuse_close(subject, f"{decision.pair}: {subject}: borsa stop iptali belirsiz")
-                return
-
-            if cancel_status is OrderStatus.FILLED:
-                fill_price = position.stop
-                fee = None
-                fetch_fn = getattr(run.exchange, "fetch_order", None)
-                if callable(fetch_fn):
-                    try:
-                        raw = fetch_fn(stop_id, symbol=decision.pair)
-                        if isinstance(raw, dict):
-                            avg = raw.get("average") or raw.get("price")
-                            if avg is not None:
-                                fill_price = Decimal(str(avg))
-                            raw_fee = raw.get("fee")
-                            if isinstance(raw_fee, dict) and raw_fee.get("cost") is not None:
-                                fee = Decimal(str(raw_fee["cost"]))
-                    except Exception:
-                        pass
-                if fee is None:
-                    fee = position.amount * fill_price * run.settings.fee
-
-                close = Close(
-                    stop_id,
-                    subject,
-                    position.amount,
-                    fill_price,
-                    fee,
-                    CloseReason.STOP,
-                    run.now,
-                )
-                res = close_position(run.state.ledger, close)
-                if res.closure is not None:
-                    run.closures.append(res.closure)
-                run.save(ledger=res.ledger)
-                return
+    if run.state.mode == "live" and not _stop_cancelled(run, subject, decision.pair):
+        return
     placed = place_close_order(
         run.state.execution,
         CloseOrderRequest(
@@ -245,6 +212,34 @@ def _close_one(run: TurnRun, decision: Decision) -> None:
         run.refuse_close(subject, placed.message)
     run.save(ledger=ledger, execution=placed.state)
     run.closes.append(order)
+
+
+def _stop_cancelled(run: TurnRun, subject: str, pair: str) -> bool:
+    """Spec 0034 R-7, review round 1 F-5: satışa yalnız stopun iptali teyit edilince (ya da borsada
+    hiç yoksa) geçilir. Dolmuşsa kapanış stop dolumudur; başka her sonuçta kapanış reddedilir."""
+    stop_id = stop_client_id(subject)
+    cancel_fn = getattr(run.exchange, "cancel_order", None)
+    if not callable(cancel_fn):
+        run.stop_failed(subject, f"borsa stop iptali yapılamıyor ({stop_id})")
+        run.refuse_close(subject, f"{pair}: {subject}: borsa stop iptali yapılamıyor")
+        return False
+    try:
+        status = cancel_fn(stop_id, symbol=pair)
+    except Exception as error:
+        run.raise_if_banned(error)
+        run.stop_failed(subject, f"stop iptali başarısız ({stop_id}, {type(error).__name__})")
+        run.refuse_close(subject, f"{pair}: {subject}: borsa stop iptali başarısız")
+        return False
+    if status is OrderStatus.CANCELED:
+        return True
+    if status is OrderStatus.FILLED:
+        _record_stop_fill(run, subject)
+        return False
+    if status is OrderStatus.REJECTED and _stop_missing(run, stop_id, pair):
+        return True
+    run.stop_failed(subject, f"stop iptali teyit edilmedi ({stop_id}, {status.value})")
+    run.refuse_close(subject, f"{pair}: {subject}: borsa stop iptali teyit edilmedi")
+    return False
 
 
 def close_positions(run: TurnRun) -> None:

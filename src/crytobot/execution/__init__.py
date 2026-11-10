@@ -6,6 +6,7 @@ from crytobot.execution._close import (
     CloseOrderRequest,
     CloseOrderResult,
     place_close_order,
+    record_stop_fill,
 )
 from crytobot.execution._credentials import (
     CREDENTIALS_MISSING,
@@ -97,6 +98,7 @@ __all__: list[str] = [
     "place_order",
     "position_id_from_stop_id",
     "query_order",
+    "record_stop_fill",
     "redact_secrets",
     "stop_client_id",
     "verify_permissions",
