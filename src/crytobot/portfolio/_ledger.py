@@ -112,14 +112,36 @@ class Ledger:
         return self.entries[0].at if self.entries else None
 
     def bought(self, client_order_id: str) -> Position | None:
-        """Bu kimlikle kaydedilmiş alımın pozisyonu, açık ya da kapanmış (spec 0008 R-9)."""
-        position = self.positions.get(client_order_id)
-        if position is not None:
-            return position
+        """Bu kimlikle kaydedilmiş alımın pozisyonu, açık ya da kapanmış (spec 0008 R-9): alım
+        kaydındaki pozisyon, kısmi kapanıştan kalan değil (spec 0037)."""
+        return self.filled_position(client_order_id)
+
+    def filled_position(self, client_order_id: str) -> Position | None:
+        """Spec 0037 (plan Risk 5): alım kaydındaki pozisyon. Pozisyonun ilk kapanışı (kısmi ya da
+        tam) alım kaydındaki pozisyonu taşır; kapanışı yoksa açık pozisyonun kendisidir."""
         for closure in self.closures.values():
             if closure.position.client_order_id == client_order_id:
                 return closure.position
-        return None
+        return self.positions.get(client_order_id)
+
+    def filled_positions(self) -> dict[str, Position]:
+        """Her alımın kayıttaki pozisyonu, alım kimliğine göre: `filled_position`'ın tek geçişte
+        toplu hali (mutabakat, spec 0011 R-11). Sıra: açık pozisyonlar, sonra kapanmış olanlar
+        kapanma sırasıyla."""
+        first: dict[str, Position] = {}
+        for closure in self.closures.values():
+            first.setdefault(closure.position.client_order_id, closure.position)
+        found = {cid: first.get(cid, position) for cid, position in self.positions.items()}
+        for cid, position in first.items():
+            found.setdefault(cid, position)
+        return found
+
+    def parts(self, client_order_id: str) -> int:
+        """Spec 0037 (plan Risk 3): bu pozisyonun kayıtlı kapanış sayısı; açık pozisyonda kısmi
+        kapanışların sayısıdır."""
+        return sum(
+            1 for c in self.closures.values() if c.position.client_order_id == client_order_id
+        )
 
 
 EMPTY_LEDGER = Ledger((), None, MappingProxyType({}), MappingProxyType({}), Decimal(0))

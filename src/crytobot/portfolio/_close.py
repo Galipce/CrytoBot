@@ -3,7 +3,16 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, DecimalException, localcontext
+from decimal import (
+    ROUND_HALF_EVEN,
+    Context,
+    Decimal,
+    DecimalException,
+    DivisionByZero,
+    InvalidOperation,
+    Overflow,
+    localcontext,
+)
 from enum import Enum
 from types import MappingProxyType
 
@@ -14,13 +23,84 @@ from crytobot.portfolio._ledger import (
     Entry,
     EntryKind,
     Ledger,
+    Position,
     _amount,
     _price,
     _time,
 )
-from crytobot.portfolio._numbers import BOUNDED, CALC_DIGITS, _brief, _show
+from crytobot.portfolio._numbers import (
+    BOUNDED,
+    CALC_DIGITS,
+    DIGITS,
+    SCALE,
+    _brief,
+    _in_scale,
+    _show,
+    _significant,
+)
 
 _AT = {CloseReason.STOP: "stop'ta", CloseReason.TARGET: "hedefte"}
+# the fee share's division: wide enough that only the quantize below rounds (plan 0037 Risk 1)
+_SHARE = Context(
+    prec=2 * CALC_DIGITS + 10,
+    rounding=ROUND_HALF_EVEN,
+    Emax=SCALE,
+    Emin=-SCALE,
+    traps=[InvalidOperation, DivisionByZero, Overflow],
+)
+
+
+def _fee_share(position: Position, part: Decimal) -> Decimal:
+    """Plan 0037 Risk 1 (G-7): kapanan kısmın alım ücreti payı, `kısım / miktar * ücret`,
+    ROUND_HALF_EVEN yuvarlanır. Basamak, kısmın tutarı (`kısım * maliyet fiyatı`) ile ücretin
+    büyüğünün en büyük basamağından itibaren `DIGITS`'inci basamaktır: pay, kalan ücret
+    (`ücret - pay`, tam) ve kısmın maliyeti defterin 60 basamağına sığar; ücretin kendi basamağına
+    yuvarlamak küçük pozisyonda maliyeti 60 basamaktan uzatırdı. Tam kapanışta pay ücretin
+    kendisidir; sığmayan hesap `DecimalException` fırlatır."""
+    fee = position.fee
+    if part == position.amount or fee == 0:
+        return fee
+    with localcontext(_SHARE):
+        notional = part * position.cost_price
+        raw = fee * part / position.amount
+        quantum = Decimal(1).scaleb(max(fee.adjusted(), notional.adjusted()) - DIGITS + 1)
+        return raw.quantize(quantum)
+
+
+def part_cost(position: Position, part: Decimal) -> tuple[Decimal, Decimal]:
+    """R-3 (G-7): kapanan kısmın maliyeti `kısım * maliyet fiyatı + ücret payı` ve ücret payı.
+    Parçaların maliyet toplamı tam kapanışın maliyetine birebir eşittir; tam kapanışta
+    `miktar * maliyet fiyatı + ücret` (spec 0008). Sığmayan hesap `DecimalException` fırlatır."""
+    share = _fee_share(position, part)
+    with localcontext(BOUNDED):
+        return part * position.cost_price + share, share
+
+
+def remaining_position(position: Position, part: Decimal) -> Position:
+    """Spec 0037 R-3: `part` kadarı kapandıktan sonra açık kalan pozisyon; kimlik, çift, maliyet
+    fiyatı, stop, hedef ve açılış aynıdır, ücret `ücret - pay`dır. Kısım sıfırdan büyük ve
+    miktardan küçük olmalı, kalan miktar defterin basamak sınırına sığmalı; değilse `ValueError`."""
+    if not (isinstance(part, Decimal) and part.is_finite() and 0 < part < position.amount):
+        raise ValueError("kısım sıfırdan büyük ve pozisyon miktarından küçük olmalı")
+    try:
+        share = _fee_share(position, part)
+        with localcontext(BOUNDED):
+            amount = position.amount - part
+            fee = position.fee - share
+    except DecimalException as error:
+        raise ValueError("kalan pozisyon hesaplanamıyor") from error
+    if not (_in_scale(amount) and _significant(amount) <= DIGITS):
+        raise ValueError("kalan miktar defterin basamak sınırına sığmıyor")
+    return Position(
+        position.client_order_id,
+        position.pair,
+        amount,
+        position.cost_price,
+        fee,
+        position.stop,
+        position.target,
+        position.opened_at,
+    )
 
 
 @dataclass(frozen=True)
@@ -209,9 +289,13 @@ def _content(closure: Closure) -> tuple[object, ...]:
     )
 
 
-def close_position(ledger: Ledger, close: Close) -> CloseResult:
+def close_position(ledger: Ledger, close: Close, *, partial: bool = False) -> CloseResult:
     """R-3…R-10: dolan kapanış satışını kaydeder, geliri bakiyeye ekler, pozisyonu kapatır ve
-    gerçekleşen kâr/zararı hesaplar ya da adlandırarak reddeder."""
+    gerçekleşen kâr/zararı hesaplar ya da adlandırarak reddeder.
+
+    Spec 0037 R-3 (D-2): `partial` iken pozisyon miktarından küçük kısım da kabul edilir (yalnız
+    canlı); kapanan kısmın maliyeti miktarla orantılıdır (`part_cost`), kalan pozisyon aynı
+    kimlikle ve yerinde açık kalır (`remaining_position`). Varsayılan tam kapanıştır (R-4, R-7)."""
 
     def reject(outcome: CloseOutcome, detail: str) -> CloseResult:
         return CloseResult(ledger, outcome, None, detail)
@@ -252,7 +336,7 @@ def close_position(ledger: Ledger, close: Close) -> CloseResult:
         closer = next(
             (
                 c.client_order_id
-                for c in ledger.closures.values()
+                for c in reversed(tuple(ledger.closures.values()))
                 if c.position.client_order_id == checked.position_id
             ),
             None,
@@ -266,7 +350,8 @@ def close_position(ledger: Ledger, close: Close) -> CloseResult:
             CloseOutcome.POSITION_CLOSED,
             f"pozisyon kapalı: {checked.position_id} {closer} ile kapandı",
         )
-    if checked.amount != position.amount:  # full close only (R-4)
+    whole = checked.amount == position.amount
+    if not whole and not (partial and checked.amount < position.amount):  # R-4; 0037 R-3
         return reject(
             CloseOutcome.INVALID_INPUT,
             f"geçersiz girdi: miktar pozisyonla uyuşmuyor (kapanış {_brief(checked.amount)},"
@@ -279,12 +364,13 @@ def close_position(ledger: Ledger, close: Close) -> CloseResult:
             f" ({position.opened_at.isoformat()}) önce",
         )
     try:  # after the record checks: a retry does not depend on the balance (R-13)
+        rest = None if whole else remaining_position(position, checked.amount)
+        cost, _share = part_cost(position, checked.amount)
         with localcontext(BOUNDED):
-            cost = position.amount * position.cost_price + position.fee
             realized = checked.proceeds - cost
             after = balance + checked.proceeds
             total = ledger.realized + realized
-    except DecimalException:  # the exact result does not fit in 60 digits (plan 0008 Risk 5)
+    except (DecimalException, ValueError):  # does not fit in 60 digits (plan 0008 Risk 5)
         return reject(
             CloseOutcome.INVALID_INPUT,
             f"geçersiz girdi: ölçek hesaplanamıyor (gelir {_brief(checked.proceeds)}, bakiye"
@@ -301,7 +387,10 @@ def close_position(ledger: Ledger, close: Close) -> CloseResult:
         checked.proceeds,
         realized,
     )
-    positions = {k: p for k, p in ledger.positions.items() if k != position.client_order_id}
+    if rest is None:
+        positions = {k: p for k, p in ledger.positions.items() if k != position.client_order_id}
+    else:  # the rest keeps the position's place and id (spec 0037 R-3)
+        positions = {**ledger.positions, position.client_order_id: rest}
     closures = {**ledger.closures, closure.client_order_id: closure}
     entry = Entry(EntryKind.CLOSE, checked.at, checked.proceeds, position, closure)
     return CloseResult(
@@ -314,7 +403,9 @@ def close_position(ledger: Ledger, close: Close) -> CloseResult:
         ),
         CloseOutcome.CLOSED,
         closure,
-        f"{position.pair}: {position.client_order_id} {_AT[checked.reason]} kapandı"
-        f" ({closure.client_order_id}): gelir {_brief(checked.proceeds)} USDT, kâr/zarar"
-        f" {_brief(realized)} USDT, bakiye {_brief(after)} USDT",
+        f"{position.pair}: {position.client_order_id} {_AT[checked.reason]}"
+        + (" kapandı" if rest is None else " kısmen kapandı")
+        + f" ({closure.client_order_id}): gelir {_brief(checked.proceeds)} USDT, kâr/zarar"
+        f" {_brief(realized)} USDT, bakiye {_brief(after)} USDT"
+        + ("" if rest is None else f", kalan miktar {_brief(rest.amount)}"),
     )

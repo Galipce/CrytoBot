@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, DecimalException, localcontext
 
+from crytobot.portfolio._close import part_cost, remaining_position
 from crytobot.portfolio._ledger import (
     _CLIENT_ORDER_ID,
     CloseReason,
@@ -159,16 +160,22 @@ def _close(state: _Replay, entry: Entry) -> None:
     # the open position passed _check_position at its fill: being the same is enough (R-11)
     if not (_exact(position, open_position) and _exact(closure.position, open_position)):
         raise _Broken(f"{client_order_id}: pozisyon alım kaydıyla aynı değil")
-    if closure.amount != position.amount:
+    if closure.amount > position.amount:
         raise _Broken(f"{client_order_id}: miktar pozisyonla uyuşmuyor")
+    rest = None
+    if closure.amount < position.amount:  # a live partial close (spec 0037 R-3)
+        try:
+            rest = remaining_position(position, closure.amount)
+        except ValueError as error:
+            raise _Broken(f"{client_order_id}: kalan pozisyon türetilemiyor") from error
     if not _exact(entry.at, closure.closed_at):
         raise _Broken("kayıt zamanı kapanış zamanı değil")
     if closure.closed_at < position.opened_at:
         raise _Broken(f"{client_order_id}: kapanış pozisyonun açılışından önce")
+    cost, _share = part_cost(position, closure.amount)  # the engine's own formula (G-7)
     with localcontext(BOUNDED):
         sale = closure.amount * closure.price
         proceeds = sale - closure.fee
-        cost = position.amount * position.cost_price + position.fee
         realized = proceeds - cost
         after = balance + proceeds
         total = state.realized + realized
@@ -179,7 +186,10 @@ def _close(state: _Replay, entry: Entry) -> None:
     if not _same_number(entry.usdt, proceeds):
         raise _Broken(f"{client_order_id}: kayıt tutarı gelir değil")
     state.balance, state.realized = after, total
-    del state.positions[position_id]
+    if rest is None:
+        del state.positions[position_id]
+    else:
+        state.positions[position_id] = rest
     state.closures[client_order_id] = closure
 
 

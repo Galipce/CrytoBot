@@ -8,7 +8,9 @@ satışını yazar: pozisyon tamamen kapanır, satış geliri bakiyeye eklenir, 
 kâr/zarar gerçekleşir. Bakiye negatife düşmez; alım ve kapanış aynı kimlik alanını paylaşır, aynı
 `clientOrderId` ikinci bir kayıt doğurmaz. `account_state` defterden serbest bakiyeyi, açık
 pozisyonları, çift başına güncel fiyatla değerlenmiş kasayı ve gerçekleşen kâr/zarar toplamını
-türetir: `risk`'in hesap girdisi (`AccountState`'e `app` çevirir).
+türetir: `risk`'in hesap girdisi (`AccountState`'e `app` çevirir). Canlıda kapanış kısmi olabilir
+(spec 0037): `close_position(..., partial=True)` kapanan kısmı orantılı maliyetle yazar, kalan
+pozisyon (`remaining_position`) aynı kimlikle açık kalır.
 """
 
 from crytobot.portfolio._close import (
@@ -20,6 +22,7 @@ from crytobot.portfolio._close import (
     DecisionResult,
     close_position,
     exit_decisions,
+    remaining_position,
 )
 from crytobot.portfolio._ledger import (
     BUY,
@@ -69,4 +72,5 @@ __all__: list[str] = [
     "ledger_problems",
     "open_ledger",
     "record_fill",
+    "remaining_position",
 ]
