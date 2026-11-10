@@ -321,7 +321,7 @@ def test_stop_flag_ends_loop_after_turn_and_is_cleared(tmp_path: Path) -> None:
     beklemesi görür; bot turunu tamamlayıp temiz çıkar, bayrak çıkışta silinir."""
     from crytobot.app import StopRequest
     from crytobot.market_data import MarketRead, ReadSettings
-    from tests.main.test_entry import Bot
+    from tests.main.test_entry import Bot, event_lines
 
     bot = Bot(tmp_path / "bot", stop_on_read=None)
     assert bot.run("prepare")[0] == EXIT_OK
@@ -348,5 +348,54 @@ def test_stop_flag_ends_loop_after_turn_and_is_cleared(tmp_path: Path) -> None:
 
     assert code == EXIT_OK
     assert turns == [1]  # one turn completed, no second read
+    assert len(event_lines(console.getvalue(), "tur")) == 1  # its end-of-turn line (round 2 I-1)
     assert "durdurma isteği" in console.getvalue()
     assert not flag.exists()
+
+
+def test_control_write_holds_the_store_lock(tmp_path: Path, monkeypatch: object) -> None:
+    """Spec 0035 A-2, review round 2 L-2: `kill-switch` ve `resume` depoya kilidi tutarken
+    yazar; o sırada başka bir süreç (bot) kilidi alamaz."""
+    import pytest
+
+    import crytobot.__main__ as entry
+
+    assert isinstance(monkeypatch, pytest.MonkeyPatch)
+    cfg_path, db_path = setup_config_and_store(tmp_path)
+    seen: list[str | None] = []
+    for name in ("engage_kill_switch", "resume_operations"):
+        real = getattr(entry, name)
+
+        def probe(*args: object, _real: object = real, **kwargs: object) -> object:
+            other = StoreLock(str(db_path))
+            seen.append(other.acquire())
+            other.release()
+            return _real(*args, **kwargs)  # type: ignore[operator]
+
+        monkeypatch.setattr(entry, name, probe)
+
+    assert run(["kill-switch"], config_path=cfg_path, console=io.StringIO(), clock=lambda: T0) == 0
+    assert run(["resume"], config_path=cfg_path, console=io.StringIO(), clock=lambda: T0) == 0
+    assert seen == [entry.LOCK_BUSY, entry.LOCK_BUSY]
+
+
+def test_unopenable_lock_counts_as_running_bot(tmp_path: Path, monkeypatch: object) -> None:
+    """Spec 0035 review round 2 L-1: kilit dosyası açılamıyorsa bot çalışıyor sayılır
+    (fail-closed): `resume` reddedilir, `kill-switch` depoya değil istek bayrağına gider."""
+    import pytest
+
+    from crytobot.control import kill_flag_path
+
+    assert isinstance(monkeypatch, pytest.MonkeyPatch)
+    cfg_path, db_path = setup_config_and_store(tmp_path)
+    before = load_store(db_path, "paper")
+    assert before.state is not None
+    monkeypatch.setattr(StoreLock, "acquire", lambda self: "kilit dosyası açılamıyor")
+
+    console = io.StringIO()
+    assert run(["resume"], config_path=cfg_path, console=console, clock=lambda: T0) == EXIT_REFUSED
+    assert "çalışan bot var: önce stop" in console.getvalue()
+    assert run(["kill-switch"], config_path=cfg_path, console=io.StringIO(), clock=lambda: T0) == 0
+    assert kill_flag_path(db_path).exists()
+    after = load_store(db_path, "paper")
+    assert after.state is not None and after.state.revision == before.state.revision

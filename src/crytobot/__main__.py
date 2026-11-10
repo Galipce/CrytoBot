@@ -179,12 +179,12 @@ LOCK_BUSY = "depo başka bir bot sürecinde kullanılıyor"
 
 def _locked_control[T](store_path: str, command: Callable[[bool], T]) -> T:
     """Spec 0035 review round 1 L-2: depoya doğrudan yazan kontrol komutu kilidi tutarak çalışır.
-    Kilit alınamıyorsa bot çalışıyordur (`is_running=True`): kontrol ile yazım arasında bot kilidi
-    alıp depoyu yükleyemez, eski yazım (STALE_WRITE) oluşmaz."""
+    Kilit hangi nedenle alınamazsa alınamasın bot çalışıyor sayılır (`is_running=True`, round 2
+    L-1: fail-closed): kontrol ile yazım arasında bot depoyu yükleyemez, eski yazım oluşmaz."""
     lock = StoreLock(store_path)
     refused = lock.acquire()
     try:
-        return command(refused == LOCK_BUSY)
+        return command(refused is not None)
     finally:
         lock.release()
 
