@@ -1,5 +1,12 @@
-"""Uygulama kontrol mantığı (spec 0030 R-1…R-4, R-7, R-8)."""
+"""Uygulama kontrol mantığı (spec 0030 R-1…R-4, R-7, R-8; spec 0035 R-1…R-7).
 
+Depo ayardaki modla açılır; mod uyuşmazlığında deponun kendi modu okunur (spec 0035 R-2):
+gevşeten eylem (`resume`) reddedilir, sıkılaştıran eylem (`kill-switch`) deponun modunda uygulanır.
+Bot çalışırken kontrol depoya yazmaz (plan 0035 Risk 1, 2): `kill-switch` istek bayrağına gider,
+`resume` reddedilir. Hiçbir komut borsaya çıkmaz (R-5).
+"""
+
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -7,7 +14,9 @@ from decimal import Decimal
 
 from crytobot.app._config import BotConfig
 from crytobot.persistence import (
+    MODES,
     StoreOutcome,
+    StoreResult,
     append_audit_record,
     load_store,
     save_store,
@@ -19,6 +28,9 @@ from crytobot.risk import (
     resume as risk_resume,
 )
 
+LIVE_BANNER = "CANLI MOD — gerçek para"
+RUNNING_REFUSAL = "çalışan bot var: önce stop"
+
 
 @dataclass(frozen=True)
 class ControlResult:
@@ -28,47 +40,105 @@ class ControlResult:
     message: str
 
 
-def _format_audit_row(now_dt: datetime, action: str, result: str, detail: str = "") -> str:
-    iso = now_dt.isoformat(timespec="seconds")
-    if detail:
-        safe_detail = detail.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        return (
-            f'{{"action":"{action}","channel":"cli","detail":"{safe_detail}",'
-            f'"result":"{result}","timestamp":"{iso}"}}'
-        )
-    return f'{{"action":"{action}","channel":"cli","result":"{result}","timestamp":"{iso}"}}'
+@dataclass(frozen=True)
+class ModeLoad:
+    """Moda göre yükleme (spec 0035 R-1, R-2): sonuç, deponun modu ve ayardaki mod."""
+
+    result: StoreResult
+    store_mode: str | None
+    config_mode: str
+
+    @property
+    def mismatch(self) -> bool:
+        return self.store_mode is not None and self.store_mode != self.config_mode
+
+    @property
+    def mode(self) -> str:
+        """Gösterilecek mod: depo okunduysa deponun modu, değilse ayardaki mod."""
+        return self.store_mode if self.store_mode is not None else self.config_mode
+
+    def mismatch_text(self) -> str:
+        return f"mod uyuşmazlığı: ayar={self.config_mode}, depo={self.store_mode}"
 
 
-def _format_log_line(now_dt: datetime, action: str, result: str, detail: str = "") -> str:
-    iso = now_dt.isoformat(timespec="seconds")
-    suffix = f" {detail}" if detail else ""
-    return f"{iso} audit [cli] {action} {result}{suffix}\n"
+def load_for_mode(config: BotConfig, *, readonly: bool = False) -> ModeLoad:
+    """R-1, R-2: depoyu ayardaki modla açar; uyuşmazlıkta deponun kendi modunu okur."""
+    config_mode = config.mode
+    result = load_store(config.store_path, config_mode, readonly=readonly)
+    if result.outcome is StoreOutcome.MODE_MISMATCH:
+        for other in MODES:
+            if other == config_mode:
+                continue
+            alt = load_store(config.store_path, other, readonly=readonly)
+            if alt.state is not None:
+                return ModeLoad(alt, other, config_mode)
+            if alt.outcome is not StoreOutcome.MODE_MISMATCH:
+                return ModeLoad(alt, None, config_mode)
+    store_mode = config_mode if result.state is not None else None
+    return ModeLoad(result, store_mode, config_mode)
 
 
-def _write_audit(
-    store_path: str,
-    log_path: str,
+def _format_audit_row(
     now_dt: datetime,
     action: str,
     result: str,
     detail: str = "",
+    *,
+    mode: str = "",
+    config_mode: str = "",
+) -> str:
+    """R-6: alanlar alfabetik sırada; uyuşmazlıkta `config_mode` da yazılır (spec 0035 R-6)."""
+    data: dict[str, str] = {
+        "action": action,
+        "channel": "cli",
+        "result": result,
+        "timestamp": now_dt.isoformat(timespec="seconds"),
+    }
+    if detail:
+        data["detail"] = detail
+    if mode:
+        data["mode"] = mode
+    if config_mode:
+        data["config_mode"] = config_mode
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _format_log_line(
+    now_dt: datetime, action: str, result: str, detail: str = "", *, mode: str = ""
+) -> str:
+    iso = now_dt.isoformat(timespec="seconds")
+    suffix = f" {detail}" if detail else ""
+    mode_part = f" [mod={mode}]" if mode else ""
+    return f"{iso} audit [cli] {action} {result}{suffix}{mode_part}\n"
+
+
+def _write_audit(
+    config: BotConfig,
+    now_dt: datetime,
+    action: str,
+    result: str,
+    detail: str = "",
+    *,
+    loaded: ModeLoad,
 ) -> None:
-    row = _format_audit_row(now_dt, action, result, detail)
-    append_audit_record(store_path, row)
+    config_mode = ""
+    if loaded.mismatch:
+        config_mode = loaded.config_mode
+        detail = f"{detail}; {loaded.mismatch_text()}" if detail else loaded.mismatch_text()
+    row = _format_audit_row(
+        now_dt, action, result, detail, mode=loaded.mode, config_mode=config_mode
+    )
+    append_audit_record(config.store_path, row)
     try:
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(_format_log_line(now_dt, action, result, detail))
+        with open(config.log_path, "a", encoding="utf-8") as f:
+            f.write(_format_log_line(now_dt, action, result, detail, mode=loaded.mode))
     except OSError:
         pass
 
 
-def query_status(
-    config: BotConfig,
-    clock: Callable[[], datetime],
-    is_running: bool = False,
-) -> ControlResult:
-    """R-1: Durum sorgulama (salt okunur)."""
-    store_res = load_store(config.store_path, "paper")
+def _unavailable(config: BotConfig, loaded: ModeLoad) -> ControlResult | None:
+    """R-8: depo yok ya da okunamıyor → adıyla ret; depo oluşturulmaz."""
+    store_res = loaded.result
     if store_res.outcome is StoreOutcome.NOT_FOUND:
         return ControlResult(
             False,
@@ -76,8 +146,25 @@ def query_status(
         )
     if store_res.state is None:
         return ControlResult(False, f"depo okunamıyor: {store_res.message}")
+    return None
 
-    state = store_res.state
+
+def _with_mismatch(loaded: ModeLoad, message: str) -> str:
+    return f"{message} (uyarı: {loaded.mismatch_text()})" if loaded.mismatch else message
+
+
+def query_status(
+    config: BotConfig,
+    clock: Callable[[], datetime],
+    is_running: bool = False,
+) -> ControlResult:
+    """R-1: Durum sorgulama (salt okunur); spec 0035 R-3: deponun gerçek modu gösterilir."""
+    loaded = load_for_mode(config)
+    refused = _unavailable(config, loaded)
+    if refused is not None:
+        return refused
+    state = loaded.result.state
+    assert state is not None  # checked by _unavailable
     process_status = "çalışıyor" if is_running else "durdu"
 
     free_balance = state.ledger.balance
@@ -130,10 +217,14 @@ def query_status(
     )
     last_summary = f"zaman={last_time_str}, son kasa={state.risk.last_equity}"
 
+    head = f"{LIVE_BANNER}\n" if loaded.mode == "live" else ""
+    warning = f"UYARI: {loaded.mismatch_text()}\n" if loaded.mismatch else ""
     summary = (
+        f"{head}"
         f"=== CrytoBot Durum Raporu ===\n"
+        f"{warning}"
         f"Süreç Durumu: {process_status}\n"
-        f"Çalışma Modu: paper\n"
+        f"Çalışma Modu: {loaded.mode}\n"
         f"Serbest Bakiye: {free_balance} USDT\n"
         f"Toplam Kasa: {total_equity} USDT\n"
         f"Zirve Kasa: {peak_equity} USDT\n"
@@ -150,30 +241,56 @@ def query_status(
 def engage_kill_switch(
     config: BotConfig,
     clock: Callable[[], datetime],
+    *,
+    is_running: bool = False,
+    request_kill: Callable[[], None] | None = None,
 ) -> ControlResult:
-    """R-2: Acil alım durdurma (kill switch)."""
-    store_res = load_store(config.store_path, "paper")
-    if store_res.outcome is StoreOutcome.NOT_FOUND:
-        return ControlResult(
-            False,
-            f"depo dosyası yok: {config.store_path} (önce 'prepare' çalıştırılmalı)",
-        )
-    if store_res.state is None:
-        return ControlResult(False, f"depo okunamıyor: {store_res.message}")
-
-    state = store_res.state
+    """R-2: Acil alım durdurma. Spec 0035 R-2: uyuşmazlıkta deponun modunda uygulanır; bot
+    çalışırken depoya yazılmaz, istek bayrağına gider (plan 0035 Risk 1)."""
+    loaded = load_for_mode(config)
+    refused = _unavailable(config, loaded)
+    if refused is not None:
+        return refused
+    state = loaded.result.state
+    assert state is not None  # checked by _unavailable
     now_dt = clock()
     if state.risk.kill_switch:
         _write_audit(
-            config.store_path,
-            config.log_path,
-            now_dt,
-            "kill-switch on",
-            "already_active",
-            "zaten devrede",
+            config, now_dt, "kill-switch on", "already_active", "zaten devrede", loaded=loaded
         )
         return ControlResult(
-            True, "kill switch zaten devrede: yeni alımlar engellenmeye devam ediyor"
+            True,
+            _with_mismatch(
+                loaded, "kill switch zaten devrede: yeni alımlar engellenmeye devam ediyor"
+            ),
+        )
+
+    if is_running:
+        if request_kill is None:
+            _write_audit(
+                config, now_dt, "kill-switch on", "refused", "istek iletilemedi", loaded=loaded
+            )
+            return ControlResult(False, "kill switch isteği çalışan bota iletilemedi")
+        try:
+            request_kill()
+        except OSError as err:
+            _write_audit(
+                config,
+                now_dt,
+                "kill-switch on",
+                "refused",
+                f"istek yazılamadı ({type(err).__name__})",
+                loaded=loaded,
+            )
+            return ControlResult(False, f"kill switch isteği yazılamadı ({type(err).__name__})")
+        _write_audit(config, now_dt, "kill-switch on", "requested", "", loaded=loaded)
+        return ControlResult(
+            True,
+            _with_mismatch(
+                loaded,
+                "kill switch isteği çalışan bota iletildi: en geç sonraki turun başında,"
+                " alımdan önce devreye girer; açık pozisyonlar korunuyor",
+            ),
         )
 
     updated_risk = risk_engage_kill_switch(state.risk).state
@@ -185,49 +302,43 @@ def engage_kill_switch(
         updated_risk,
     )
     if save_res.state is None:
-        _write_audit(
-            config.store_path,
-            config.log_path,
-            now_dt,
-            "kill-switch on",
-            "refused",
-            save_res.message,
-        )
+        _write_audit(config, now_dt, "kill-switch on", "refused", save_res.message, loaded=loaded)
         return ControlResult(False, f"kill switch kaydedilemedi: {save_res.message}")
 
-    _write_audit(config.store_path, config.log_path, now_dt, "kill-switch on", "engaged", "")
+    _write_audit(config, now_dt, "kill-switch on", "engaged", "", loaded=loaded)
     return ControlResult(
         True,
-        "kill switch devreye alındı: yeni alımlar durduruldu, açık pozisyonlar korunuyor",
+        _with_mismatch(
+            loaded,
+            "kill switch devreye alındı: yeni alımlar durduruldu, açık pozisyonlar korunuyor",
+        ),
     )
 
 
 def resume_operations(
     config: BotConfig,
     clock: Callable[[], datetime],
+    *,
+    is_running: bool = False,
 ) -> ControlResult:
-    """R-3: Durdurma kaldırma (resume)."""
-    store_res = load_store(config.store_path, "paper")
-    if store_res.outcome is StoreOutcome.NOT_FOUND:
-        return ControlResult(
-            False,
-            f"depo dosyası yok: {config.store_path} (önce 'prepare' çalıştırılmalı)",
-        )
-    if store_res.state is None:
-        return ControlResult(False, f"depo okunamıyor: {store_res.message}")
-
-    state = store_res.state
+    """R-3: Durdurma kaldırma. Spec 0035 R-2: uyuşmazlıkta ret; R-7: çalışan botta ret."""
+    loaded = load_for_mode(config)
+    refused = _unavailable(config, loaded)
+    if refused is not None:
+        return refused
+    state = loaded.result.state
+    assert state is not None  # checked by _unavailable
     now_dt = clock()
+    if loaded.mismatch:
+        _write_audit(config, now_dt, "resume", "refused", "", loaded=loaded)
+        return ControlResult(False, f"durdurma kaldırılmadı: {loaded.mismatch_text()}")
+    if is_running:
+        _write_audit(config, now_dt, "resume", "refused", RUNNING_REFUSAL, loaded=loaded)
+        return ControlResult(False, RUNNING_REFUSAL)
+
     update = risk_resume(state.risk, "cli")
     if update.reason is not None:
-        _write_audit(
-            config.store_path,
-            config.log_path,
-            now_dt,
-            "resume",
-            "refused",
-            update.message,
-        )
+        _write_audit(config, now_dt, "resume", "refused", update.message, loaded=loaded)
         return ControlResult(False, update.message)
 
     save_res = save_store(
@@ -238,17 +349,10 @@ def resume_operations(
         update.state,
     )
     if save_res.state is None:
-        _write_audit(
-            config.store_path,
-            config.log_path,
-            now_dt,
-            "resume",
-            "refused",
-            save_res.message,
-        )
+        _write_audit(config, now_dt, "resume", "refused", save_res.message, loaded=loaded)
         return ControlResult(False, f"durdurma kaldırılamadı: {save_res.message}")
 
-    _write_audit(config.store_path, config.log_path, now_dt, "resume", "success", "")
+    _write_audit(config, now_dt, "resume", "success", "", loaded=loaded)
     return ControlResult(True, "durdurma kaldırıldı: kill switch ve drawdown durdurması sıfırlandı")
 
 
@@ -258,30 +362,21 @@ def request_stop(
     is_running: bool = False,
     on_stop_requested: Callable[[], None] | None = None,
 ) -> ControlResult:
-    """R-4: Temiz süreç durdurma isteği."""
-    store_res = load_store(config.store_path, "paper")
-    if store_res.outcome is StoreOutcome.NOT_FOUND:
-        return ControlResult(
-            False,
-            f"depo dosyası yok: {config.store_path} (önce 'prepare' çalıştırılmalı)",
-        )
-    if store_res.state is None:
-        return ControlResult(False, f"depo okunamıyor: {store_res.message}")
+    """R-4: Temiz süreç durdurma isteği; spec 0035 R-2: moddan bağımsız iletilir."""
+    loaded = load_for_mode(config)
+    refused = _unavailable(config, loaded)
+    if refused is not None:
+        return refused
 
     now_dt = clock()
     if not is_running:
-        _write_audit(
-            config.store_path,
-            config.log_path,
-            now_dt,
-            "stop",
-            "refused",
-            "çalışan bot süreci yok",
-        )
+        _write_audit(config, now_dt, "stop", "refused", "çalışan bot süreci yok", loaded=loaded)
         return ControlResult(False, "çalışan bot süreci yok: durdurma isteği iletilmedi")
 
     if on_stop_requested is not None:
         on_stop_requested()
 
-    _write_audit(config.store_path, config.log_path, now_dt, "stop", "success", "")
-    return ControlResult(True, "durdurma isteği çalışan bot sürecine iletildi")
+    _write_audit(config, now_dt, "stop", "success", "", loaded=loaded)
+    return ControlResult(
+        True, _with_mismatch(loaded, "durdurma isteği çalışan bot sürecine iletildi")
+    )
