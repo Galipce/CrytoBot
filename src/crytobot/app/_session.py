@@ -3,11 +3,12 @@
 Süreç belleği dışında hiçbir şey turdan taşmaz; kaydedilmeyen durum bir sonraki turda diskten gelir.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 
+from crytobot.app._control import format_audit_row
 from crytobot.app._inputs import DataIssue, DataReport, TurnSettings
 from crytobot.app._notices import NoticeKind, Notices, TurnMemory
 from crytobot.app._result import BuyHalt, PairOutcome, TurnOutcome, TurnResult
@@ -20,9 +21,9 @@ from crytobot.execution import (
     OrderStatus,
     stop_client_id,
 )
-from crytobot.persistence import StoredState, StoreOutcome, save_store
+from crytobot.persistence import StoredState, StoreOutcome, append_audit_record, save_store
 from crytobot.portfolio import Closure, Fill, Ledger, SnapshotOutcome, account_state
-from crytobot.risk import RiskState, observe
+from crytobot.risk import RiskState, engage_kill_switch, observe
 
 
 class AppError(Exception):
@@ -31,6 +32,18 @@ class AppError(Exception):
 
 class SaveRefusedError(AppError):
     """Kayıt reddedildi: tur biter, sonraki tur diskteki durumdan başlar (R-6)."""
+
+
+@dataclass(frozen=True)
+class KillRequest:
+    """Çalışan bota kill switch isteği (spec 0035 R-4, AC-11; plan Risk 1).
+
+    `pending()` bekleyen istek var mı; `consume()` istek depoya işlendikten sonra çağrılır. Tur
+    isteği kendi kaydıyla işler; CLI çalışan botun deposuna hiç yazmaz (eski yazım oluşmaz).
+    """
+
+    pending: Callable[[], bool]
+    consume: Callable[[], None]
 
 
 # what stays visible without stopping the buys: risk refuses them itself (R-8)
@@ -71,6 +84,29 @@ class TurnRun:
     pairs: list[PairOutcome] = field(default_factory=list)
     closures: list[Closure] = field(default_factory=list)
     last_equity: Decimal | None = None
+    kill_request: KillRequest | None = None
+
+    def apply_kill_request(self) -> None:
+        """Spec 0035 R-4, AC-11: bekleyen kill switch isteği turun kendi kaydıyla depoya işlenir.
+
+        Kayıt reddedilirse `SaveRefusedError` turu bitirir ve istek silinmez (sonraki tur yeniden
+        dener). Kill switch zaten devredeyse yalnız istek silinir.
+        """
+        request = self.kill_request
+        if request is None or not request.pending():
+            return
+        if not self.state.risk.kill_switch:
+            self.save(risk=engage_kill_switch(self.state.risk).state)
+            row = format_audit_row(
+                self.now,
+                "kill-switch on",
+                "engaged",
+                "çalışan bot isteği işledi",
+                mode=self.state.mode,
+            )
+            append_audit_record(self.store_path, row)
+        request.consume()
+        self.note_drawdown()
 
     @property
     def buying_stopped(self) -> bool:

@@ -64,6 +64,7 @@ from crytobot.app._loop import (
 from crytobot.app._market import to_turn_market
 from crytobot.app._notices import NoticeKind, TurnMemory, TurnNotice
 from crytobot.app._result import BuyHalt, PairNote, PairOutcome, TurnOutcome, TurnResult
+from crytobot.app._session import KillRequest
 from crytobot.app._stage import (
     StageConfig,
     StageConfigResult,
@@ -105,6 +106,7 @@ __all__: list[str] = [
     "DownloadParts",
     "ExitReason",
     "ForcedStop",
+    "KillRequest",
     "LogWriteError",
     "LoopExit",
     "LoopParts",

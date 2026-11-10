@@ -88,3 +88,28 @@ def test_audit_log_written_to_store_and_file(tmp_path: Path) -> None:
 
     log_content = log_path.read_text(encoding="utf-8")
     assert "audit [cli] kill-switch on engaged" in log_content
+
+
+def test_audit_row_carries_mode_and_mismatch(tmp_path: Path) -> None:
+    """Spec 0035 AC-9 (R-6): kontrol kaydı deponun modunu, uyuşmazlıkta ayardaki modu da taşır."""
+    import dataclasses
+
+    from crytobot.app import engage_kill_switch, resume_operations
+    from tests.app.test_control_live import config_for
+
+    (tmp_path / "a").mkdir()
+    matching = config_for(tmp_path / "a", "live", "live")
+    assert engage_kill_switch(matching, clock=lambda: T0).success
+    rows = load_audit_records(matching.store_path)
+    assert len(rows) == 1
+    assert '"mode":"live"' in rows[0] and "config_mode" not in rows[0]
+    log = Path(matching.log_path).read_text(encoding="utf-8")
+    assert "audit [cli] kill-switch on engaged [mod=live]" in log
+
+    (tmp_path / "b").mkdir()
+    mismatched = dataclasses.replace(config_for(tmp_path / "b", "live", "live"), mode="paper")
+    assert not resume_operations(mismatched, clock=lambda: T0).success
+    rows = load_audit_records(mismatched.store_path)
+    assert len(rows) == 1
+    assert '"mode":"live"' in rows[0] and '"config_mode":"paper"' in rows[0]
+    assert "mod uyuşmazlığı: ayar=paper, depo=live" in rows[0]

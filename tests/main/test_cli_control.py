@@ -178,3 +178,224 @@ def test_control_commands_handle_missing_or_corrupt_store(tmp_path: Path) -> Non
         assert "depo okunamıyor" in console.getvalue()
         # Bozuk dosya ezilmez
         assert db_path.read_bytes() == b"garbage-not-a-sqlite-db"
+
+
+def live_setup(root: Path) -> tuple[Path, Path]:
+    """Spec 0035: canlı ayar (`bot.mode = "live"`) ve borsaya çıkmadan açılmış canlı depo."""
+    from crytobot.app import PrepareOutcome, prepare_live_store
+    from tests.app.test_live_start import FakeLiveClient, write_test_config
+
+    cfg_path = write_test_config(root, mode="live")
+    db_path = root / "bot.db"
+    prepared = prepare_live_store(
+        db_path.as_posix(), T0, live_client=FakeLiveClient(free_balance=Decimal("1000.00"))
+    )
+    assert prepared.outcome is PrepareOutcome.PREPARED, prepared.message
+    return cfg_path, db_path
+
+
+def test_stop_ends_running_live_bot(tmp_path: Path) -> None:
+    """Spec 0035 AC-3 (R-4): çalışan canlı bota `stop` iletilir; botun beklemesi bayrağı görüp
+    durdurma ister (spec 0030 R-4 yolu)."""
+    from crytobot.__main__ import make_wait
+    from crytobot.app import StopRequest
+
+    cfg_path, db_path = live_setup(tmp_path)
+    lock = StoreLock(str(db_path))
+    assert lock.acquire() is None
+    flag = stop_flag_path(db_path)
+    try:
+        console = io.StringIO()
+        assert run(["stop"], config_path=cfg_path, console=console, clock=lambda: T0) == EXIT_OK
+        assert "durdurma isteği çalışan bot sürecine iletildi" in console.getvalue()
+        assert flag.exists()
+        stop = StopRequest()
+        make_wait(stop, sleep=lambda _s: None, stop_flag_path=flag)(30.0)
+        assert stop.requested and stop.source == "cli-stop"
+    finally:
+        lock.release()
+        flag.unlink(missing_ok=True)
+
+
+def test_kill_switch_and_resume_while_live_bot_runs(tmp_path: Path) -> None:
+    """Spec 0035 plan Risk 1, AC-12: çalışan botta kill switch isteği bayrağa yazılır (depo
+    değişmez); resume `önce stop` ile reddedilir."""
+    from crytobot.control import kill_flag_path
+
+    cfg_path, db_path = live_setup(tmp_path)
+    before = load_store(db_path, "live")
+    assert before.state is not None
+    lock = StoreLock(str(db_path))
+    assert lock.acquire() is None
+    kill_flag = kill_flag_path(db_path)
+    try:
+        c1 = io.StringIO()
+        assert run(["kill-switch"], config_path=cfg_path, console=c1, clock=lambda: T0) == EXIT_OK
+        assert "çalışan bota iletildi" in c1.getvalue()
+        assert kill_flag.exists()
+        c2 = io.StringIO()
+        assert run(["resume"], config_path=cfg_path, console=c2, clock=lambda: T0) == EXIT_REFUSED
+        assert "çalışan bot var: önce stop" in c2.getvalue()
+        after = load_store(db_path, "live")
+        assert after.state is not None and after.state.revision == before.state.revision
+    finally:
+        lock.release()
+        kill_flag.unlink(missing_ok=True)
+
+
+def test_control_commands_need_no_credentials(tmp_path: Path, monkeypatch: object) -> None:
+    """Spec 0035 AC-8 (R-5): API anahtarı yokken dört komut ve pano canlı depoda çalışır; borsa
+    istemcisi hiç kurulmaz."""
+    import pytest
+
+    import crytobot.execution._live_client as live_client
+    from crytobot.__main__ import _load_toml
+    from crytobot.app import get_dashboard_status, load_config
+
+    assert isinstance(monkeypatch, pytest.MonkeyPatch)
+    cfg_path, db_path = live_setup(tmp_path)
+    for name in ("BINANCE_API_KEY", "BINANCE_API_SECRET"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.chdir(tmp_path)  # yerel .env okunmaz
+
+    def no_exchange(*_a: object, **_k: object) -> None:
+        raise AssertionError("borsa istemcisi kurulmamalı")
+
+    monkeypatch.setattr(live_client.BinanceLiveClient, "__init__", no_exchange)
+
+    for cmd in (["status"], ["kill-switch"], ["resume"]):
+        console = io.StringIO()
+        assert run(cmd, config_path=cfg_path, console=console, clock=lambda: T0) == EXIT_OK, (
+            cmd,
+            console.getvalue(),
+        )
+    lock = StoreLock(str(db_path))
+    assert lock.acquire() is None
+    try:
+        assert (
+            run(["stop"], config_path=cfg_path, console=io.StringIO(), clock=lambda: T0) == EXIT_OK
+        )
+    finally:
+        lock.release()
+        stop_flag_path(db_path).unlink(missing_ok=True)
+
+    document = _load_toml(cfg_path)
+    loaded = load_config(document, T0)
+    assert loaded.config is not None, loaded.message
+    code, data = get_dashboard_status(loaded.config, clock=lambda: T0)
+    assert code == 200 and data["mode"] == "live"
+
+
+def test_kill_flag_reaches_running_loop_end_to_end(tmp_path: Path) -> None:
+    """Spec 0035 AC-1, AC-11 (R-4), review round 1 M-1: `kill-switch` bot çalışırken bayrağa
+    yazılır; `start` döngüsü onu turunda kendi kaydıyla işler, bayrak silinir, denetim kaydı
+    `engaged`. Bağlantı (`__main__` → `LoopParts` → tur) gerçek CLI yolundan sınanır."""
+    from crytobot.control import kill_flag_path
+    from tests.main.test_entry import Bot
+
+    bot = Bot(tmp_path / "bot")
+    assert bot.run("prepare")[0] == EXIT_OK
+    lock = StoreLock(str(bot.store))
+    assert lock.acquire() is None  # a running bot holds the lock
+    try:
+        console = io.StringIO()
+        code = run(["kill-switch"], config_path=bot.config_path, console=console, clock=bot.clock)
+        assert code == EXIT_OK and "çalışan bota iletildi" in console.getvalue()
+    finally:
+        lock.release()
+    assert kill_flag_path(bot.store).exists()
+
+    code, _ = bot.run("start")
+
+    assert code == EXIT_OK
+    loaded = load_store(bot.store, "paper")
+    assert loaded.state is not None and loaded.state.risk.kill_switch
+    assert not kill_flag_path(bot.store).exists()
+    rows = load_audit_records(bot.store)
+    assert any('"result":"requested"' in r for r in rows)
+    assert any('"result":"engaged"' in r and "çalışan bot isteği" in r for r in rows)
+
+
+def test_stop_flag_ends_loop_after_turn_and_is_cleared(tmp_path: Path) -> None:
+    """Spec 0035 AC-3 (R-4), review round 1 M-2: tur sürerken gelen `stop` bayrağını botun
+    beklemesi görür; bot turunu tamamlayıp temiz çıkar, bayrak çıkışta silinir."""
+    from crytobot.app import StopRequest
+    from crytobot.market_data import MarketRead, ReadSettings
+    from tests.main.test_entry import Bot, event_lines
+
+    bot = Bot(tmp_path / "bot", stop_on_read=None)
+    assert bot.run("prepare")[0] == EXIT_OK
+    flag = stop_flag_path(bot.store)
+    turns: list[int] = []
+
+    def read_then_stop(pairs: tuple[str, ...], settings: ReadSettings) -> MarketRead:
+        turns.append(1)
+        if len(turns) == 1:  # the `stop` command arrives while the first turn runs
+            assert run(["stop"], config_path=bot.config_path, console=io.StringIO()) == EXIT_OK
+            assert flag.exists()
+        return bot.read(pairs, settings)
+
+    console = io.StringIO()
+    code = run(
+        ["start", "--trial"],
+        config_path=bot.config_path,
+        console=console,
+        clock=bot.clock,
+        stop=StopRequest(),
+        read=read_then_stop,
+        wait=None,  # the real wait: it is what watches the flag
+    )
+
+    assert code == EXIT_OK
+    assert turns == [1]  # one turn completed, no second read
+    assert len(event_lines(console.getvalue(), "tur")) == 1  # its end-of-turn line (round 2 I-1)
+    assert "durdurma isteği" in console.getvalue()
+    assert not flag.exists()
+
+
+def test_control_write_holds_the_store_lock(tmp_path: Path, monkeypatch: object) -> None:
+    """Spec 0035 A-2, review round 2 L-2: `kill-switch` ve `resume` depoya kilidi tutarken
+    yazar; o sırada başka bir süreç (bot) kilidi alamaz."""
+    import pytest
+
+    import crytobot.__main__ as entry
+
+    assert isinstance(monkeypatch, pytest.MonkeyPatch)
+    cfg_path, db_path = setup_config_and_store(tmp_path)
+    seen: list[str | None] = []
+    for name in ("engage_kill_switch", "resume_operations"):
+        real = getattr(entry, name)
+
+        def probe(*args: object, _real: object = real, **kwargs: object) -> object:
+            other = StoreLock(str(db_path))
+            seen.append(other.acquire())
+            other.release()
+            return _real(*args, **kwargs)  # type: ignore[operator]
+
+        monkeypatch.setattr(entry, name, probe)
+
+    assert run(["kill-switch"], config_path=cfg_path, console=io.StringIO(), clock=lambda: T0) == 0
+    assert run(["resume"], config_path=cfg_path, console=io.StringIO(), clock=lambda: T0) == 0
+    assert seen == [entry.LOCK_BUSY, entry.LOCK_BUSY]
+
+
+def test_unopenable_lock_counts_as_running_bot(tmp_path: Path, monkeypatch: object) -> None:
+    """Spec 0035 review round 2 L-1: kilit dosyası açılamıyorsa bot çalışıyor sayılır
+    (fail-closed): `resume` reddedilir, `kill-switch` depoya değil istek bayrağına gider."""
+    import pytest
+
+    from crytobot.control import kill_flag_path
+
+    assert isinstance(monkeypatch, pytest.MonkeyPatch)
+    cfg_path, db_path = setup_config_and_store(tmp_path)
+    before = load_store(db_path, "paper")
+    assert before.state is not None
+    monkeypatch.setattr(StoreLock, "acquire", lambda self: "kilit dosyası açılamıyor")
+
+    console = io.StringIO()
+    assert run(["resume"], config_path=cfg_path, console=console, clock=lambda: T0) == EXIT_REFUSED
+    assert "çalışan bot var: önce stop" in console.getvalue()
+    assert run(["kill-switch"], config_path=cfg_path, console=io.StringIO(), clock=lambda: T0) == 0
+    assert kill_flag_path(db_path).exists()
+    after = load_store(db_path, "paper")
+    assert after.state is not None and after.state.revision == before.state.revision

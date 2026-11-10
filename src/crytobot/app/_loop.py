@@ -32,7 +32,7 @@ from crytobot.app._market import to_turn_market
 from crytobot.app._notices import NoticeKind, TurnMemory, TurnNotice
 from crytobot.app._result import BuyHalt, TurnOutcome, TurnResult
 from crytobot.app._schedule import Due, after_turn, boundary_at_or_before, due, seconds_until
-from crytobot.app._session import AppError
+from crytobot.app._session import AppError, KillRequest
 from crytobot.app._start import read_pairs
 from crytobot.app._turn import run_turn
 from crytobot.execution import Exchange, OrderStatus, PaperExchange
@@ -77,6 +77,7 @@ class LoopParts:
     read: Callable[[tuple[str, ...], ReadSettings], MarketRead]
     write: Callable[[str], None]
     stop: StopRequest
+    kill_request: KillRequest | None = None  # spec 0035 R-4: çalışan bota kill switch isteği
 
 
 class ExitReason(Enum):
@@ -249,6 +250,7 @@ class _Loop:
                 exchange=self.exchange,
                 sink=self.notice,
                 memory=self.memory,
+                kill_request=self.parts.kill_request,
             )
         except Exception as turn_err:
             if type(turn_err).__name__ == "BannedError":

@@ -1,6 +1,7 @@
-"""Pano durum verisi kapısı (spec 0031 R-2, R-4, R-6).
+"""Pano durum verisi kapısı (spec 0031 R-2, R-4, R-6; spec 0035 R-1…R-3).
 
-Depoyu salt-okunur (`mode=ro`) okuyarak /api/status JSON verisini hazırlar.
+Depoyu salt-okunur (`mode=ro`) ve ayardaki modla okuyarak /api/status JSON verisini hazırlar;
+uyuşmazlıkta deponun gerçek modu ve `mode_mismatch` uyarısı döner (spec 0035 R-2).
 Depo yokken veya bozukken hata durumunu adıyla sunar (AC-7).
 """
 
@@ -9,7 +10,8 @@ from datetime import datetime
 from decimal import Decimal
 
 from crytobot.app._config import BotConfig
-from crytobot.persistence import StoreOutcome, load_store
+from crytobot.app._control import load_for_mode
+from crytobot.persistence import StoreOutcome
 
 
 def get_dashboard_status(
@@ -19,19 +21,23 @@ def get_dashboard_status(
     logs: tuple[str, ...] = (),
 ) -> tuple[int, dict[str, object]]:
     """Depodan salt-okunur veri okuyarak /api/status yanıtını üretir (R-2, R-4, R-6)."""
-    store_res = load_store(config.store_path, "paper", readonly=True)
+    loaded = load_for_mode(config, readonly=True)
+    store_res = loaded.result
+    mismatch = loaded.mismatch_text() if loaded.mismatch else None
     if store_res.outcome is StoreOutcome.NOT_FOUND:
         return 503, {
             "error": f"Depo bulunamadı: {config.store_path} (önce 'prepare' çalıştırılmalı)",
             "is_running": is_running,
-            "mode": "paper",
+            "mode": loaded.mode,
+            "mode_mismatch": None,
         }
 
     if store_res.state is None:
         return 503, {
             "error": f"Depo okunamıyor: {store_res.message}",
             "is_running": is_running,
-            "mode": "paper",
+            "mode": loaded.mode,
+            "mode_mismatch": None,
         }
 
     state = store_res.state
@@ -80,7 +86,8 @@ def get_dashboard_status(
 
     return 200, {
         "is_running": is_running,
-        "mode": "paper",
+        "mode": loaded.mode,
+        "mode_mismatch": mismatch,
         "equity": equity,
         "free_balance": free_balance,
         "peak_equity": peak_equity,
