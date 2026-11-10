@@ -15,7 +15,15 @@ from crytobot.backtest import ParsedReport, ReportRead
 from crytobot.market_data import CANDLE_INTERVALS
 
 _STAGE_SECTION = "stage"
-_STAGE_KEYS = ("report_path", "approved_by", "approved_at", "min_trades", "min_profit_factor")
+_STAGE_KEYS = (
+    "report_path",
+    "approved_by",
+    "approved_at",
+    "min_trades",
+    "min_profit_factor",
+    "live_approved_by",
+    "live_approved_at",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +35,8 @@ class StageConfig:
     approved_at: datetime
     min_trades: int = 10
     min_profit_factor: Decimal | None = None
+    live_approved_by: str | None = None
+    live_approved_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,8 +56,8 @@ class StageGateResult:
     message: str
 
 
-def load_stage_config(document: object) -> StageConfigResult:
-    """Ayar dosyasından `[stage]` bölümünü yükler ve doğrular (R-2, AC-4)."""
+def load_stage_config(document: object, mode: str = "paper") -> StageConfigResult:
+    """Ayar dosyasından `[stage]` bölümünü yükler ve doğrular (R-2, AC-4, Spec 0033 R-4)."""
     if not isinstance(document, Mapping):
         return StageConfigResult(None, _STAGE_SECTION, f"ayar geçersiz: {_STAGE_SECTION}")
     table = document.get(_STAGE_SECTION)
@@ -114,6 +124,68 @@ def load_stage_config(document: object) -> StageConfigResult:
             )
         min_profit_factor = pf
 
+    # 6. live_approved_by (canlı modda zorunlu, paper modda isteğe bağlı)
+    live_approved_by: str | None = None
+    if mode == "live":
+        if "live_approved_by" not in table:
+            return StageConfigResult(
+                None, "stage.live_approved_by", "ayar eksik: stage.live_approved_by"
+            )
+        val_lab = table["live_approved_by"]
+        if type(val_lab) is not str or not val_lab.strip():
+            return StageConfigResult(
+                None, "stage.live_approved_by", "ayar geçersiz: stage.live_approved_by"
+            )
+        live_approved_by = val_lab.strip()
+    elif "live_approved_by" in table:
+        val_lab = table["live_approved_by"]
+        if type(val_lab) is not str or not val_lab.strip():
+            return StageConfigResult(
+                None, "stage.live_approved_by", "ayar geçersiz: stage.live_approved_by"
+            )
+        live_approved_by = val_lab.strip()
+
+    # 7. live_approved_at (canlı modda zorunlu, paper modda isteğe bağlı)
+    live_approved_at: datetime | None = None
+    if mode == "live":
+        if "live_approved_at" not in table:
+            return StageConfigResult(
+                None, "stage.live_approved_at", "ayar eksik: stage.live_approved_at"
+            )
+        val_lat = table["live_approved_at"]
+        if type(val_lat) is not str or not val_lat.strip():
+            return StageConfigResult(
+                None, "stage.live_approved_at", "ayar geçersiz: stage.live_approved_at"
+            )
+        try:
+            dt_lat = datetime.fromisoformat(val_lat.strip())
+        except (ValueError, TypeError):
+            return StageConfigResult(
+                None, "stage.live_approved_at", "ayar geçersiz: stage.live_approved_at"
+            )
+        if dt_lat.tzinfo is None:
+            return StageConfigResult(
+                None, "stage.live_approved_at", "ayar geçersiz: stage.live_approved_at"
+            )
+        live_approved_at = dt_lat.astimezone(UTC)
+    elif "live_approved_at" in table:
+        val_lat = table["live_approved_at"]
+        if type(val_lat) is not str or not val_lat.strip():
+            return StageConfigResult(
+                None, "stage.live_approved_at", "ayar geçersiz: stage.live_approved_at"
+            )
+        try:
+            dt_lat = datetime.fromisoformat(val_lat.strip())
+        except (ValueError, TypeError):
+            return StageConfigResult(
+                None, "stage.live_approved_at", "ayar geçersiz: stage.live_approved_at"
+            )
+        if dt_lat.tzinfo is None:
+            return StageConfigResult(
+                None, "stage.live_approved_at", "ayar geçersiz: stage.live_approved_at"
+            )
+        live_approved_at = dt_lat.astimezone(UTC)
+
     # Bilinmeyen anahtarlar
     for key in table:
         if key not in _STAGE_KEYS:
@@ -126,6 +198,8 @@ def load_stage_config(document: object) -> StageConfigResult:
             approved_at=approved_at,
             min_trades=min_trades,
             min_profit_factor=min_profit_factor,
+            live_approved_by=live_approved_by,
+            live_approved_at=live_approved_at,
         ),
         None,
         "ayarlar geçerli",

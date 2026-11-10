@@ -3,6 +3,7 @@
 import json
 import re
 import threading
+from decimal import Decimal, InvalidOperation
 from typing import Any, Final
 
 from crytobot.execution._credentials import (
@@ -240,4 +241,31 @@ class BinanceLiveClient:
                     code = None
             if code == _BINANCE_ORDER_NOT_EXIST or "OrderNotFound" in type(err).__name__:
                 return None
+            raise self._handle_call_error(err) from None
+
+    def fetch_free_balance(self, asset: str = "USDT") -> Decimal:
+        """Borsadan ilgili varlığın serbest (free) bakiyesini çeker."""
+        self._reset_seen()
+        try:
+            if hasattr(self._exchange, "fetch_free_balance"):
+                res = self._exchange.fetch_free_balance()
+                val = res.get(asset) if isinstance(res, dict) else None
+            elif hasattr(self._exchange, "fetch_balance"):
+                res = self._exchange.fetch_balance()
+                free_map = res.get("free") if isinstance(res, dict) else {}
+                val = free_map.get(asset) if isinstance(free_map, dict) else None
+                if val is None and isinstance(res, dict) and isinstance(res.get(asset), dict):
+                    val = res[asset].get("free")
+            else:
+                raise LiveExchangeCallError(
+                    "fetch_free_balance veya fetch_balance metodu bulunamadı"
+                )
+            if val is None:
+                return Decimal("0")
+            return Decimal(str(val))
+        except (LiveExchangeCallError, BannedError):
+            raise
+        except (InvalidOperation, TypeError):
+            raise LiveExchangeCallError(f"Geçersiz bakiye formatı: {val}") from None
+        except Exception as err:
             raise self._handle_call_error(err) from None

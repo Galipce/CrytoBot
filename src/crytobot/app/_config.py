@@ -28,14 +28,14 @@ _PROBE_PAIR = "PROBE/USDT"
 _PROBE_STRATEGY = StrategySettings(1, 2, 2, Decimal(70), 2, Decimal(2), Decimal(2))
 _INTERVALS_BY_TEXT = {text: interval for interval, text in CANDLE_INTERVALS.items()}
 _DIGITS = frozenset("0123456789")
-# Specs 0024, 0026, 0028, 0029: their contents are judged by the download (0023), backtest (0025),
-# stage (0028) and reporting (0029) loaders, the bot never reads them; matched by exact name only
-_PASSED_SECTIONS = frozenset({"history", "backtest", "stage", "reporting", "dashboard"})
+# Specs 0024, 0026, 0028, 0029, 0033: their contents are judged by loaders
+# (0023, 0025, 0028, 0029, 0032/0033); the bot never reads them; matched by exact name only
+_PASSED_SECTIONS = frozenset({"history", "backtest", "stage", "reporting", "dashboard", "exchange"})
 
 
 @dataclass(frozen=True)
 class BotConfig:
-    """Botun bütün ayarları. Mod alanı yoktur: bot her zaman paper'dır (R-1)."""
+    """Botun bütün ayarları."""
 
     store_path: str
     log_path: str
@@ -43,6 +43,7 @@ class BotConfig:
     opening_balance: Decimal
     read: ReadSettings
     turn: TurnSettings
+    mode: str = "paper"
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,12 @@ def _whitelist(value: object) -> tuple[str, ...]:
     if not isinstance(value, list):
         raise _Bad
     return tuple(value)  # each pair is judged by the turn's own check
+
+
+def _mode(value: object) -> str:
+    if type(value) is not str or value not in ("paper", "live"):
+        raise _Bad
+    return value
 
 
 _Parse = Callable[[object], object]
@@ -207,9 +214,19 @@ def _parse(document: object) -> dict[str, object]:
             except _Bad:
                 raise _invalid(name) from None
         known = {key for key, _ in keys}
+        if section == "bot":
+            known.add("mode")
         for key in table:
             if key not in known:
                 raise _Problem(f"{section}.{key}", f"bilinmeyen ayar: {section}.{key}")
+    bot_table = document.get("bot")
+    mode = "paper"
+    if isinstance(bot_table, Mapping) and "mode" in bot_table:
+        try:
+            mode = _mode(bot_table["mode"])
+        except _Bad:
+            raise _invalid("bot.mode") from None
+    values["bot.mode"] = mode
     for section in document:
         if section in _PASSED_SECTIONS:
             continue
@@ -295,6 +312,7 @@ def _config(values: Mapping[str, object], now: datetime) -> BotConfig:
     turn = replace(turn, limits=_limits(values, now), strategy=_strategy(values))
     if settings_problem(turn, now) is not None:  # pragma: no cover - each part passed alone
         raise _invalid("turn")
+    mode = str(values.get("bot.mode", "paper"))
     return BotConfig(
         str(store_path),
         str(log_path),
@@ -302,6 +320,7 @@ def _config(values: Mapping[str, object], now: datetime) -> BotConfig:
         Decimal(balance),
         read,
         turn,
+        mode=mode,
     )
 
 

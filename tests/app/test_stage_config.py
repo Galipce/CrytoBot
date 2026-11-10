@@ -126,3 +126,58 @@ def test_stage_config_validation() -> None:
     res_unk = load_stage_config(d)
     assert res_unk.setting == "stage.unknown_key"
     assert "bilinmeyen ayar: stage.unknown_key" in res_unk.message
+
+
+def test_live_stage_approval_required_for_live_mode() -> None:
+    """Spec 0033 AC-3 (R-4): Canlı modda BR-10 live_approved_by ve live_approved_at zorunluluğu."""
+    doc = valid_document()
+
+    # 1. Paper modda live onay alanları olmadan geçerli
+    res_paper = load_stage_config(doc, mode="paper")
+    assert res_paper.config is not None
+    assert res_paper.config.live_approved_by is None
+    assert res_paper.config.live_approved_at is None
+
+    # 2. Canlı modda live_approved_by eksik
+    res_missing_by = load_stage_config(doc, mode="live")
+    assert res_missing_by.setting == "stage.live_approved_by"
+    assert "ayar eksik: stage.live_approved_by" in res_missing_by.message
+
+    # 3. Canlı modda live_approved_by boş/geçersiz
+    for bad_by in ("", "   ", 123, None):
+        d_bad_by = valid_document()
+        d_bad_by["stage"]["live_approved_by"] = bad_by
+        res_bad_by = load_stage_config(d_bad_by, mode="live")
+        assert res_bad_by.setting == "stage.live_approved_by"
+        assert "ayar geçersiz: stage.live_approved_by" in res_bad_by.message
+
+    # 4. Canlı modda live_approved_by var ama live_approved_at eksik
+    doc_with_by = valid_document()
+    doc_with_by["stage"]["live_approved_by"] = "Galip Badem"
+    res_missing_at = load_stage_config(doc_with_by, mode="live")
+    assert res_missing_at.setting == "stage.live_approved_at"
+    assert "ayar eksik: stage.live_approved_at" in res_missing_at.message
+
+    # 5. Canlı modda live_approved_at geçersiz (ISO değil, saat dilimsiz vb.)
+    for bad_at in ("invalid-date", "2026-11-09 12:00:00", "2026-11-09T12:00:00", 12345, None):
+        d_bad_at = valid_document()
+        d_bad_at["stage"]["live_approved_by"] = "Galip Badem"
+        d_bad_at["stage"]["live_approved_at"] = bad_at
+        res_bad_at = load_stage_config(d_bad_at, mode="live")
+        assert res_bad_at.setting == "stage.live_approved_at"
+        assert "ayar geçersiz: stage.live_approved_at" in res_bad_at.message
+
+    # 6. Mutlu yol (canlı modda her iki alan da geçerli UTC)
+    doc_live = valid_document()
+    doc_live["stage"]["live_approved_by"] = "Galip Badem"
+    doc_live["stage"]["live_approved_at"] = "2026-11-09T20:00:00Z"
+    res_live = load_stage_config(doc_live, mode="live")
+    assert res_live.config is not None
+    assert res_live.config.live_approved_by == "Galip Badem"
+    assert res_live.config.live_approved_at == datetime(2026, 11, 9, 20, 0, tzinfo=UTC)
+
+    # 7. Paper modda da dolu girilirse doğrulanır ve config'e yazılır
+    res_paper_with_live = load_stage_config(doc_live, mode="paper")
+    assert res_paper_with_live.config is not None
+    assert res_paper_with_live.config.live_approved_by == "Galip Badem"
+    assert res_paper_with_live.config.live_approved_at == datetime(2026, 11, 9, 20, 0, tzinfo=UTC)

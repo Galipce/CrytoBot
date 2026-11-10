@@ -35,7 +35,7 @@ from crytobot.app._schedule import Due, after_turn, boundary_at_or_before, due, 
 from crytobot.app._session import AppError
 from crytobot.app._start import read_pairs
 from crytobot.app._turn import run_turn
-from crytobot.execution import PAPER, OrderStatus, PaperExchange
+from crytobot.execution import Exchange, OrderStatus, PaperExchange
 from crytobot.market_data import MarketRead, ReadSettings
 from crytobot.persistence import load_store
 from crytobot.risk import daily_loss_reached
@@ -84,6 +84,7 @@ class ExitReason(Enum):
     READ_REFUSED = "read_refused"
     LOG_FAILED = "log_failed"
     FORCED = "forced"
+    BANNED = "banned"
 
 
 _REASON_TEXT = {
@@ -91,6 +92,7 @@ _REASON_TEXT = {
     ExitReason.READ_REFUSED: "okuma reddi",
     ExitReason.LOG_FAILED: "kayıt dosyası yazılamıyor",
     ExitReason.FORCED: "zorla durdurma",
+    ExitReason.BANNED: "borsa banı (HTTP 418)",
 }
 
 
@@ -106,7 +108,7 @@ class _Loop:
         self,
         config: BotConfig,
         parts: LoopParts,
-        exchange: PaperExchange,
+        exchange: Exchange,
         *,
         trial: bool = True,
         approved_by: str | None = None,
@@ -206,7 +208,7 @@ class _Loop:
         """Okuma: tur girdisi ve zamanı; ret `READ_REFUSED`; beklenmeyen hata `None` (tur yok)."""
         config = self.config
         try:
-            pairs = read_pairs(config.turn.whitelist, config.store_path)
+            pairs = read_pairs(config.turn.whitelist, config.store_path, mode=config.mode)
             read = self.parts.read(pairs, config.read)
         except Exception as error:
             self.failed("okuma", error, now)
@@ -238,17 +240,31 @@ class _Loop:
             if isinstance(read, ExitReason):
                 return read
             market, at = read
-        result = run_turn(
-            market=market,
-            settings=self.config.turn,
-            store_path=self.config.store_path,
-            now=at,
-            exchange=self.exchange,
-            sink=self.notice,
-            memory=self.memory,
-        )
+        try:
+            result = run_turn(
+                market=market,
+                settings=self.config.turn,
+                store_path=self.config.store_path,
+                now=at,
+                exchange=self.exchange,
+                sink=self.notice,
+                memory=self.memory,
+            )
+        except Exception as turn_err:
+            if type(turn_err).__name__ == "BannedError":
+                self.emit(
+                    at, "durdurma", f"borsa banı (HTTP 418); fail-closed durduruldu: {turn_err}"
+                )
+                return ExitReason.BANNED
+            raise
         self.last = result
         self.turns += 1
+
+        if self.memory.retry_after is not None:
+            pause_time = self.memory.retry_after
+            self.memory.retry_after = None
+            self.emit(at, "bekleme", f"borsa rate limit (HTTP 429), {pause_time}s bekleniyor")
+            self.pause(pause_time, at)
 
         # R-4: Kasa ve risk durdurma bildirimleri
         if self.reporter is not None and getattr(self.reporter, "is_active", False):
@@ -283,7 +299,7 @@ class _Loop:
                             at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
                         )
 
-                loaded_risk = load_store(self.config.store_path, PAPER)
+                loaded_risk = load_store(self.config.store_path, self.config.mode)
                 is_daily_loss = False
                 if loaded_risk.state is not None:
                     is_daily_loss = daily_loss_reached(
@@ -376,7 +392,7 @@ class _Loop:
         if self.reporter is None or not getattr(self.reporter, "is_active", False):
             return
 
-        loaded = load_store(self.config.store_path, PAPER)
+        loaded = load_store(self.config.store_path, self.config.mode)
         start_eq = self.day_start_equity or self.config.opening_balance
         end_eq = result.equity if result.equity is not None else start_eq
         open_positions = 0
@@ -463,7 +479,7 @@ def run_loop(
     config: BotConfig,
     parts: LoopParts,
     *,
-    exchange: PaperExchange | None = None,
+    exchange: Exchange | None = None,
     trial: bool = True,
     approved_by: str | None = None,
     report_path: str | None = None,

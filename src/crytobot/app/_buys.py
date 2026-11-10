@@ -21,7 +21,6 @@ from crytobot.app._result import PairNote, PairOutcome
 from crytobot.app._session import TurnRun, buy_fill
 from crytobot.execution import (
     CLIENT_ID_PREFIX,
-    PAPER,
     OrderRequest,
     OrderStatus,
     place_order,
@@ -109,7 +108,7 @@ def _approved_buy(
         data.price,
         run.settings.fee,
         run.settings.slippage,
-        PAPER,
+        run.state.mode,
     )
     placed = place_order(run.state.execution, order_request, run.exchange, run.now)
     order = placed.order

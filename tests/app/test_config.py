@@ -198,9 +198,11 @@ def test_huge_number_is_named_without_its_digits() -> None:
         assert "0000" not in result.message
 
 
-@pytest.mark.parametrize(("section", "key"), [("bot", "mode"), ("risk", "api_key"), ("live", None)])
+@pytest.mark.parametrize(
+    ("section", "key"), [("bot", "unknown_key"), ("risk", "api_key"), ("live", None)]
+)
 def test_unknown_setting_is_refused(section: str, key: str | None) -> None:
-    """Bilinmeyen anahtar yok sayılmaz: yazım hatası varsayılana düşmez, mod anahtarı yoktur."""
+    """Bilinmeyen anahtar yok sayılmaz: yazım hatası varsayılana düşmez."""
     values: dict[str, Any] = document()
     if key is None:
         values[section] = {}
@@ -291,12 +293,12 @@ def test_only_the_exact_history_name_is_passed(name: str) -> None:
 def test_unknown_key_in_each_section_is_refused(section: str, history: bool) -> None:
     """PB-1: beş bot bölümünde bilinmeyen anahtar, `[history]` olsun olmasın."""
     values: dict[str, Any] = document()
-    values[section]["mode"] = "live"
+    values[section]["unknown_key"] = "test"
     if history:
         values = with_history(values)
     result = load_config(values, NOW)
-    assert result.config is None and result.setting == f"{section}.mode"
-    assert result.message == f"bilinmeyen ayar: {section}.mode"
+    assert result.config is None and result.setting == f"{section}.unknown_key"
+    assert result.message == f"bilinmeyen ayar: {section}.unknown_key"
 
 
 @pytest.mark.parametrize("name", ["live", "histroy"])
@@ -396,10 +398,10 @@ def test_only_the_exact_backtest_name_is_passed(name: str) -> None:
 def test_unknown_key_in_each_section_is_refused_beside_backtest(section: str) -> None:
     """0026 PB-1: beş bot bölümünde bilinmeyen anahtar, `[backtest]` varken de."""
     values: dict[str, Any] = document()
-    values[section]["mode"] = "live"
+    values[section]["unknown_key"] = "test"
     result = load_config(with_backtest(values), NOW)
-    assert result.config is None and result.setting == f"{section}.mode"
-    assert result.message == f"bilinmeyen ayar: {section}.mode"
+    assert result.config is None and result.setting == f"{section}.unknown_key"
+    assert result.message == f"bilinmeyen ayar: {section}.unknown_key"
 
 
 @pytest.mark.parametrize("name", ["live", "histroy", "bactest"])
@@ -452,3 +454,16 @@ def test_first_problem_in_file_order_is_named_beside_backtest() -> None:
     """0026 PB-3 (0022/AC-3)."""
     values = document(**{"turn.fee": "x", "risk.max_drawdown": "x", "strategy.k": None})
     assert setting_of(with_backtest(values)) == "turn.fee"
+
+
+def test_bot_mode_defaults_to_paper_and_accepts_live() -> None:
+    """Spec 0033: [bot] altında mode opsiyoneldir (varsayılan 'paper', 'live' kabul edilir)."""
+    res_def = load_config(document(), NOW)
+    assert res_def.config is not None and res_def.config.mode == "paper"
+    res_live = load_config(document(**{"bot.mode": "live"}), NOW)
+    assert res_live.config is not None and res_live.config.mode == "live"
+    res_paper = load_config(document(**{"bot.mode": "paper"}), NOW)
+    assert res_paper.config is not None and res_paper.config.mode == "paper"
+    res_bad = load_config(document(**{"bot.mode": "invalid"}), NOW)
+    assert res_bad.config is None and res_bad.setting == "bot.mode"
+    assert res_bad.message == "ayar geçersiz: bot.mode"
