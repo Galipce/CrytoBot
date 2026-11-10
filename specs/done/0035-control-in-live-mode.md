@@ -1,6 +1,6 @@
 # Spec 0035 — Kontrol komutları ve pano canlı modda
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0035-plan.md`
 - Self-critique: done
@@ -42,31 +42,33 @@ none — no user interface (CLI) ve mevcut salt okunur pano. Değişen yalnız g
 - Self-critique kararları G-1, G-2 (Galip Badem, 2026-11-10) R-3, R-4 ve AC-2, AC-11'e işlendi.
 
 ## Acceptance criteria
-- [ ] AC-1 — Canlı depoda `kill-switch` (R-1, R-4): `bot.mode = "live"` ve canlı depo ile `kill-switch` kalıcı durumu devreye alır, onay yazar; aynı depoyla bir sonraki canlı turda alım önerisi `KILL_SWITCH_ACTIVE` ile onaylanmaz, açık pozisyonun stop kapanışı yine yapılır.
-- [ ] AC-2 — Canlı depoda `resume` ve `status` (R-1, R-3): `resume` kill switch'i kaldırır; `status` canlı depoda çalışır, modu "live" olarak gösterir ve ilk satırı tam olarak `CANLI MOD — gerçek para` metnidir.
-- [ ] AC-3 — Canlı botu `stop` ile durdurma (R-4): çalışan canlı bot `stop` ile turunu tamamlayıp temiz çıkar; bayrak temizlenir.
-- [ ] AC-4 — Pano canlı depoda (R-1, R-3): pano canlı depoyu okur, `/api/status` modu `live` döner, sayfa modu metin olarak gösterir.
-- [ ] AC-5 — Uyuşmazlıkta `resume` reddi (R-2): ayar `paper`, depo `live` (ve tersi) iken `resume` depoya dokunmadan, iki modu adıyla söyleyerek reddedilir; çıkış kodu ret kodudur.
-- [ ] AC-6 — Uyuşmazlıkta `kill-switch` uygulanır (R-2): ayar ile depo modu farklıyken `kill-switch` deponun modunda devreye alınır; çıktı ve denetim kaydı uyuşmazlığı belirtir.
-- [ ] AC-7 — Uyuşmazlıkta `status`, pano ve `stop` (R-2): deponun gerçek modu ve uyuşmazlık uyarısı gösterilir; `stop` çalışan sürece iletilir.
-- [ ] AC-8 — Borsaya çıkmama (R-5): API anahtarı tanımsızken dört komut ve pano canlı depoda çalışır; hiçbir borsa isteği gönderilmez.
-- [ ] AC-9 — Denetim kaydı modu taşır (R-6): her eylemin kaydında deponun modu, uyuşmazlıkta da uyuşmazlık bilgisi yer alır.
-- [ ] AC-10 — Paper davranışı korunur: paper depoda dört komutun ve panonun çıktısı, mod satırı dışında bugünküyle aynıdır; mevcut testler değişmeden yeşildir.
-- [ ] AC-11 — Tur sırasında kill switch kaybolmaz (R-4, G-1): bir tur depoyu yükledikten sonra ve kaydetmeden önce `kill-switch` yazılırsa, tur bittiğinde depoda kill switch devrededir ve sonraki turda alım onaylanmaz (canlı ve paper).
-- [ ] AC-12 — Çalışan botta `resume` reddi (R-7): bot çalışırken (`.lock` tutuluyor) `resume` depoyu değiştirmeden `çalışan bot var: önce stop` ile reddedilir, ret denetim kaydına yazılır, çıkış kodu ret kodudur; bot durunca aynı komut kill switch'i kaldırır.
+- [x] AC-1 — Canlı depoda `kill-switch` (R-1, R-4): `bot.mode = "live"` ve canlı depo ile `kill-switch` kalıcı durumu devreye alır, onay yazar; aynı depoyla bir sonraki canlı turda alım önerisi `KILL_SWITCH_ACTIVE` ile onaylanmaz, açık pozisyonun stop kapanışı yine yapılır.
+- [x] AC-2 — Canlı depoda `resume` ve `status` (R-1, R-3): `resume` kill switch'i kaldırır; `status` canlı depoda çalışır, modu "live" olarak gösterir ve ilk satırı tam olarak `CANLI MOD — gerçek para` metnidir.
+- [x] AC-3 — Canlı botu `stop` ile durdurma (R-4): çalışan canlı bot `stop` ile turunu tamamlayıp temiz çıkar; bayrak temizlenir.
+- [x] AC-4 — Pano canlı depoda (R-1, R-3): pano canlı depoyu okur, `/api/status` modu `live` döner, sayfa modu metin olarak gösterir.
+- [x] AC-5 — Uyuşmazlıkta `resume` reddi (R-2): ayar `paper`, depo `live` (ve tersi) iken `resume` depoya dokunmadan, iki modu adıyla söyleyerek reddedilir; çıkış kodu ret kodudur.
+- [x] AC-6 — Uyuşmazlıkta `kill-switch` uygulanır (R-2): ayar ile depo modu farklıyken `kill-switch` deponun modunda devreye alınır; çıktı ve denetim kaydı uyuşmazlığı belirtir.
+- [x] AC-7 — Uyuşmazlıkta `status`, pano ve `stop` (R-2): deponun gerçek modu ve uyuşmazlık uyarısı gösterilir; `stop` çalışan sürece iletilir.
+- [x] AC-8 — Borsaya çıkmama (R-5): API anahtarı tanımsızken dört komut ve pano canlı depoda çalışır; hiçbir borsa isteği gönderilmez.
+- [x] AC-9 — Denetim kaydı modu taşır (R-6): her eylemin kaydında deponun modu, uyuşmazlıkta da uyuşmazlık bilgisi yer alır.
+- [x] AC-10 — Paper davranışı korunur: paper depoda dört komutun ve panonun çıktısı, mod satırı dışında bugünküyle aynıdır; mevcut testler değişmeden yeşildir.
+- [x] AC-11 — Tur sırasında kill switch kaybolmaz (R-4, G-1): bir tur depoyu yükledikten sonra ve kaydetmeden önce `kill-switch` yazılırsa, tur bittiğinde depoda kill switch devrededir ve sonraki turda alım onaylanmaz (canlı ve paper).
+- [x] AC-12 — Çalışan botta `resume` reddi (R-7): bot çalışırken (`.lock` tutuluyor) `resume` depoyu değiştirmeden `çalışan bot var: önce stop` ile reddedilir, ret denetim kaydına yazılır, çıkış kodu ret kodudur; bot durunca aynı komut kill switch'i kaldırır.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 1 (plan kapısında R-7/AC-12 eklendi, R-08) |
+| Fix rounds | 3 (fix-1: M-1, M-2, L-2; fix-2: round 2 L-1, L-2, I-1, I-3; fix-3: VERIFY round 1 F-1) |
+| Review findings: real / noise / deferred | 10 / 10 / 3 (review round 1–5 ve VERIFY round 1; deferred: B-66, B-68, B-69) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi: yerel kanıt `CHECK GREEN (fast)` @8c032a1 (main ile birleşme sonrası); full koşu bu PR'ın CI işidir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). VERIFY round 1 @15667da ve round 2 @84cd58b: 12 kriterin 12'si kanıtlı, kasıtlı bozmaların hepsi kırmızı; UI galerisi S-1…S-7 ship kapısında incelendi. 0034 ile birleşmede tek test kurulumu düzeltildi (plan A-3, review round 5 temiz).
