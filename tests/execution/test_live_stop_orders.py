@@ -1,5 +1,6 @@
 """Spec 0034 AC-3, AC-4, AC-7: Canlı borsa şartlı stop iletimi, fallback, yaşam döngüsü ve iptal."""
 
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -228,6 +229,67 @@ def test_stop_order_fallback_to_stop_loss_limit() -> None:
     assert Decimal(str(fallback["price"])) == Decimal("94.905")
     assert Decimal(str(fallback["params"]["stopPrice"])) == Decimal("95")
     assert fallback["params"]["newClientOrderId"] == "cs-fallback-test"
+
+
+def _binance_stop_rejecting(code: int, msg: str) -> tuple[FakeCcxtExchange, list[str]]:
+    """STOP_LOSS çağrısı Binance hata gövdesini ccxt'nin gerçek `handle_errors` eşlemesinden
+    geçirir (plan 0036 A-1, review round 2 Info-2); yedek emir kabul edilir."""
+    body = json.dumps({"code": code, "msg": msg})
+    url = "https://api.binance.com/api/v3/order"
+    real = ccxt.binance()
+    types: list[str] = []
+    fake_ccxt = FakeCcxtExchange()
+
+    def create(
+        symbol: str,
+        type: str,
+        side: str,
+        amount: str,
+        price: str | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        types.append(type)
+        if type == "STOP_LOSS":
+            fake_ccxt.on_rest_response(400, "", url, "POST", {}, body)
+            real.handle_errors(400, "", url, "POST", {}, body, json.loads(body), {}, None)
+            raise AssertionError("ccxt did not raise")  # pragma: no cover
+        return {"status": "open", "id": "fallback-limit-stop"}
+
+    fake_ccxt.create_order = create  # type: ignore[method-assign]
+    return fake_ccxt, types
+
+
+def test_real_binance_stop_type_refusal_falls_back_to_stop_loss_limit() -> None:
+    """Gerçek gövde: `-1013 "Stop loss orders are not supported for this symbol."` ccxt'de
+    `BadRequest`'tir; kesin ret sayılır, `STOP_LOSS_LIMIT` yedeği aynı kimlikle denenir."""
+    fake_ccxt, types = _binance_stop_rejecting(
+        -1013, "Stop loss orders are not supported for this symbol."
+    )
+    venue = LiveExchange(BinanceLiveClient(CREDS, exchange=fake_ccxt))
+    status = venue.place_stop_order(
+        client_order_id="cs-real-1013",
+        symbol=PAIR,
+        amount=Decimal("10"),
+        stop_price=Decimal("95"),
+        limit_price=Decimal("94.905"),
+    )
+    assert status is OrderStatus.NEW
+    assert types == ["STOP_LOSS", "STOP_LOSS_LIMIT"]
+
+
+def test_real_binance_unlisted_bad_request_does_not_attempt_fallback() -> None:
+    """Gerçek gövde: listede olmayan `BadRequest` (`-1128`) tanınmayan hatadır; yedek denenmez."""
+    fake_ccxt, types = _binance_stop_rejecting(-1128, "Combination of optional parameters invalid.")
+    venue = LiveExchange(BinanceLiveClient(CREDS, exchange=fake_ccxt))
+    status = venue.place_stop_order(
+        client_order_id="cs-real-1128",
+        symbol=PAIR,
+        amount=Decimal("10"),
+        stop_price=Decimal("95"),
+        limit_price=Decimal("94.905"),
+    )
+    assert status is OrderStatus.UNKNOWN
+    assert types == ["STOP_LOSS"]
 
 
 def test_stop_order_network_error_does_not_attempt_fallback() -> None:
