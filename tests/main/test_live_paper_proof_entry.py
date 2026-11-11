@@ -41,6 +41,7 @@ def live_dir(root: Path, *, testnet: bool = False) -> tuple[Path, Path]:
 
 
 def start_live(config: Path, client: object, *, stopped: bool = False) -> tuple[int, str]:
+    """`stopped`: istek önceden verilir; kapı yanlışlıkla geçerse döngü biter, test asılmaz."""
     out = io.StringIO()
     stop = StopRequest()
     if stopped:
@@ -56,7 +57,7 @@ def test_a_refused_paper_proof_sends_nothing_and_touches_no_live_store(tmp_path:
     before = live.read_bytes()
     client = SpyClient()
 
-    code, console = start_live(config, client)
+    code, console = start_live(config, client, stopped=True)
 
     assert code == EXIT_REFUSED
     assert "başlatma reddedildi: paper kanıtı: paper deposu yok" in console
@@ -73,7 +74,7 @@ def test_testnet_takes_the_same_gate(tmp_path: Path) -> None:
     paper.unlink()
     client = SpyClient()
 
-    code, console = start_live(config, client)
+    code, console = start_live(config, client, stopped=True)
 
     assert code == EXIT_REFUSED
     assert "paper kanıtı: paper deposu yok" in console
@@ -86,7 +87,7 @@ def test_the_report_gate_comes_before_the_paper_proof(tmp_path: Path) -> None:
     paper.unlink()
     (tmp_path / "report.txt").unlink()
 
-    code, console = start_live(config, SpyClient())
+    code, console = start_live(config, SpyClient(), stopped=True)
 
     assert code == EXIT_REFUSED
     assert "paper kanıtı" not in console
@@ -97,7 +98,7 @@ def test_the_paper_proof_comes_before_credentials(tmp_path: Path) -> None:
     config, paper = live_dir(tmp_path)
     paper.unlink()
 
-    code, console = start_live(config, None)
+    code, console = start_live(config, None, stopped=True)
 
     assert code == EXIT_REFUSED
     assert "paper kanıtı: paper deposu yok" in console
@@ -113,7 +114,7 @@ def test_an_approval_before_the_paper_result_is_refused(tmp_path: Path) -> None:
     )
     client = SpyClient()
 
-    code, console = start_live(config, client)
+    code, console = start_live(config, client, stopped=True)
 
     assert code == EXIT_REFUSED
     assert "başlatma reddedildi: stage.live_approved_at: onay paper sonucundan önce" in console
@@ -126,7 +127,7 @@ def test_a_missing_paper_setting_is_named(tmp_path: Path) -> None:
     kept = [row for row in text.splitlines() if not row.startswith("paper_store_path")]
     config.write_text("\n".join(kept), encoding="utf-8")
 
-    code, console = start_live(config, SpyClient())
+    code, console = start_live(config, SpyClient(), stopped=True)
 
     assert code == EXIT_REFUSED
     assert "başlatma reddedildi: ayar eksik: stage.paper_store_path" in console
