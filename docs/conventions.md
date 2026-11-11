@@ -123,6 +123,10 @@
 - Canlı borsa çağrısını saran `except Exception` `BannedError`'ı (HTTP 418) yutar ve döngü banı uzatarak çağırmayı sürdürür;
   ayrıca dolan emir borsaya ikinci çağrıdan önce kaydedilmezse istisna kaydı kaybettirir — yeni `except` bloğu banı
   `TurnRun.raise_if_banned` ile yeniden fırlatır, dolumu önce `save` eder — from spec 0034, review round 1 F-4 (A-4)
+- `urlopen(timeout=)` ad çözümlemeyi kapsamaz: DNS takılınca Telegram isteği soket süresini aşar. İstek daemon iş parçacığında,
+  bekleme turun kalan Telegram bütçesiyle sınırlı (`TelegramClient.attempt`); terk edilen istek sürerken yenisi gönderilmez — from spec 0039, plan Risk 1, 4, A-1
+- Gerçek saatli bütçe testlerinde iş parçacığı başlatma ve ilk import gecikmesi 0.2 s'yi aşabilir: harcanan süre enjekte saatle sınanır,
+  isteğin gittiği iş parçacığının girişte kurduğu `threading.Event` beklenerek doğrulanır; gerçek saat yalnız üst sınır için ölçülür — from spec 0039, review round 2 F-5
 - ccxt binance emir doğrulama reddinin çoğunu `InvalidOrder` değil `BadRequest` olarak fırlatır: `-1013`
   (`Filter failure: NOTIONAL`/`MIN_NOTIONAL`), `-1100…-1106`, `-1111`, `-1114…-1121` (`-1121`: `BadSymbol`);
   yalnız `LOT_SIZE`/`PRICE_FILTER` gibi birkaçı `InvalidOrder` olur — kesin ret yanıt gövdesindeki koddan

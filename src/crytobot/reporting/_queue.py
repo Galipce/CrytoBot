@@ -53,6 +53,11 @@ class NotificationQueue:
             return self._queue[0]
         return None
 
+    def replace_head(self, message: OutgoingMessage) -> None:
+        """Baştaki mesajı yerini koruyarak değiştirir (düz metin hâli; spec 0039 plan Risk 5)."""
+        if self._queue:
+            self._queue[0] = message
+
     def drain(self) -> list[OutgoingMessage]:
         """Kuyruktaki tüm mesajları sırasıyla boşaltıp liste olarak döner."""
         items = list(self._queue)

@@ -139,6 +139,7 @@ class _Loop:
         self.day_closures: list[object] = []
         self._drawdown_halted: bool = False
         self._daily_loss_halted: bool = False
+        self._telegram_open: bool = False  # spec 0039: begin_turn çağrıldı, end_turn bekliyor
 
     # --- output -----------------------------------------------------------------------------
     def emit(self, at: object, event: str, text: str) -> None:
@@ -162,9 +163,61 @@ class _Loop:
     def recovered(self, step: str) -> None:
         self.failing.discard(step)
 
+    # --- Telegram (spec 0029, 0039) ------------------------------------------------------------
+    def _telegram_active(self) -> bool:
+        return self.reporter is not None and bool(getattr(self.reporter, "is_active", False))
+
+    def _telegram_result(self, at: object, label: str, err: object) -> None:
+        """Gönderimin hata satırı; Telegram kapandıysa gerekçesiyle tek satır (CB-2)."""
+        if err:
+            self.emit(at, "hata", f"{label} iletilemedi ({err})")
+        take_dropped = getattr(self.reporter, "take_dropped", None)
+        take = getattr(self.reporter, "take_disabled_reason", None)
+        try:
+            dropped = take_dropped() if callable(take_dropped) else ()
+            reason = take() if callable(take) else None
+        except Exception as error:  # PB-5: Telegram turu düşürmez
+            self.emit(at, "hata", error_text("telegram", error))
+            return
+        for dropped_err in dropped if isinstance(dropped, list) else ():
+            # CB-3: kuyruktan atılan önceki mesaj da loga yazılır (review round 1 F-1)
+            self.emit(at, "hata", f"telegram bildirimi iletilemedi ({dropped_err})")
+        if reason:
+            self.emit(at, "hata", f"telegram devre dışı ({reason})")
+
+    def _telegram_begin(self, at: object) -> None:
+        """Turun Telegram bütçesini açar ve kuyruğu iletir; reporter yoksa çağrı yok (PB-4)."""
+        if not self._telegram_active():
+            return
+        begin = getattr(self.reporter, "begin_turn", None)
+        if not callable(begin):
+            return
+        self._telegram_open = True
+        try:
+            dropped = begin()
+        except Exception as error:  # PB-5
+            self.emit(at, "hata", error_text("telegram", error))
+            return
+        for err in dropped if isinstance(dropped, list) else ():
+            self.emit(at, "hata", f"telegram bildirimi iletilemedi ({err})")
+        self._telegram_result(at, "telegram bildirimi", None)
+
+    def _telegram_end(self, at: object) -> None:
+        """Yalnız açılan tur kapanır (PB-4); tur içinde kapanan Telegram da kapanır."""
+        if not self._telegram_open:
+            return
+        self._telegram_open = False
+        end = getattr(self.reporter, "end_turn", None)
+        if not callable(end):
+            return
+        try:
+            end()
+        except Exception as error:  # PB-5
+            self.emit(at, "hata", error_text("telegram", error))
+
     def notice(self, notice: TurnNotice) -> None:
         self.emit(notice.at, "durum", notice_text(notice))
-        if self.reporter is not None and getattr(self.reporter, "is_active", False):
+        if self._telegram_active():
             send = getattr(self.reporter, "send_turn_notice", None)
             if callable(send):
                 err = send(
@@ -173,8 +226,7 @@ class _Loop:
                     notice.entering,
                     notice.message,
                 )
-                if err:
-                    self.emit(notice.at, "hata", f"telegram bildirimi iletilemedi ({err})")
+                self._telegram_result(notice.at, "telegram bildirimi", err)
 
     # --- effects with the loop's error net ----------------------------------------------------
     def moment(self) -> datetime | None:
@@ -244,6 +296,16 @@ class _Loop:
             if isinstance(read, ExitReason):
                 return read
             market, at = read
+        # Spec 0039 CB-4: turun bütün Telegram gönderimleri tek bütçeyi paylaşır
+        self._telegram_begin(at)
+        try:
+            return self._run(target, market, at, banned)
+        finally:
+            self._telegram_end(at)
+
+    def _run(
+        self, target: Due, market: Mapping[str, object], at: datetime, banned: bool
+    ) -> ExitReason | None:
         try:
             result = run_turn(
                 market=market,
@@ -288,10 +350,7 @@ class _Loop:
                         entering=True,
                         message="drawdown limiti aşıldı",
                     )
-                    if err:
-                        self.emit(
-                            at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
-                        )
+                    self._telegram_result(at, "telegram risk durdurma bildirimi", err)
                 elif not is_drawdown and self._drawdown_halted:
                     self._drawdown_halted = False
                     err = send_notice(
@@ -300,10 +359,7 @@ class _Loop:
                         entering=False,
                         message="drawdown durdurması kalktı",
                     )
-                    if err:
-                        self.emit(
-                            at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
-                        )
+                    self._telegram_result(at, "telegram risk durdurma bildirimi", err)
 
                 loaded_risk = load_store(self.config.store_path, self.config.mode)
                 is_daily_loss = False
@@ -319,10 +375,7 @@ class _Loop:
                         entering=True,
                         message="günlük zarar limiti aşıldı",
                     )
-                    if err:
-                        self.emit(
-                            at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
-                        )
+                    self._telegram_result(at, "telegram risk durdurma bildirimi", err)
                 elif not is_daily_loss and self._daily_loss_halted:
                     self._daily_loss_halted = False
                     err = send_notice(
@@ -331,10 +384,7 @@ class _Loop:
                         entering=False,
                         message="günlük zarar limiti sıfırlandı",
                     )
-                    if err:
-                        self.emit(
-                            at, "hata", f"telegram risk durdurma bildirimi iletilemedi ({err})"
-                        )
+                    self._telegram_result(at, "telegram risk durdurma bildirimi", err)
 
             # R-5: işlem olay bildirimleri (dolum ve kapanış)
             if callable(send_fill):
@@ -348,13 +398,11 @@ class _Loop:
                             price=price,
                             stop=buy.stop,
                         )
-                        if err:
-                            self.emit(at, "hata", f"telegram dolum bildirimi iletilemedi ({err})")
+                        self._telegram_result(at, "telegram dolum bildirimi", err)
             if callable(send_close):
                 for closure in result.closures:
                     err = send_close(closure)
-                    if err:
-                        self.emit(at, "hata", f"telegram kapanış bildirimi iletilemedi ({err})")
+                    self._telegram_result(at, "telegram kapanış bildirimi", err)
 
         # R-6: UTC gün dönümü (00:00 UTC) günlük özet raporu
         if result.outcome is TurnOutcome.COMPLETED:
@@ -423,8 +471,7 @@ class _Loop:
                 closures=closures_to_report,
             )
             self.last_reported_date = day_to_report
-            if err:
-                self.emit(at, "hata", f"telegram günlük raporu iletilemedi ({err})")
+            self._telegram_result(at, "telegram günlük raporu", err)
 
     def mark(self, result: TurnResult, at: datetime) -> None:
         """Spec 0038 plan Risk 1, A-3: paper deposunun son turu; yalnız tamamlanan tur (bayat veri
