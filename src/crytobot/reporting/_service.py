@@ -217,7 +217,7 @@ class ReportingService:
             return None  # plan Risk 6: kapanma satırı tektir (CB-2)
         if len(self._queue) > 0:  # yeni mesaj öne geçmez (PB-2)
             self._queue.enqueue(message)
-            return stopped or self._gate() or "network_error"
+            return stopped  # kuyruk yalnız kapı kapalıyken durur: neden doludur (F-2)
         gate = self._gate()
         if gate is not None:
             self._queue.enqueue(message)
