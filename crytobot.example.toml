@@ -68,6 +68,7 @@ r = "2"
 # Ayarların varsayılanı yoktur: kanıtlı başlatmadan önce aşağıdaki satırların başındaki "# " kaldırılır.
 # [stage]
 # report_path = "crytobot-backtest.txt"  # geçerli ve aday işareti taşıyan backtest rapor dosyası
+# report_sha256 = "<64 onaltılık>"       # backtest konsolundaki `rapor parmak izi:` değeri (spec 0040)
 # approved_by = "Ad Soyad"              # onayı veren kişinin adı / kimliği
 # approved_at = 2026-11-08T12:00:00Z    # onay anı, UTC ISO formatında
 # min_trades = 10                       # asgari işlem sayısı (isteğe bağlı, varsayılan 10)
