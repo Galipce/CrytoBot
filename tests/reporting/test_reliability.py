@@ -84,9 +84,11 @@ class Hanging:
         self.release = threading.Event()
         self.hold_s = hold_s
         self.calls = 0
+        self.entered = threading.Event()  # iş parçacığı isteğe girdi (review round 2 F-5)
 
     def __call__(self, url: str, payload: dict[str, Any]) -> tuple[int, str]:
         self.calls += 1
+        self.entered.set()
         self.release.wait(self.hold_s)
         return OK
 
@@ -244,34 +246,54 @@ def test_turn_budget_bounds_all_sends(hanging: Hanging) -> None:
     service.end_turn()
     elapsed = time.monotonic() - started
     assert elapsed < 0.2 + SLACK_S
+    assert hanging.entered.wait(2)  # istek gerçekten gitti; iş parçacığı geç başlayabilir
     assert hanging.calls == 1
     assert errors[0] == "timeout"
     assert _queued(service) == ["m1", "m2", "m3", "m4"]
 
 
 def test_turn_budget_shared_by_slow_successes() -> None:
-    # Gerçek saat: her istek 0.15 s sürüp başarılı; 0.2 s'lik bütçeyi ikinci istek tüketir.
-    transport = Hanging(hold_s=0.15)
-    service = _service(transport, budget=0.2)
-    started = time.monotonic()
-    service.begin_turn()
-    for n in range(1, 5):
-        service.dispatch(f"m{n}")
-    service.end_turn()
-    elapsed = time.monotonic() - started
-    transport.release.set()
-    assert elapsed < 0.2 + SLACK_S
-    assert transport.calls == 2
-    assert _queued(service) == ["m2", "m3", "m4"]
+    # İlk istek başarılı ve 4 s harcar (enjekte saat); ikinci istek kalan 1 s ile sınırlıdır,
+    # takılır ve gerçek saatle 1 s'de bırakılır. Kalanlar sırayla kuyrukta (review round 2 F-5).
+    clock = FakeClock()
+    release = threading.Event()
+    second = threading.Event()
+    calls: list[str] = []
+
+    def transport(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        calls.append(payload["text"])
+        if len(calls) == 1:
+            clock.now += 4.0
+            return OK
+        second.set()
+        release.wait(10)
+        return OK
+
+    service = _service(transport, clock=clock, budget=5.0)
+    try:
+        started = time.monotonic()
+        service.begin_turn()
+        errors = [service.dispatch(f"m{n}") for n in range(1, 5)]
+        service.end_turn()
+        elapsed = time.monotonic() - started
+        assert elapsed < 1.0 + SLACK_S
+        assert second.wait(2)
+        assert calls == ["m1", "m2"]
+        assert errors == [None, "timeout", "timeout", "timeout"]
+        assert _queued(service) == ["m2", "m3", "m4"]
+    finally:
+        release.set()
 
 
 def test_dns_hang_bounded_by_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     # Varsayılan transport: urlopen(timeout=) ad çözümlemeyi kapsamaz; bekleme yine sınırlı.
     release = threading.Event()
+    entered = threading.Event()
     lookups: list[str] = []
 
     def hanging_lookup(host: Any, *args: Any, **kwargs: Any) -> Any:
         lookups.append(str(host))
+        entered.set()
         release.wait(10)
         raise socket.gaierror("lookup released")
 
@@ -284,6 +306,7 @@ def test_dns_hang_bounded_by_budget(monkeypatch: pytest.MonkeyPatch) -> None:
         assert service.dispatch("m2") == "timeout"
         service.end_turn()
         assert time.monotonic() - started < 0.2 + SLACK_S
+        assert entered.wait(2)  # iş parçacığı ad çözümlemeye ulaştı (ilk import gecikebilir, F-5)
         assert lookups == ["api.telegram.org"]
         assert _queued(service) == ["m1", "m2"]
 
@@ -349,6 +372,7 @@ def test_first_transient_timeout_stops_turn(hanging: Hanging) -> None:
     assert service.dispatch("m1") == "timeout"
     assert service.dispatch("m2") == "timeout"
     service.end_turn()
+    assert hanging.entered.wait(2)
     assert hanging.calls == 1
     assert _queued(service) == ["m1", "m2"]
 
@@ -356,6 +380,7 @@ def test_first_transient_timeout_stops_turn(hanging: Hanging) -> None:
     deadline = time.monotonic() + 2
     while service._client.busy and time.monotonic() < deadline:
         time.sleep(0.01)
+    service._turn_budget_s = 5.0  # sonraki tur: iletim gerçek saatte 0.1 s'ye sıkışmasın (F-5)
     service.begin_turn()
     service.end_turn()
     assert hanging.calls == 3
