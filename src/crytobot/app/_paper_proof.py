@@ -160,7 +160,9 @@ def check_paper_proof(
     approved = stage.live_approved_at
     if approved is None:
         return _refused("ayar eksik: stage.live_approved_at")
-    if approved <= last:  # CB-5
+    # CB-5: a close written after the last mark (mark not written) is still a paper result (F-1)
+    result_at = max([last, *(entry.at for entry in state.ledger.entries)])
+    if approved <= result_at:  # CB-5
         return _refused("stage.live_approved_at: onay paper sonucundan önce")
     if approved > now:
         return _refused("stage.live_approved_at: onay gelecekte")

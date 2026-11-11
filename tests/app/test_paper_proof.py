@@ -427,6 +427,25 @@ def test_approval_at_or_before_the_last_turn_is_refused(tmp_path: Path) -> None:
         assert result.message == "stage.live_approved_at: onay paper sonucundan önce"
 
 
+def test_a_close_written_after_the_last_turn_mark_moves_the_paper_result(tmp_path: Path) -> None:
+    """Review round 1 F-1: işareti yazılamamış bir turun kapanışı da paper sonucudur."""
+    late = APPROVED + timedelta(minutes=30)
+    world = traded()
+    world = bought(world, "late", amount="1", price="100", at=late - timedelta(minutes=10))
+    world = sold(world, "cb-late", price="110", at=late)
+    proof_store(tmp_path / "paper.sqlite", world)
+
+    between = check(tmp_path, now=late + timedelta(hours=1))
+    after = check(
+        tmp_path,
+        stage=stage_for(tmp_path, live_approved_at=late + timedelta(seconds=1)),
+        now=late + timedelta(hours=1),
+    )
+
+    assert between.message == "stage.live_approved_at: onay paper sonucundan önce"
+    assert after.passed, after.message
+
+
 def test_approval_in_the_future_is_refused_and_now_is_allowed(tmp_path: Path) -> None:
     proof_store(tmp_path / "paper.sqlite")
 
