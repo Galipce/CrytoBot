@@ -1,6 +1,6 @@
 # Spec 0037 — Canlı modda kısmi dolum, üçüncü varlıktan komisyon ve coin mutabakatı
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0037-plan.md`
 - Self-critique: done
@@ -41,26 +41,28 @@ none — no user interface. Kullanıcı yalnız konsol ve kayıt satırlarını 
 - Split: 0036'dan bölündü — Galip Badem, 2026-11-10 (0036 Constraints'e bakın). Canlı mod iki spec de ship edilmeden kullanılmaz.
 
 ## Acceptance criteria
-- [ ] AC-1 — Alımda kısmi dolum (R-1): alım kısmen dolup kalanı sona erdiğinde dolan net miktar pozisyon olur, borsa stopu bu miktarla verilir ve bildirim üretilir.
-- [ ] AC-2 — Asgarinin altında kısmi dolum (R-2): alımda dolan net miktar asgari miktar ya da asgari tutarın altındaysa güvenli mod devreye girer, alım durur, bildirim üretilir (sınır: tam asgari değer güvenli moda geçirmez).
-- [ ] AC-3 — Satışta kısmi dolum (R-3): kapanış kısmen dolduğunda dolan kısım kapanış olarak, gerçekleşen kâr/zararı miktarla orantılı maliyetle o kısım için deftere geçer; kalan pozisyon açık kalır, borsa stopu kalan miktarla yeniden verilir, sonraki turda yeniden değerlendirilir; defter ↔ emir çelişkisi oluşmaz.
-- [ ] AC-4 — Üçüncü varlıktan komisyon (R-4): BNB komisyonlu dolumda pozisyon miktarı dolan miktardır; BNB/USDT fiyatı okunduğunda komisyonun USDT değeri bu fiyatla, okunamadığında ya da çift borsada yokken ayardaki oranla "tahmini" işaretiyle yazılır ve bildirim gider; güvenli mod devreye girmez.
-- [ ] AC-5 — Coin mutabakatı (R-5): borsadaki toplam coin, o coindeki açık pozisyonların net toplamından bir adımdan fazla azken (aynı coinde iki pozisyon dahil) alım durur, kapanış sürer, çift adıyla bildirim gider; tam bir adım eksiklik alımı durdurmaz; fazla coin alımı durdurmaz; koşul düzelince çıkış bildirimi gider; bakiye sorgusu başarısızken güvenli mod devreye girer.
-- [ ] AC-6 — 0036 geçici güvenli modu kalkar (R-6): 0036'da güvenli moda geçiren kısmi dolum ve BNB komisyonu senaryoları artık deftere yazılır ve güvenli mod devreye girmez.
-- [ ] AC-7 — Paper ve backtest değişmezliği (R-7): paper ve backtest testleri değişmeden yeşildir; paper'da kapanış tam kapanıştır.
+- [x] AC-1 — Alımda kısmi dolum (R-1): alım kısmen dolup kalanı sona erdiğinde dolan net miktar pozisyon olur, borsa stopu bu miktarla verilir ve bildirim üretilir.
+- [x] AC-2 — Asgarinin altında kısmi dolum (R-2): alımda dolan net miktar asgari miktar ya da asgari tutarın altındaysa güvenli mod devreye girer, alım durur, bildirim üretilir (sınır: tam asgari değer güvenli moda geçirmez).
+- [x] AC-3 — Satışta kısmi dolum (R-3): kapanış kısmen dolduğunda dolan kısım kapanış olarak, gerçekleşen kâr/zararı miktarla orantılı maliyetle o kısım için deftere geçer; kalan pozisyon açık kalır, borsa stopu kalan miktarla yeniden verilir, sonraki turda yeniden değerlendirilir; defter ↔ emir çelişkisi oluşmaz.
+- [x] AC-4 — Üçüncü varlıktan komisyon (R-4): BNB komisyonlu dolumda pozisyon miktarı dolan miktardır; BNB/USDT fiyatı okunduğunda komisyonun USDT değeri bu fiyatla, okunamadığında ya da çift borsada yokken ayardaki oranla "tahmini" işaretiyle yazılır ve bildirim gider; güvenli mod devreye girmez.
+- [x] AC-5 — Coin mutabakatı (R-5): borsadaki toplam coin, o coindeki açık pozisyonların net toplamından bir adımdan fazla azken (aynı coinde iki pozisyon dahil) alım durur, kapanış sürer, çift adıyla bildirim gider; tam bir adım eksiklik alımı durdurmaz; fazla coin alımı durdurmaz; koşul düzelince çıkış bildirimi gider; bakiye sorgusu başarısızken güvenli mod devreye girer.
+- [x] AC-6 — 0036 geçici güvenli modu kalkar (R-6): 0036'da güvenli moda geçiren kısmi dolum ve BNB komisyonu senaryoları artık deftere yazılır ve güvenli mod devreye girmez.
+- [x] AC-7 — Paper ve backtest değişmezliği (R-7): paper ve backtest testleri değişmeden yeşildir; paper'da kapanış tam kapanıştır.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 (0036 bölünmesinden çıktı, dbbf656; plan sonrası spec metni değişmedi) |
+| Fix rounds | 1 (fix-1: round 1 F-1, F-2, F-3; round 2 bulgusuz) |
+| Review findings: real / noise / deferred | 3 / 1 / 0 (review round 1–2; plan onayında ertelenen B-73 ayrı) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (henüz üretim yok) |
+
+DoD'nin `scripts/check` kutusu koşullu işaretlendi: yerel kanıt `CHECK GREEN (fast)` @941edea (son kod commit'i 185754c, sonrası yalnız `specs/`); full koşu, `test-slow` ve modül başına %90 dal kapsam kapısı bu PR'ın CI işidir, yeşil olmadan merge yapılmaz (`docs/testing.md`, Two speeds, rule 10). VERIFY @941edea: 7 kriterin 7'si kanıtlı, kasıtlı bozmaların hepsi (B1–B14) kırmızı; tek kırılmayan dal AC-5 çıkış bildirimi, `test_recovery_sends_exit_notice` sırayı birebir sınıyor. Kısmen dolan borsa stopu (plan Risk 4) kapsam dışı, B-73.
