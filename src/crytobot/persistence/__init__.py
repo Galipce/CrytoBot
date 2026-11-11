@@ -5,31 +5,43 @@ adlandırılmış bir sonuç döndürür, boş ya da kısmi durum döndürmez (B
 işlemde yazar: son yükleme ya da kaydın sonucuna (`base`) dayanmayan kayıt "eski yazım", geçmişi
 değiştiren kayıt "geçmiş değiştirilemez". Geçerli ama birbiriyle çelişen durum yüklenir ve
 `StoreResult.conflicts` ile işaretlenir ("mutabakat tutmuyor"); alımı durdurmak `app`'in işidir.
+Paper deposu ayrıca (spec 0038) yalnız eklenen başlatma kayıtlarını (`append_start_record`,
+`load_start_records`) ve son turun anını (`mark_turn`, revizyonu artırmaz) tutar.
 Hiçbir işlem istisna fırlatmaz; dosya yolunu çağıran verir. Yalnız `app` import eder.
 """
 
+from crytobot.persistence._codec import StartRecord
 from crytobot.persistence._store import (
     FORMAT_VERSION,
     MODES,
+    StartRecordsResult,
     StoredState,
     StoreOutcome,
     StoreResult,
     append_audit_record,
+    append_start_record,
     create_store,
     load_audit_records,
+    load_start_records,
     load_store,
+    mark_turn,
     save_store,
 )
 
 __all__: list[str] = [
     "FORMAT_VERSION",
     "MODES",
+    "StartRecord",
+    "StartRecordsResult",
     "StoreOutcome",
     "StoreResult",
     "StoredState",
     "append_audit_record",
+    "append_start_record",
     "create_store",
     "load_audit_records",
+    "load_start_records",
     "load_store",
+    "mark_turn",
     "save_store",
 ]

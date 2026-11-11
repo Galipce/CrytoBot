@@ -46,9 +46,11 @@ from crytobot.app import (
     KillRequest,
     LogWriteError,
     LoopParts,
+    PaperProof,
     PrepareOutcome,
     StartOutcome,
     StopRequest,
+    check_paper_proof,
     check_stage_gate,
     create_live_exchange,
     engage_kill_switch,
@@ -62,6 +64,7 @@ from crytobot.app import (
     prepare_live_store,
     prepare_store,
     query_status,
+    record_start,
     request_stop,
     resume_operations,
     run_backtest,
@@ -473,6 +476,30 @@ def _stage_gate(
     return True, stage.approved_by, stage.report_path
 
 
+def _paper_proof_gate(
+    config_path: Path, bot: BotConfig, output: Output, clock: Clock
+) -> PaperProof | None:
+    """Spec 0038 CB-2…CB-5: ayar ve rapor kapılarından sonra, kimlik ve yetki denetiminden (ağa
+    çıkan tek adım) önce; kilit alınmadan, canlı depo açılmadan. Testnet'te de aynıdır."""
+    document = _load_toml(config_path)
+    stage_res = load_stage_config(document, mode="live")
+    if stage_res.config is None:  # read just before by _stage_gate; a changed file is refused
+        output.say(line(clock(), "başlatma", f"başlatma reddedildi: {stage_res.message}"))
+        return None
+    result = check_paper_proof(
+        stage_res.config,
+        bot,
+        bot.store_path,
+        clock(),
+        is_lock_held,
+        same_file=_same_file,
+        resolve=lambda path: str(Path(path).resolve()),
+    )
+    if result.summary is None:
+        output.say(line(clock(), "başlatma", f"başlatma reddedildi: {result.message}"))
+    return result.summary
+
+
 def _dashboard(
     config_path: Path,
     config: BotConfig,
@@ -538,8 +565,15 @@ def _start(
     report_path: str | None = None,
     reporter: ReportingService | None = None,
     exchange: object = None,
+    paper_proof: PaperProof | None = None,
 ) -> int:
     check = open_for_start(config.store_path, mode=config.mode)
+    if check.outcome is StartOutcome.READY and config.mode == "paper":
+        # spec 0038 CB-1: after READY, before any turn; the report as an absolute path (G-5)
+        absolute = None if report_path is None else str(Path(report_path).resolve())
+        check = record_start(
+            config.store_path, trial=trial, report_path=absolute, now=parts.clock()
+        )
     if check.outcome is not StartOutcome.READY:
         hint = f"; {check.hint}" if check.hint is not None else ""
         output(line(parts.clock(), "başlatma", f"{check.message}{hint}"))
@@ -552,6 +586,7 @@ def _start(
         approved_by=approved_by,
         report_path=report_path,
         reporter=reporter,
+        paper_proof=paper_proof,
     )
     if exit_.reason is ExitReason.LOG_FAILED:
         output.say(line(parts.clock(), "durdurma", _LOG_FAILED))
@@ -664,6 +699,7 @@ def run(
     approved_by: str | None = None
     report_path: str | None = None
     live_exchange: object = None
+    paper_proof: PaperProof | None = None
 
     if argv[0] == "start":
         if is_live:
@@ -671,6 +707,9 @@ def run(
                 config_path, config, output, clock, mode="live"
             )
             if not passed:
+                return EXIT_REFUSED
+            paper_proof = _paper_proof_gate(config_path, config, output, clock)
+            if paper_proof is None:
                 return EXIT_REFUSED
             document = _load_toml(config_path)
             testnet = False
@@ -751,6 +790,7 @@ def run(
             report_path=report_path,
             reporter=reporter,
             exchange=live_exchange,
+            paper_proof=paper_proof,
         )
     except LogWriteError:
         output.say(line(clock(), "durdurma", _LOG_FAILED))

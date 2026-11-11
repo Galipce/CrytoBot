@@ -25,6 +25,7 @@ from crytobot.execution import (
     PermissionForbiddenError,
 )
 from crytobot.persistence import load_store
+from tests.app.test_paper_proof import proof_store
 
 NOW = datetime(2026, 11, 9, 20, 0, tzinfo=UTC)
 ROOT = Path(__file__).resolve().parents[2]
@@ -113,6 +114,7 @@ def write_test_config(
     mode: str = "paper",
     testnet: bool = False,
     include_live_stage: bool = True,
+    include_paper_store: bool = True,
 ) -> Path:
     dir_path.mkdir(parents=True, exist_ok=True)
     cfg_file = dir_path / "crytobot.toml"
@@ -135,6 +137,12 @@ def write_test_config(
                 'live_approved_at = "2026-11-09T20:00:00Z"',
             ]
         )
+        # spec 0038 CB-2: a live start needs a proven paper store, finished before the approval
+        paper_file = dir_path / "paper.sqlite"
+        if include_paper_store:
+            if mode == "live" and not paper_file.exists():
+                proof_store(paper_file, report=str(report_file))
+            stage_lines.append(f'paper_store_path = "{paper_file.as_posix()}"')
 
     content = f"""
 [bot]
@@ -281,6 +289,25 @@ def test_prepare_live_creates_store_with_exchange_balance(tmp_path: Path) -> Non
     assert cli_res == EXIT_OK
     assert "canlı depo hazır" in out.getvalue()
     assert "3000" in out.getvalue()
+
+
+def test_prepare_live_is_not_subject_to_the_paper_proof_gate(tmp_path: Path) -> None:
+    """Spec 0038 PB-3: `prepare --live` paper kanıtı aramaz; deposu ve alanı yokken de hazırlar."""
+    cfg = write_test_config(tmp_path / "no_paper", mode="live", include_paper_store=False)
+    assert "paper_store_path" not in cfg.read_text(encoding="utf-8")
+    assert not (tmp_path / "no_paper" / "paper.sqlite").exists()
+
+    out = io.StringIO()
+    res = run(
+        ["prepare", "--live"],
+        config_path=cfg,
+        console=out,
+        live_client=FakeLiveClient(free_balance=Decimal("3000")),
+    )
+
+    assert res == EXIT_OK
+    assert "canlı depo hazır" in out.getvalue()
+    assert load_store(str(tmp_path / "no_paper" / "bot.db"), "live").state is not None
 
 
 def test_live_start_fails_closed_on_credentials_or_permissions(tmp_path: Path) -> None:

@@ -19,15 +19,20 @@ from pathlib import Path
 from crytobot.execution import EMPTY_EXECUTION, ExecutionState, execution_problems
 from crytobot.persistence._codec import (
     CodecError,
+    StartRecord,
     decode_ledger,
     decode_orders,
     decode_risk,
+    decode_start,
+    decode_time,
     encode_entry,
     encode_orders,
     encode_risk,
     encode_risk_legacy,
+    encode_start,
     encode_summary,
     order_resolution_allowed,
+    start_record_problem,
 )
 from crytobot.persistence._reconcile import conflicts
 from crytobot.portfolio import EMPTY_LEDGER, Ledger, ledger_problems
@@ -42,11 +47,17 @@ LIVE_FILLS_KEY, LIVE_FILLS = "fills", "exchange"
 BUSY_WAIT_S = 4.0
 _BUSY_POLL_S = 0.05
 _SHOWN_CONFLICTS = 3
+# spec 0038: added only; an older store gets it on its first start record (no format change)
+_STARTS_TABLE = (
+    "CREATE TABLE IF NOT EXISTS starts(seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT"
+)
+LAST_TURN_KEY = "last_turn"  # spec 0038 plan Risk 1: paper only, monotonic, revision unchanged
 _SCHEMA = (
     "CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT",
     "CREATE TABLE entries(seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT",
     "CREATE TABLE orders(seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT",
     "CREATE TABLE audit(seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT",
+    _STARTS_TABLE,
 )
 
 
@@ -76,6 +87,7 @@ class StoredState:
     ledger: Ledger
     execution: ExecutionState
     risk: RiskState
+    last_turn: datetime | None = None  # spec 0038: the last turn written to a paper store
 
 
 @dataclass(frozen=True)
@@ -146,7 +158,7 @@ def _busy(error: sqlite3.Error) -> bool:
     return code is not None and code & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED)
 
 
-def _waiting(action: Callable[[], StoreResult]) -> StoreResult:
+def _waiting[T](action: Callable[[], T]) -> T:
     """`action` kilit bulana ya da gerçek zamanla süre dolana kadar; süre dolunca hata yükselir."""
     deadline = time.monotonic() + BUSY_WAIT_S
     while True:
@@ -255,14 +267,20 @@ def _read(database: sqlite3.Connection, mode: str) -> StoreResult:
     ledger = decode_ledger(_rows(database, "entries"), meta["ledger"])
     execution = decode_orders(_rows(database, "orders"))
     risk = decode_risk(meta["risk"])
+    last_turn = _last_turn(meta)
     problems = _problems(ledger, execution, risk)
     if problems:
         return _refusal(StoreOutcome.UNREADABLE, f"depo okunamıyor: {problems[0]}")
     return _flagged(
         StoreOutcome.LOADED,
-        StoredState(mode, header, ledger, execution, risk),
+        StoredState(mode, header, ledger, execution, risk, last_turn),
         "depo yüklendi",
     )
+
+
+def _last_turn(meta: dict[str, str]) -> datetime | None:
+    text = meta.get(LAST_TURN_KEY)
+    return None if text is None else decode_time(text)
 
 
 def _read_from(target: Path, mode: str, readonly: bool = False) -> StoreResult:
@@ -431,7 +449,7 @@ def save_store(
         encode_summary(ledger),
         encode_risk(risk),
     )
-    state = StoredState(base.mode, base.revision + 1, ledger, execution, risk)
+    state = StoredState(base.mode, base.revision + 1, ledger, execution, risk, base.last_turn)
     try:
         if not target.exists():
             return _MISSING
@@ -491,3 +509,120 @@ def load_audit_records(path: object) -> list[str]:
             return _rows(database, "audit")
     except (sqlite3.Error, CodecError, OSError):
         return []
+
+
+@dataclass(frozen=True)
+class StartRecordsResult:
+    """Spec 0038: `records` yalnız LOADED'da anlamlıdır; tablosu olmayan depo boş döner."""
+
+    outcome: StoreOutcome
+    records: tuple[StartRecord, ...]
+    message: str
+
+
+def _start_refusal(result: StoreResult) -> StartRecordsResult:
+    return StartRecordsResult(result.outcome, (), result.message)
+
+
+def _append_start(target: Path, record: StartRecord) -> StoreResult:
+    with closing(_connect(target)) as database:  # closing without COMMIT rolls back
+        database.execute("BEGIN EXCLUSIVE")
+        header = _header(_meta(database), "paper")
+        if isinstance(header, StoreResult):
+            return header
+        database.execute(_STARTS_TABLE)
+        rows = _rows(database, "starts")
+        for row in rows:
+            decode_start(row)  # a broken history is not extended
+        row = encode_start(StartRecord(record.at, record.trial, record.report_path, header))
+        database.execute("INSERT INTO starts(seq, row) VALUES (?, ?)", (len(rows), row))
+        database.execute("COMMIT")
+        return StoreResult(StoreOutcome.SAVED, None, (), "başlatma kaydı eklendi")
+
+
+def append_start_record(path: object, record: object) -> StoreResult:
+    """Spec 0038 CB-1: başlatma kaydını yalnız paper deposuna, o anki revizyonla ekler.
+
+    Kaydın `revision` alanı yok sayılır, depo yazar. Güncelleme ya da silme yolu yoktur."""
+    target = _target(path)
+    if target is None or start_record_problem(record) is not None:
+        return _INVALID
+    assert isinstance(record, StartRecord)  # checked above
+    if record.report_path is not None and not os.path.isabs(record.report_path):
+        return _INVALID  # CB-3, G-5: compared later as an absolute path
+    try:
+        if not target.exists():
+            return _MISSING
+        return _waiting(lambda: _append_start(target, record))
+    except sqlite3.Error as error:
+        return _BUSY if _busy(error) else _WRITE_FAILED
+    except CodecError:
+        return _UNREADABLE
+    except (KeyError, OSError, ValueError):
+        return _WRITE_FAILED
+
+
+def _read_starts(target: Path, readonly: bool) -> StartRecordsResult:
+    with closing(_connect(target, readonly=readonly)) as database:
+        database.execute("BEGIN")
+        header = _header(_meta(database), "paper")
+        if isinstance(header, StoreResult):
+            return _start_refusal(header)
+        has_table = database.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='starts'"
+        ).fetchone()
+        rows = _rows(database, "starts") if has_table else []
+        records = tuple(decode_start(row) for row in rows)
+        return StartRecordsResult(StoreOutcome.LOADED, records, "başlatma kayıtları yüklendi")
+
+
+def load_start_records(path: object, readonly: bool = True) -> StartRecordsResult:
+    """Spec 0038 CB-3: paper deposunun başlatma kayıtları sırasıyla ya da adlandırılmış sonuç.
+
+    Okuma hatası boş listeye çevrilmez: "kayıt yok" ile "okunamıyor" ayrı sonuçlardır."""
+    target = _target(path)
+    if target is None or not isinstance(readonly, bool):
+        return _start_refusal(_INVALID)
+    try:
+        if not target.exists():
+            return _start_refusal(_MISSING)
+        return _waiting(lambda: _read_starts(target, readonly))
+    except sqlite3.Error as error:
+        return _start_refusal(_BUSY if _busy(error) else _UNREADABLE)
+    except (CodecError, KeyError, OSError, ValueError):
+        return _start_refusal(_UNREADABLE)
+
+
+def _mark(target: Path, at: datetime) -> StoreResult:
+    with closing(_connect(target)) as database:  # closing without COMMIT rolls back
+        database.execute("BEGIN EXCLUSIVE")
+        meta = _meta(database)
+        header = _header(meta, "paper")
+        if isinstance(header, StoreResult):
+            return header
+        previous = _last_turn(meta)
+        if previous is not None and at < previous:
+            return _IMMUTABLE
+        database.execute(
+            "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
+            (LAST_TURN_KEY, at.isoformat()),
+        )
+        database.execute("COMMIT")
+        return StoreResult(StoreOutcome.SAVED, None, (), "tur işaretlendi")
+
+
+def mark_turn(path: object, at: object) -> StoreResult:
+    """Spec 0038 plan Risk 1: paper deposunun son turunu yazar; revizyon artmaz, an geri gitmez."""
+    target = _target(path)
+    if target is None or not isinstance(at, datetime) or at.utcoffset() is None:
+        return _INVALID
+    try:
+        if not target.exists():
+            return _MISSING
+        return _waiting(lambda: _mark(target, at))
+    except sqlite3.Error as error:
+        return _BUSY if _busy(error) else _WRITE_FAILED
+    except CodecError:
+        return _UNREADABLE
+    except (KeyError, OSError, ValueError):
+        return _WRITE_FAILED

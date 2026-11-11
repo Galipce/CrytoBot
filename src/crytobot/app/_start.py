@@ -19,7 +19,14 @@ from crytobot.execution import (
     LiveExchange,
     load_credentials,
 )
-from crytobot.persistence import StoreOutcome, create_store, load_store, save_store
+from crytobot.persistence import (
+    StartRecord,
+    StoreOutcome,
+    append_start_record,
+    create_store,
+    load_store,
+    save_store,
+)
 from crytobot.portfolio import EMPTY_LEDGER, LedgerOutcome, open_ledger
 
 PREPARE_HINT = "önce hazırlık: python -m crytobot prepare"
@@ -74,6 +81,7 @@ class StartOutcome(Enum):
     MODE_MISMATCH = "mode_mismatch"
     LEDGER_NOT_OPENED = "ledger_not_opened"
     LIVE_STORE_OUTDATED = "live_store_outdated"
+    START_NOT_RECORDED = "start_not_recorded"
 
 
 @dataclass(frozen=True)
@@ -114,6 +122,23 @@ def open_for_start(store_path: str, mode: str = PAPER) -> StartCheck:
             StartOutcome.LEDGER_NOT_OPENED, "başlatma reddedildi: defter açılmamış", hint
         )
     return StartCheck(StartOutcome.READY, "depo hazır", None)
+
+
+START_NOT_RECORDED = "başlatma reddedildi: başlatma kaydı yazılamadı"
+
+
+def record_start(
+    store_path: str, *, trial: bool, report_path: str | None, now: datetime
+) -> StartCheck:
+    """Spec 0038 CB-1, plan Risk 6: paper başlatmasını depoya yazar; depo `READY` olduktan sonra,
+    tur atılmadan çağrılır. `--trial` "deneme"dir, raporu yoktur; kanıtlı başlatmanın raporu
+    mutlak yoldur (çözümü `__main__` yapar). Yazılamazsa başlatma reddedilir: kaydı olmayan bir
+    koşu kanıt sayılamaz."""
+    record = StartRecord(now, trial, None if trial else report_path)
+    written = append_start_record(store_path, record)
+    if written.outcome is not StoreOutcome.SAVED:
+        return StartCheck(StartOutcome.START_NOT_RECORDED, START_NOT_RECORDED, None)
+    return StartCheck(StartOutcome.READY, "başlatma kaydedildi", None)
 
 
 def read_pairs(whitelist: Sequence[str], store_path: str, mode: str = PAPER) -> tuple[str, ...]:

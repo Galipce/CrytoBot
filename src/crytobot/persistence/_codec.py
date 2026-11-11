@@ -12,7 +12,7 @@ taşır, kalan pozisyon okurken `remaining_position` ile türetilir.
 
 import json
 from collections.abc import Iterable, Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal, DecimalException
 from types import MappingProxyType
@@ -413,3 +413,65 @@ def decode_risk(text: object) -> RiskState:
         halted,
         kill_switch,
     )
+
+
+PROOF, TRIAL = "proof", "trial"
+
+
+@dataclass(frozen=True)
+class StartRecord:
+    """Spec 0038 CB-1: paper başlatma kaydı. `trial` ise rapor yoktur; kanıtlıysa rapor mutlak
+    yoldur. `revision` kaydın yazıldığı andaki depo revizyonudur, depo doldurur (plan Risk 2)."""
+
+    at: datetime
+    trial: bool
+    report_path: str | None
+    revision: int = 0
+
+
+def start_record_problem(record: object) -> str | None:
+    """Yazılacak kaydın biçimi; sorun yoksa `None`."""
+    if not isinstance(record, StartRecord):
+        return "kayıt"
+    if not isinstance(record.at, datetime) or record.at.utcoffset() is None:
+        return "zaman"
+    if type(record.trial) is not bool:
+        return "tür"
+    if record.trial:
+        return None if record.report_path is None else "rapor"
+    if type(record.report_path) is not str or not record.report_path:
+        return "rapor"
+    return None
+
+
+def encode_start(record: StartRecord) -> str:
+    """Doğrulanmış kayıt (`start_record_problem` geçti)."""
+    return _dumps(
+        {
+            "at": record.at.isoformat(),
+            "kind": TRIAL if record.trial else PROOF,
+            "report": record.report_path,
+            "revision": str(record.revision),
+        }
+    )
+
+
+def decode_start(text: object) -> StartRecord:
+    """Satır birebir geri yazılabilmeli; değilse `CodecError`."""
+    raw = _loads(text)
+    if not isinstance(raw, dict) or set(raw) != {"at", "kind", "report", "revision"}:
+        raise CodecError
+    kind, report, revision = raw["kind"], raw["report"], raw["revision"]
+    if kind not in (PROOF, TRIAL) or type(revision) is not str:
+        raise CodecError
+    if not (revision.isascii() and revision.isdigit()):
+        raise CodecError
+    record = StartRecord(_time(raw["at"]), kind == TRIAL, report, int(revision))
+    if start_record_problem(record) is not None or encode_start(record) != text:
+        raise CodecError
+    return record
+
+
+def decode_time(value: object) -> datetime:
+    """Meta alanındaki an (spec 0038 `last_turn`): satırlardaki zamanla aynı kural."""
+    return _time(value)

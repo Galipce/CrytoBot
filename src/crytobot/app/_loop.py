@@ -30,14 +30,15 @@ from crytobot.app._events import (
 )
 from crytobot.app._market import to_turn_market
 from crytobot.app._notices import NoticeKind, TurnMemory, TurnNotice
+from crytobot.app._paper_proof import PaperProof
 from crytobot.app._result import BuyHalt, TurnOutcome, TurnResult
 from crytobot.app._schedule import Due, after_turn, boundary_at_or_before, due, seconds_until
 from crytobot.app._session import AppError, KillRequest
 from crytobot.app._start import read_pairs
 from crytobot.app._turn import run_turn
-from crytobot.execution import Exchange, OrderStatus, PaperExchange
+from crytobot.execution import PAPER, Exchange, OrderStatus, PaperExchange
 from crytobot.market_data import MarketRead, ReadSettings
-from crytobot.persistence import load_store
+from crytobot.persistence import StoreOutcome, load_store, mark_turn
 from crytobot.risk import daily_loss_reached
 
 # The clock is read again at least this often while waiting: a sleep or a clock jump is seen
@@ -115,8 +116,10 @@ class _Loop:
         approved_by: str | None = None,
         report_path: str | None = None,
         reporter: object | None = None,
+        paper_proof: PaperProof | None = None,
     ) -> None:
         self.config = config
+        self.paper_proof = paper_proof
         self.parts = parts
         self.exchange = exchange
         self.trial = trial
@@ -261,6 +264,7 @@ class _Loop:
             raise
         self.last = result
         self.turns += 1
+        self.mark(result, at)
 
         if self.memory.retry_after is not None:
             pause_time = self.memory.retry_after
@@ -422,6 +426,15 @@ class _Loop:
             if err:
                 self.emit(at, "hata", f"telegram günlük raporu iletilemedi ({err})")
 
+    def mark(self, result: TurnResult, at: datetime) -> None:
+        """Spec 0038 plan Risk 1, A-3: paper deposunun son turu; yalnız tamamlanan tur (bayat veri
+        ve yasak turları dahil). Yazılamazsa kanıt yalnız kısalır, satırla bildirilir."""
+        if self.config.mode != PAPER or result.outcome is not TurnOutcome.COMPLETED:
+            return
+        marked = mark_turn(self.config.store_path, at)
+        if marked.outcome is not StoreOutcome.SAVED:
+            self.emit(at, "hata", f"tur işareti yazılamadı: {marked.message}")
+
     # --- the loop -----------------------------------------------------------------------------
     def finish(self, reason: ExitReason) -> LoopExit:
         text = _REASON_TEXT[reason]
@@ -455,6 +468,7 @@ class _Loop:
                 trial=self.trial,
                 approved_by=self.approved_by,
                 report_path=self.report_path,
+                paper_proof=self.paper_proof,
             ),
         )
         last: datetime | None = None
@@ -486,11 +500,13 @@ def run_loop(
     approved_by: str | None = None,
     report_path: str | None = None,
     reporter: object | None = None,
+    paper_proof: PaperProof | None = None,
 ) -> LoopExit:
     """R-8…R-15: hazırlanmış depoyla paper turlarını aralık sınırlarında atar; nedeniyle çıkar.
 
     İkinci durdurma isteğinde de çıkış kaydı yazılır ve `FORCED` döner. `exchange` yalnız paper
-    simülatörüdür; verilmezse yenisi kurulur.
+    simülatörüdür; verilmezse yenisi kurulur. `paper_proof` geçen canlı başlatmanın paper kanıtıdır
+    (spec 0038 CB-5), başlatma satırına yazılır.
     """
     loop = _Loop(
         config,
@@ -500,6 +516,7 @@ def run_loop(
         approved_by=approved_by,
         report_path=report_path,
         reporter=reporter,
+        paper_proof=paper_proof,
     )
     try:
         return loop.run()
