@@ -25,6 +25,7 @@ from crytobot.execution import (
     PermissionForbiddenError,
 )
 from crytobot.persistence import load_store
+from tests.app.test_paper_proof import proof_store
 
 NOW = datetime(2026, 11, 9, 20, 0, tzinfo=UTC)
 ROOT = Path(__file__).resolve().parents[2]
@@ -135,6 +136,11 @@ def write_test_config(
                 'live_approved_at = "2026-11-09T20:00:00Z"',
             ]
         )
+        # spec 0038 CB-2: a live start needs a proven paper store, finished before the approval
+        paper_file = dir_path / "paper.sqlite"
+        if mode == "live" and not paper_file.exists():
+            proof_store(paper_file, report=str(report_file))
+        stage_lines.append(f'paper_store_path = "{paper_file.as_posix()}"')
 
     content = f"""
 [bot]

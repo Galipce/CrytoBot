@@ -10,7 +10,8 @@ kâr/zarar gerçekleşir. Bakiye negatife düşmez; alım ve kapanış aynı kim
 pozisyonları, çift başına güncel fiyatla değerlenmiş kasayı ve gerçekleşen kâr/zarar toplamını
 türetir: `risk`'in hesap girdisi (`AccountState`'e `app` çevirir). Canlıda kapanış kısmi olabilir
 (spec 0037): `close_position(..., partial=True)` kapanan kısmı orantılı maliyetle yazar, kalan
-pozisyon (`remaining_position`) aynı kimlikle açık kalır.
+pozisyon (`remaining_position`) aynı kimlikle açık kalır. `realized_curve` ve `closed_trades`
+(spec 0038) BR-10 paper eşikleri için gerçekleşmiş kasa eğrisini ve kapanmış işlem sayısını verir.
 """
 
 from crytobot.portfolio._close import (
@@ -24,6 +25,7 @@ from crytobot.portfolio._close import (
     exit_decisions,
     remaining_position,
 )
+from crytobot.portfolio._curve import closed_trades, realized_curve
 from crytobot.portfolio._ledger import (
     BUY,
     EMPTY_LEDGER,
@@ -68,9 +70,11 @@ __all__: list[str] = [
     "SnapshotResult",
     "account_state",
     "close_position",
+    "closed_trades",
     "exit_decisions",
     "ledger_problems",
     "open_ledger",
+    "realized_curve",
     "record_fill",
     "remaining_position",
 ]

@@ -1,7 +1,9 @@
 """Aşama onayı ve BR-10 başlatma kapısı (spec 0028 R-2, R-4, R-5; plan Adım 2).
 
 `load_stage_config`: ayar dosyasındaki `[stage]` bölümünü denetler (dosya sırasıyla `report_path`,
-`approved_by`, `approved_at`, `min_trades`, `min_profit_factor`) ve bilinmeyen anahtarları reddeder.
+`approved_by`, `approved_at`, `min_trades`, `min_profit_factor`; canlıda ayrıca `live_approved_*` ve
+spec 0038'in `paper_store_path`, `paper_min_days`, `paper_min_trades`'i) ve bilinmeyen anahtarları
+reddeder.
 `check_stage_gate`: metrik eşiklerini ve ayar uyumunu denetler.
 """
 
@@ -23,7 +25,13 @@ _STAGE_KEYS = (
     "min_profit_factor",
     "live_approved_by",
     "live_approved_at",
+    "paper_store_path",
+    "paper_min_days",
+    "paper_min_trades",
 )
+# spec 0038 CB-4: defaults and the floors below which a value is a setting error
+PAPER_MIN_DAYS, PAPER_DAYS_FLOOR = 14, 7
+PAPER_MIN_TRADES, PAPER_TRADES_FLOOR = 10, 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +45,9 @@ class StageConfig:
     min_profit_factor: Decimal | None = None
     live_approved_by: str | None = None
     live_approved_at: datetime | None = None
+    paper_store_path: str | None = None
+    paper_min_days: int = PAPER_MIN_DAYS
+    paper_min_trades: int = PAPER_MIN_TRADES
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +197,31 @@ def load_stage_config(document: object, mode: str = "paper") -> StageConfigResul
             )
         live_approved_at = dt_lat.astimezone(UTC)
 
+    # 8-10. Spec 0038: paper kanıtı ayarları yalnız canlıda aranır ve denetlenir (PB-1)
+    paper_store_path: str | None = None
+    paper_min_days, paper_min_trades = PAPER_MIN_DAYS, PAPER_MIN_TRADES
+    if mode == "live":
+        name = "stage.paper_store_path"
+        if "paper_store_path" not in table:
+            return StageConfigResult(None, name, f"ayar eksik: {name}")
+        val_psp = table["paper_store_path"]
+        if type(val_psp) is not str or not val_psp.strip():
+            return StageConfigResult(None, name, f"ayar geçersiz: {name}")
+        paper_store_path = val_psp.strip()
+        for key, floor in (
+            ("paper_min_days", PAPER_DAYS_FLOOR),
+            ("paper_min_trades", PAPER_TRADES_FLOOR),
+        ):
+            if key not in table:
+                continue
+            value = table[key]
+            if isinstance(value, bool) or type(value) is not int or value < floor:
+                return StageConfigResult(None, f"stage.{key}", f"ayar geçersiz: stage.{key}")
+            if key == "paper_min_days":
+                paper_min_days = value
+            else:
+                paper_min_trades = value
+
     # Bilinmeyen anahtarlar
     for key in table:
         if key not in _STAGE_KEYS:
@@ -200,6 +236,9 @@ def load_stage_config(document: object, mode: str = "paper") -> StageConfigResul
             min_profit_factor=min_profit_factor,
             live_approved_by=live_approved_by,
             live_approved_at=live_approved_at,
+            paper_store_path=paper_store_path,
+            paper_min_days=paper_min_days,
+            paper_min_trades=paper_min_trades,
         ),
         None,
         "ayarlar geçerli",

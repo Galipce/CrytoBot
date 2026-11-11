@@ -7,6 +7,7 @@ metin sır taşıyabilir. Başlatma satırı ve her tur özeti deneme işaretini
 from datetime import UTC, datetime, timedelta
 
 from crytobot.app._notices import TurnNotice
+from crytobot.app._paper_proof import PaperProof
 from crytobot.app._result import TurnResult
 from crytobot.market_data import CANDLE_INTERVALS, InputProblem
 
@@ -32,13 +33,22 @@ def start_text(
     trial: bool = True,
     approved_by: str | None = None,
     report_path: str | None = None,
+    paper_proof: PaperProof | None = None,
 ) -> str:
+    """Spec 0038 CB-5: geçen canlı başlatmada satır paper kanıtını taşır; paper satırı aynıdır."""
     every = CANDLE_INTERVALS.get(interval, "?")
     pairs = ",".join(whitelist)
     prefix = f"başladı: mod=paper aralık={every} depo={store_path} çiftler={pairs}"
     if trial or approved_by is None or report_path is None:
         return f"{prefix} — {TRIAL_MARK}"
-    return f"{prefix} onaylı: onaylayan={approved_by} rapor={report_path}"
+    text = f"{prefix} onaylı: onaylayan={approved_by} rapor={report_path}"
+    if paper_proof is None:
+        return text
+    proof = paper_proof
+    return (
+        f"{text} paper={proof.path} gün={proof.days} işlem={proof.trades} net={proof.net}"
+        f" açık={proof.open_positions}"
+    )
 
 
 def turn_text(

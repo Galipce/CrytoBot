@@ -14,6 +14,10 @@ Gerçek etkiler (saat, bekleme, piyasa okuması, çıktı, durdurma isteği) `Lo
 yasağı süresince okuma yapılmaz. Her başlatma bir deneme koşusudur (`TRIAL_MARK`, BR-10). Giriş
 noktası `python -m crytobot`'tur.
 
+Paper kanıtı (spec 0038): paper başlatması `record_start` ile depoya kanıtlı ya da deneme kaydı
+bırakır, döngü her tamamlanan turun anını işaretler; `check_paper_proof` `start --live`'da paper
+kanıt deposunu salt okunur denetler (kayıtlar, eşikler, onay sırası).
+
 İndirme (spec 0023): `load_download_config` aynı ayar dosyasından botun ayarlarını ve `[history]`
 bölümünü (veri dosyası yolu, dönem) denetler; `run_download` geçmiş veri indirmesini `DownloadParts`
 ile verilen saat, indirme işlevi, çıktı ve durdurma isteğiyle yapar. Depoya, kilide ve kayıt
@@ -63,6 +67,7 @@ from crytobot.app._loop import (
 )
 from crytobot.app._market import to_turn_market
 from crytobot.app._notices import NoticeKind, TurnMemory, TurnNotice
+from crytobot.app._paper_proof import PaperProof, PaperProofResult, check_paper_proof
 from crytobot.app._result import BuyHalt, PairNote, PairOutcome, TurnOutcome, TurnResult
 from crytobot.app._session import KillRequest
 from crytobot.app._stage import (
@@ -83,6 +88,7 @@ from crytobot.app._start import (
     prepare_live_store,
     prepare_store,
     read_pairs,
+    record_start,
 )
 from crytobot.app._turn import run_turn
 
@@ -114,6 +120,8 @@ __all__: list[str] = [
     "PairMarket",
     "PairNote",
     "PairOutcome",
+    "PaperProof",
+    "PaperProofResult",
     "PrepareOutcome",
     "PrepareResult",
     "StageConfig",
@@ -127,6 +135,7 @@ __all__: list[str] = [
     "TurnOutcome",
     "TurnResult",
     "TurnSettings",
+    "check_paper_proof",
     "check_stage_gate",
     "create_live_exchange",
     "engage_kill_switch",
@@ -141,6 +150,7 @@ __all__: list[str] = [
     "prepare_store",
     "query_status",
     "read_pairs",
+    "record_start",
     "request_stop",
     "resume_operations",
     "run_backtest",

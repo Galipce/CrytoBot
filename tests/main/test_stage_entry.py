@@ -4,14 +4,18 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from crytobot.__main__ import EXIT_OK, EXIT_REFUSED
 from crytobot.app import TRIAL_MARK
+from crytobot.app import _start as start_module
 from crytobot.backtest import (
     CANDIDATE_MARK,
     ReportFacts,
     report_text,
     run_metrics,
 )
+from crytobot.persistence import StoreOutcome, StoreResult, load_start_records
 from tests.backtest.test_metrics import BTC, DAY1, DAY2
 from tests.main.test_entry import Bot, config_text, event_lines
 
@@ -181,4 +185,74 @@ def test_fail_closed_touches_no_store_or_network(tmp_path: Path) -> None:
     assert not lock.exists()
 
     # Borsaya hiçbir çağrı gitmez
+    assert bot.exchange.touched == []
+
+
+# --- spec 0038 CB-1, PB-1: the paper start record --------------------------------------------
+
+
+def _proven_config(tmp_path: Path) -> Path:
+    report_file = tmp_path / "backtest-report.txt"
+    report_file.write_text(make_valid_report_text(), encoding="utf-8")
+    stage_toml = f"""
+[stage]
+report_path = "{report_file.as_posix()}"
+approved_by = "Galip Badem"
+approved_at = "2026-11-08T12:00:00Z"
+min_trades = 10
+"""
+    (tmp_path / "crytobot.toml").write_text(config_text(tmp_path) + stage_toml, encoding="utf-8")
+    return report_file
+
+
+def test_a_proven_paper_start_records_its_absolute_report(tmp_path: Path) -> None:
+    bot = Bot(tmp_path)
+    report_file = _proven_config(tmp_path)
+    assert bot.run("prepare")[0] == EXIT_OK
+
+    assert bot.run("start", trial=False)[0] == EXIT_OK
+
+    records = load_start_records(bot.store).records
+    assert [(r.trial, r.report_path, r.revision) for r in records] == [
+        (False, str(report_file.resolve()), 1)
+    ]
+
+
+def test_a_trial_start_records_a_trial_without_a_report(tmp_path: Path) -> None:
+    bot = Bot(tmp_path)
+    assert bot.run("prepare")[0] == EXIT_OK
+
+    assert bot.run("start", "--trial")[0] == EXIT_OK
+    assert bot.run("start", "--trial")[0] == EXIT_OK
+
+    records = load_start_records(bot.store).records
+    assert [(r.trial, r.report_path) for r in records] == [(True, None), (True, None)]
+    assert records[0].at <= records[1].at
+
+
+def test_a_refused_start_leaves_no_record(tmp_path: Path) -> None:
+    bot = Bot(tmp_path)
+    _proven_config(tmp_path)
+    (tmp_path / "backtest-report.txt").unlink()
+    assert bot.run("prepare")[0] == EXIT_OK
+
+    assert bot.run("start", trial=False)[0] == EXIT_REFUSED
+
+    assert load_start_records(bot.store).records == ()
+
+
+def test_a_start_whose_record_cannot_be_written_is_refused_before_any_turn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Plan Risk 6: kaydı olmayan koşu kanıt sayılamaz."""
+    bot = Bot(tmp_path)
+    assert bot.run("prepare")[0] == EXIT_OK
+    failed = StoreResult(StoreOutcome.WRITE_FAILED, None, (), "yazılamadı")
+    monkeypatch.setattr(start_module, "append_start_record", lambda *_args: failed)
+
+    code, console = bot.run("start", "--trial")
+
+    assert code == EXIT_REFUSED
+    assert "başlatma reddedildi: başlatma kaydı yazılamadı" in console
+    assert event_lines(console, "tur") == []
     assert bot.exchange.touched == []

@@ -72,6 +72,12 @@ r = "2"
 # approved_at = 2026-11-08T12:00:00Z    # onay anı, UTC ISO formatında
 # min_trades = 10                       # asgari işlem sayısı (isteğe bağlı, varsayılan 10)
 # min_profit_factor = "1.5"             # asgari kâr faktörü (isteğe bağlı, ≥1)
+# Yalnız canlı (`start --live`) için; paper başlatma bu satırları aramaz (spec 0033, 0038):
+# live_approved_by = "Ad Soyad"          # canlı onayı veren
+# live_approved_at = 2026-12-01T12:00:00Z  # canlı onay anı; paper kanıtının son turundan sonra
+# paper_store_path = "crytobot-paper.db"   # kanıtlı paper koşusunun deposu (canlı depo olamaz)
+# paper_min_days = 14                      # asgari paper süresi, 24 saatlik gün (alt sınır 7)
+# paper_min_trades = 10                    # asgari tamamen kapanmış paper işlemi (alt sınır 5)
 
 # Geçmiş veri indirme (`python -m crytobot download`, spec 0023): beyaz listedeki çiftlerin kapanmış
 # mumları, ısınma için `candle_count` kadar önceki mumlarla, herkese açık veriden anahtarsız indirilir.

@@ -171,6 +171,7 @@ def test_live_stage_approval_required_for_live_mode() -> None:
     doc_live = valid_document()
     doc_live["stage"]["live_approved_by"] = "Galip Badem"
     doc_live["stage"]["live_approved_at"] = "2026-11-09T20:00:00Z"
+    doc_live["stage"]["paper_store_path"] = "paper.sqlite"  # spec 0038 CB-2: required in live
     res_live = load_stage_config(doc_live, mode="live")
     assert res_live.config is not None
     assert res_live.config.live_approved_by == "Galip Badem"
