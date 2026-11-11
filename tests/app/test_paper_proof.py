@@ -5,6 +5,9 @@ başlatma kaydı → alım/kapanışlar → son tur işareti. Burada kurulan yar
 testleri de kullanır.
 """
 
+import json
+import sqlite3
+from contextlib import closing
 from dataclasses import replace
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -20,6 +23,7 @@ from crytobot.persistence import (
     StartRecordsResult,
     StoreOutcome,
     append_start_record,
+    load_start_records,
     load_store,
     mark_turn,
     save_store,
@@ -35,6 +39,7 @@ LAST_TURN = STARTED + timedelta(days=14)
 APPROVED = LAST_TURN + timedelta(hours=1)
 NOW = APPROVED + timedelta(hours=1)
 DEPOSIT = Decimal(10000)
+SHA = "0123456789abcdef" * 4  # spec 0040 CB-5: the approved report fingerprint
 
 
 def resolve(path: str) -> str:
@@ -70,11 +75,14 @@ def proof_store(
     records: tuple[StartRecord, ...] | None = None,
     last_turn: datetime | None = LAST_TURN,
     report: str | None = None,
+    sha: str = SHA,
 ) -> Path:
-    """Hazırlık → başlatma kayıtları → `world` → son tur. Varsayılan: geçen bir kanıt."""
+    """Hazırlık → başlatma kayıtları → `world` → son tur. Varsayılan: geçen bir kanıt; `sha`
+    varsayılan kaydın rapor parmak izi (spec 0040 CB-5)."""
     base = stored(path, opened(DEPOSIT, OPENED_AT))
     report = report_of(path.parent) if report is None else report
-    for record in (StartRecord(STARTED, False, report),) if records is None else records:
+    default = (StartRecord(STARTED, False, report, report_sha256=sha),)
+    for record in default if records is None else records:
         assert append_start_record(path, record).outcome is StoreOutcome.SAVED
     world = traded() if world is None else world
     world = seen(world, str(DEPOSIT), at=STARTED + timedelta(minutes=5))
@@ -88,6 +96,7 @@ def proof_store(
 def stage_for(root: Path, **changes: Any) -> StageConfig:
     values: dict[str, Any] = {
         "report_path": report_of(root),
+        "report_sha256": SHA,
         "approved_by": "Galip Badem",
         "approved_at": OPENED_AT,
         "live_approved_by": "Galip Badem",
@@ -211,7 +220,7 @@ def test_a_store_whose_reconciliation_fails_is_refused(tmp_path: Path) -> None:
     """Plan A-4."""
     path = tmp_path / "paper.sqlite"
     base = stored(path, opened(DEPOSIT, OPENED_AT))
-    append_start_record(path, StartRecord(STARTED, False, report_of(tmp_path)))
+    append_start_record(path, StartRecord(STARTED, False, report_of(tmp_path), report_sha256=SHA))
     world = traded()
     save_store(path, base, world.ledger, opened().execution, world.risk)  # fills, no orders
 
@@ -237,7 +246,7 @@ def test_a_store_without_start_records_is_refused(tmp_path: Path) -> None:
 def test_any_trial_record_is_refused(tmp_path: Path) -> None:
     report = report_of(tmp_path)
     records = (
-        StartRecord(STARTED, False, report),
+        StartRecord(STARTED, False, report, report_sha256=SHA),
         StartRecord(STARTED + timedelta(days=1), True, None),
     )
     proof_store(tmp_path / "paper.sqlite", records=records)
@@ -252,21 +261,21 @@ def test_history_before_the_first_record_is_refused(tmp_path: Path) -> None:
     world = traded()
     later = save_store(path, base, world.ledger, world.execution, world.risk)
     assert later.state is not None
-    append_start_record(path, StartRecord(STARTED, False, report_of(tmp_path)))
+    append_start_record(path, StartRecord(STARTED, False, report_of(tmp_path), report_sha256=SHA))
     mark_turn(path, LAST_TURN)
 
     assert check(tmp_path).message == "paper kanıtı: başlatma kaydı eksik"
 
 
 def test_entries_older_than_the_first_record_are_refused(tmp_path: Path) -> None:
-    late = StartRecord(STARTED + timedelta(days=1), False, report_of(tmp_path))
+    late = StartRecord(STARTED + timedelta(days=1), False, report_of(tmp_path), report_sha256=SHA)
     proof_store(tmp_path / "paper.sqlite", records=(late,))
 
     assert check(tmp_path).message == "paper kanıtı: başlatma kaydı eksik"
 
 
 def test_a_last_turn_older_than_the_first_record_is_refused(tmp_path: Path) -> None:
-    late = StartRecord(STARTED + timedelta(days=20), False, report_of(tmp_path))
+    late = StartRecord(STARTED + timedelta(days=20), False, report_of(tmp_path), report_sha256=SHA)
     proof_store(tmp_path / "paper.sqlite", world=opened(DEPOSIT, OPENED_AT), records=(late,))
 
     assert check(tmp_path).message == "paper kanıtı: başlatma kaydı eksik"
@@ -274,8 +283,10 @@ def test_a_last_turn_older_than_the_first_record_is_refused(tmp_path: Path) -> N
 
 def test_records_linked_to_two_reports_are_refused(tmp_path: Path) -> None:
     records = (
-        StartRecord(STARTED, False, report_of(tmp_path)),
-        StartRecord(STARTED + timedelta(days=1), False, str(tmp_path / "başka.txt")),
+        StartRecord(STARTED, False, report_of(tmp_path), report_sha256=SHA),
+        StartRecord(
+            STARTED + timedelta(days=1), False, str(tmp_path / "başka.txt"), report_sha256=SHA
+        ),
     )
     proof_store(tmp_path / "paper.sqlite", records=records)
 
@@ -288,6 +299,55 @@ def test_a_report_other_than_the_live_settings_is_refused(tmp_path: Path) -> Non
     result = check(tmp_path, stage=stage_for(tmp_path, report_path=str(tmp_path / "yeni.txt")))
 
     assert result.message == "paper kanıtı: rapor uyuşmazlığı"
+
+
+def test_proof_fingerprint_mismatch_refused(tmp_path: Path) -> None:
+    """Spec 0040 CB-5: aynı yol, başka parmak izi (rapor yeniden üretilmiş) → uyuşmazlık."""
+    proof_store(tmp_path / "paper.sqlite")
+
+    other = check(tmp_path, stage=stage_for(tmp_path, report_sha256="f" * 64))
+    assert other.message == "paper kanıtı: rapor uyuşmazlığı"
+
+
+def test_records_with_two_fingerprints_are_refused(tmp_path: Path) -> None:
+    """Spec 0040 CB-5: kayıtlardan biri bile başka rapora bağlıysa kanıt değildir."""
+    records = (
+        StartRecord(STARTED, False, report_of(tmp_path), report_sha256=SHA),
+        StartRecord(
+            STARTED + timedelta(hours=1), False, report_of(tmp_path), report_sha256="f" * 64
+        ),
+    )
+    proof_store(tmp_path / "paper.sqlite", records=records)
+
+    assert check(tmp_path).message == "paper kanıtı: rapor uyuşmazlığı"
+
+
+def test_old_record_without_fingerprint_refused(tmp_path: Path) -> None:
+    """Spec 0040 CB-5, plan Risk 3: spec 0040'tan önceki kayıt okunur ama kanıt değildir."""
+    path = proof_store(tmp_path / "paper.sqlite", records=())
+    legacy = json.dumps(
+        {
+            "at": STARTED.isoformat(),
+            "kind": "proof",
+            "report": report_of(tmp_path),
+            "revision": "1",
+        },
+        separators=(",", ":"),
+    )
+    with closing(sqlite3.connect(path)) as database:
+        database.execute(
+            "CREATE TABLE IF NOT EXISTS starts(seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT"
+        )
+        database.execute("INSERT INTO starts(seq, row) VALUES (0, ?)", (legacy,))
+        database.commit()
+    (record,) = load_start_records(str(path)).records
+    assert (record.trial, record.report_path, record.report_sha256) == (
+        False,
+        report_of(tmp_path),
+        None,
+    )
+
+    assert check(tmp_path).message == "paper kanıtı: rapor uyuşmazlığı"
 
 
 def test_an_unreadable_record_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

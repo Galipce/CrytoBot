@@ -1,4 +1,5 @@
-"""Spec 0038 CB-1 (depo yarısı), plan Risk 1, 2: başlatma kayıtları ve son tur işareti."""
+"""Spec 0038 CB-1 (depo yarısı), plan Risk 1, 2: başlatma kayıtları ve son tur işareti; spec 0040
+CB-5: kanıtlı kaydın parmak izi, eski (parmak izsiz) satırın okunması (plan Risk 3)."""
 
 import sqlite3
 from contextlib import closing
@@ -19,10 +20,12 @@ from crytobot.persistence import (
 from tests.persistence.chain import T0, T1, bought, loaded, opened, stored
 
 REPORT = str(Path("rapor.json").resolve())
+SHA = "0123456789abcdef" * 4
+R = "C:/rapor.json"  # an absolute path as JSON text, for the raw rows below
 
 
 def proof(at: datetime = T1) -> StartRecord:
-    return StartRecord(at, False, REPORT)
+    return StartRecord(at, False, REPORT, report_sha256=SHA)
 
 
 def trial(at: datetime = T1) -> StartRecord:
@@ -44,7 +47,7 @@ def test_proof_and_trial_records_are_appended_in_order_with_the_revision(tmp_pat
     result = load_start_records(path)
     assert result.outcome is StoreOutcome.LOADED
     assert result.records == (
-        StartRecord(T1, False, REPORT, 1),
+        StartRecord(T1, False, REPORT, 1, SHA),
         StartRecord(T1 + timedelta(hours=1), True, None, 1),
     )
 
@@ -55,7 +58,7 @@ def test_record_revision_is_written_by_the_store_not_the_caller(tmp_path: Path) 
     world = bought(opened())
     save_store(path, base, world.ledger, world.execution, world.risk)
 
-    append_start_record(path, StartRecord(T1, False, REPORT, revision=99))
+    append_start_record(path, StartRecord(T1, False, REPORT, revision=99, report_sha256=SHA))
 
     assert load_start_records(path).records[0].revision == 2
 
@@ -90,6 +93,12 @@ def test_live_store_takes_no_start_record(tmp_path: Path) -> None:
         StartRecord(T1, False, ""),
         StartRecord(T1, False, "göreli/rapor.json"),
         StartRecord(T1, 1, None),  # type: ignore[arg-type]
+        StartRecord(T1, False, REPORT),  # spec 0040: a new proof record carries its fingerprint
+        StartRecord(T1, False, REPORT, report_sha256=SHA.upper()),
+        StartRecord(T1, False, REPORT, report_sha256=SHA[:63]),
+        StartRecord(T1, False, REPORT, report_sha256=SHA + "0"),
+        StartRecord(T1, False, REPORT, report_sha256=1),  # type: ignore[arg-type]
+        StartRecord(T1, True, None, report_sha256=SHA),
     ],
 )
 def test_invalid_records_are_refused_without_writing(tmp_path: Path, record: object) -> None:
@@ -141,6 +150,17 @@ def test_store_without_the_table_has_no_records_and_gets_it_on_first_append(
         '{"at":"2026-01-01T00:00:00+00:00","kind":"trial","report":null,"revision":"-1"}',
         '{"kind":"trial","at":"2026-01-01T00:00:00+00:00","report":null,"revision":"1"}',
         "[]",
+        # spec 0040: the new form, broken
+        f'{{"at":"2026-01-01T00:00:00+00:00","kind":"proof","report":"{R}","revision":"1",'
+        '"report_sha256":null}',
+        f'{{"at":"2026-01-01T00:00:00+00:00","kind":"proof","report":"{R}","revision":"1",'
+        f'"report_sha256":"{SHA.upper()}"}}',
+        '{"at":"2026-01-01T00:00:00+00:00","kind":"trial","report":null,"revision":"1",'
+        f'"report_sha256":"{SHA}"}}',
+        f'{{"at":"2026-01-01T00:00:00+00:00","kind":"proof","report":"{R}","report_sha256":'
+        f'"{SHA}","revision":"1"}}',  # not the written key order
+        f'{{"at":"2026-01-01T00:00:00+00:00","kind":"proof","report":"{R}","revision":"1",'
+        f'"report_sha256":"{SHA}","x":"1"}}',
     ],
 )
 def test_broken_record_is_unreadable_not_an_empty_history(tmp_path: Path, row: str) -> None:
@@ -174,6 +194,34 @@ def test_readonly_read_leaves_the_file_untouched(tmp_path: Path) -> None:
 
     assert path.read_bytes() == before
     assert sorted(p.name for p in tmp_path.iterdir()) == ["depo.sqlite"]
+
+
+def test_old_and_new_rows_decode(tmp_path: Path) -> None:
+    """Spec 0040 CB-5, plan Risk 3: eski satır kendi biçimiyle okunur (`report_sha256=None`), yeni
+    kayıt yeni biçimle yazılır; eski geçmiş bozuk sayılmaz, uzatılabilir."""
+    path = tmp_path / "depo.sqlite"
+    stored(path, opened())
+    legacy_proof = (
+        f'{{"at":"2026-01-01T00:00:00+00:00","kind":"proof","report":"{R}","revision":"1"}}'
+    )
+    legacy_trial = '{"at":"2026-01-01T01:00:00+00:00","kind":"trial","report":null,"revision":"1"}'
+    raw(path, "INSERT INTO starts(seq, row) VALUES (0, ?)", legacy_proof)
+    raw(path, "INSERT INTO starts(seq, row) VALUES (1, ?)", legacy_trial)
+
+    assert append_start_record(path, proof(T1 + timedelta(days=1))).outcome is StoreOutcome.SAVED
+    assert append_start_record(path, trial(T1 + timedelta(days=2))).outcome is StoreOutcome.SAVED
+
+    records = load_start_records(path).records
+    assert [(r.trial, r.report_path, r.report_sha256) for r in records] == [
+        (False, R, None),
+        (True, None, None),
+        (False, REPORT, SHA),
+        (True, None, None),
+    ]
+    rows = [str(row) for (row,) in raw(path, "SELECT row FROM starts ORDER BY seq")]
+    assert rows[:2] == [legacy_proof, legacy_trial]  # never rewritten
+    assert rows[2].endswith(f'"revision":"1","report_sha256":"{SHA}"}}')
+    assert rows[3].endswith('"revision":"1","report_sha256":null}')
 
 
 def test_writable_read_is_also_available(tmp_path: Path) -> None:

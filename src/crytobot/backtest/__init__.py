@@ -5,7 +5,8 @@ Spec 0025: koşunun kendisi (turlar, simüle saat) `app`'tedir; burada koşunun 
 metrikleri hesaplar (saf hesap). `report_text` raporu belirlenimci düz metin olarak yazar: koşunun
 varsayımları, parçaların metrikleri; yalnız örneklem dışı "BR-10 kanıtı adayı"dır, hüküm yoktur.
 `write_report` raporu `.part` üzerinden, var olan dosyanın üzerine yazmadan diske koyar;
-`report_exists` yolda ya da `.part` yolunda bir şey olup olmadığını söyler. `app` ve
+`report_exists` yolda ya da `.part` yolunda bir şey olup olmadığını söyler. `report_fingerprint`
+yazılan baytların SHA-256 özetidir (spec 0040). `app` ve
 `market_data` import edilmez.
 """
 
@@ -20,13 +21,20 @@ from crytobot.backtest._metrics import (
 from crytobot.backtest._report import (
     ASSUMPTIONS,
     CANDIDATE_MARK,
+    CONDITIONS,
+    GENERATED_LABEL,
     ReportFacts,
     money,
     percent,
     ratio,
     report_text,
 )
-from crytobot.backtest._report_file import PART_SUFFIX, report_exists, write_report
+from crytobot.backtest._report_file import (
+    PART_SUFFIX,
+    report_exists,
+    report_fingerprint,
+    write_report,
+)
 from crytobot.backtest._report_read import (
     CandidateMetrics,
     ParsedReport,
@@ -39,6 +47,8 @@ from crytobot.backtest._report_read import (
 __all__: list[str] = [
     "ASSUMPTIONS",
     "CANDIDATE_MARK",
+    "CONDITIONS",
+    "GENERATED_LABEL",
     "PART_SUFFIX",
     "CandidateMetrics",
     "ParsedReport",
@@ -55,6 +65,7 @@ __all__: list[str] = [
     "ratio",
     "read_report",
     "report_exists",
+    "report_fingerprint",
     "report_text",
     "run_metrics",
     "unrealized",

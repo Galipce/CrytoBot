@@ -416,21 +416,32 @@ def decode_risk(text: object) -> RiskState:
 
 
 PROOF, TRIAL = "proof", "trial"
+_LEGACY_START_KEYS = frozenset({"at", "kind", "report", "revision"})  # before spec 0040
+_START_KEYS = _LEGACY_START_KEYS | {"report_sha256"}
+_HEX = frozenset("0123456789abcdef")
 
 
 @dataclass(frozen=True)
 class StartRecord:
     """Spec 0038 CB-1: paper başlatma kaydı. `trial` ise rapor yoktur; kanıtlıysa rapor mutlak
-    yoldur. `revision` kaydın yazıldığı andaki depo revizyonudur, depo doldurur (plan Risk 2)."""
+    yoldur. `revision` kaydın yazıldığı andaki depo revizyonudur, depo doldurur (plan Risk 2).
+    `report_sha256` (spec 0040 CB-5): kanıtlı kaydın raporunun parmak izi, 64 küçük onaltılık;
+    deneme kaydında ve spec 0040'tan önce yazılmış kanıtlı kayıtta `None`."""
 
     at: datetime
     trial: bool
     report_path: str | None
     revision: int = 0
+    report_sha256: str | None = None
 
 
-def start_record_problem(record: object) -> str | None:
-    """Yazılacak kaydın biçimi; sorun yoksa `None`."""
+def _fingerprint_problem(value: object) -> bool:
+    return type(value) is not str or len(value) != 64 or not set(value) <= _HEX
+
+
+def start_record_problem(record: object, *, legacy: bool = False) -> str | None:
+    """Yazılacak kaydın biçimi; sorun yoksa `None`. `legacy`: spec 0040 öncesi satırın okunması
+    (kanıtlı kayıtta parmak izi yoktur)."""
     if not isinstance(record, StartRecord):
         return "kayıt"
     if not isinstance(record.at, datetime) or record.at.utcoffset() is None:
@@ -438,36 +449,50 @@ def start_record_problem(record: object) -> str | None:
     if type(record.trial) is not bool:
         return "tür"
     if record.trial:
+        if record.report_sha256 is not None:
+            return "parmak izi"
         return None if record.report_path is None else "rapor"
     if type(record.report_path) is not str or not record.report_path:
         return "rapor"
-    return None
+    if legacy:
+        return None if record.report_sha256 is None else "parmak izi"
+    return "parmak izi" if _fingerprint_problem(record.report_sha256) else None
+
+
+def _encode_start(record: StartRecord, *, legacy: bool) -> str:
+    row: dict[str, str | None] = {
+        "at": record.at.isoformat(),
+        "kind": TRIAL if record.trial else PROOF,
+        "report": record.report_path,
+        "revision": str(record.revision),
+    }
+    if not legacy:
+        row["report_sha256"] = record.report_sha256
+    return _dumps(row)
 
 
 def encode_start(record: StartRecord) -> str:
-    """Doğrulanmış kayıt (`start_record_problem` geçti)."""
-    return _dumps(
-        {
-            "at": record.at.isoformat(),
-            "kind": TRIAL if record.trial else PROOF,
-            "report": record.report_path,
-            "revision": str(record.revision),
-        }
-    )
+    """Doğrulanmış kayıt (`start_record_problem` geçti); her zaman yeni (spec 0040) biçim."""
+    return _encode_start(record, legacy=False)
 
 
 def decode_start(text: object) -> StartRecord:
-    """Satır birebir geri yazılabilmeli; değilse `CodecError`."""
+    """Satır birebir geri yazılabilmeli; değilse `CodecError`. Spec 0040 öncesi satır (parmak
+    izi anahtarı yok) kendi biçimiyle okunur, `report_sha256=None` (plan Risk 3)."""
     raw = _loads(text)
-    if not isinstance(raw, dict) or set(raw) != {"at", "kind", "report", "revision"}:
+    if not isinstance(raw, dict) or set(raw) not in (_LEGACY_START_KEYS, _START_KEYS):
         raise CodecError
+    legacy = "report_sha256" not in raw
     kind, report, revision = raw["kind"], raw["report"], raw["revision"]
     if kind not in (PROOF, TRIAL) or type(revision) is not str:
         raise CodecError
     if not (revision.isascii() and revision.isdigit()):
         raise CodecError
-    record = StartRecord(_time(raw["at"]), kind == TRIAL, report, int(revision))
-    if start_record_problem(record) is not None or encode_start(record) != text:
+    sha = None if legacy else raw["report_sha256"]
+    record = StartRecord(_time(raw["at"]), kind == TRIAL, report, int(revision), sha)
+    if start_record_problem(record, legacy=legacy) is not None:
+        raise CodecError
+    if _encode_start(record, legacy=legacy) != text:
         raise CodecError
     return record
 

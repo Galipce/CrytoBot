@@ -534,7 +534,10 @@ def _append_start(target: Path, record: StartRecord) -> StoreResult:
         rows = _rows(database, "starts")
         for row in rows:
             decode_start(row)  # a broken history is not extended
-        row = encode_start(StartRecord(record.at, record.trial, record.report_path, header))
+        stamped = StartRecord(
+            record.at, record.trial, record.report_path, header, record.report_sha256
+        )
+        row = encode_start(stamped)
         database.execute("INSERT INTO starts(seq, row) VALUES (?, ?)", (len(rows), row))
         database.execute("COMMIT")
         return StoreResult(StoreOutcome.SAVED, None, (), "başlatma kaydı eklendi")

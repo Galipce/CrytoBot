@@ -41,7 +41,8 @@ hepsi `app`'tedir; `app` saat çağırmaz ve okuma işlevini import etmez, yaln�
 açılmaz, çıktı yalnız konsoladır.
 `backtest` (spec 0025) aynı ayar dosyasının `[backtest]` bölümüyle koşar: giriş noktası veri
 dosyası okumasını (`market_data`), rapor dosyası yazıcısını (`backtest`), konsolu, durdurma
-isteğini ve geçici bir dizindeki depo yolunu `app`'e verir; saat verilmez, ağa çıkılmaz, kilit
+isteğini, geçici bir dizindeki depo yolunu ve gerçek saati `app`'e verir; saat yalnız rapor
+başlığındaki üretim anı için okunur (spec 0040), turlar simüle saatle; ağa çıkılmaz, kilit
 alınmaz, bot deposu ve kayıt dosyası açılmaz. Turları `app` atar (paper turunun aynısı, simüle
 saatle); `backtest` tur kayıtlarından metrikleri ve raporu üretir.
 

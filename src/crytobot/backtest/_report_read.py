@@ -2,15 +2,22 @@
 
 Rapor dosyasını okur, başlık bilgilerini ve örneklem dışı parçasındaki metrikleri çıkarır.
 Aday işareti ("BR-10 kanıtı adayı") yoksa adıyla bildirir.
+
+Spec 0040 (plan Risk 4): dosya bir kez bayt olarak okunur; parmak izi (`ReportRead.sha256`) ve
+ayrıştırma aynı baytlardandır. Üretim anı, spread, strateji ve rapor koşulları başlıkta yoksa
+ayrıştırma bozuk saymaz, alanı boş bırakır: eksikliği kapı adıyla söyler (CB-4). Var olan ama
+değeri bozuk satır yine `CORRUPT`'tır.
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from decimal import Decimal, DecimalException
 from enum import Enum
 from pathlib import Path
 
-from crytobot.backtest._report import CANDIDATE_MARK, UNDEFINED
+from crytobot.backtest._report import CANDIDATE_MARK, CONDITIONS, GENERATED_LABEL, UNDEFINED
+from crytobot.backtest._report_file import fingerprint_of
 
 
 class ReportReadProblem(Enum):
@@ -37,23 +44,27 @@ class CandidateMetrics:
 
 @dataclass(frozen=True, slots=True)
 class ParsedReport:
-    """Ayrıştırılmış rapor bilgileri."""
+    """Ayrıştırılmış rapor bilgileri. `spread`, `strategy`, `generated_at` başlıkta yoksa `None`;
+    `conditions` yalnız başlıkta bulunan rapor koşullarını taşır (spec 0040 CB-4)."""
 
     candle_interval: str
     turn_interval: str
     pairs: tuple[str, ...]
-    spread: Decimal
+    spread: Decimal | None
     candidate: CandidateMetrics
     strategy: Mapping[str, int | Decimal] | None = None
+    generated_at: datetime | None = None
+    conditions: Mapping[str, Decimal] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
 class ReportRead:
-    """Rapor okuma sonucu."""
+    """Rapor okuma sonucu. `sha256`: dosya okunduysa ham baytlarının parmak izi (spec 0040)."""
 
     data: ParsedReport | None
     problem: ReportReadProblem | None
     detail: str | None = None
+    sha256: str | None = None
 
 
 def _parse_strategy(line: str) -> dict[str, int | Decimal]:
@@ -80,7 +91,28 @@ def _parse_strategy(line: str) -> dict[str, int | Decimal]:
             params["k"] = Decimal(val)
         elif key == "r":
             params["r"] = Decimal(val)
+    for value in params.values():
+        if isinstance(value, Decimal) and not value.is_finite():
+            raise ValueError(value)  # NaN would compare unequal, sNaN would raise in the gate
     return params
+
+
+def _finite(text: str) -> Decimal | None:
+    """Sonlu ondalık; değilse `None` (NaN eşitsiz, sNaN karşılaştırmada fırlatır)."""
+    try:
+        number = Decimal(text)
+    except DecimalException:
+        return None
+    return number if number.is_finite() else None
+
+
+def _moment(text: str) -> datetime | None:
+    """Saat dilimli ISO an, UTC'ye çevrilmiş; değilse `None`."""
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return None if moment.utcoffset() is None else moment.astimezone(UTC)
 
 
 def parse_report(text: str) -> ReportRead:
@@ -98,9 +130,21 @@ def parse_report(text: str) -> ReportRead:
     pairs: tuple[str, ...] | None = None
     spread: Decimal | None = None
     strategy: dict[str, int | Decimal] | None = None
+    generated_at: datetime | None = None
+    conditions: dict[str, Decimal] = {}
 
     for line in lines:
-        if line.startswith("mum aralığı:"):
+        name, _, value = line.partition(":")
+        if name in CONDITIONS:
+            number = _finite(value.strip())
+            if number is None:
+                return ReportRead(None, ReportReadProblem.CORRUPT, f"geçersiz {name} değeri")
+            conditions[name] = number
+        elif name == GENERATED_LABEL:
+            generated_at = _moment(value.strip())
+            if generated_at is None:
+                return ReportRead(None, ReportReadProblem.CORRUPT, "geçersiz üretim anı")
+        elif line.startswith("mum aralığı:"):
             candle_interval = line.partition(":")[2].strip()
         elif line.startswith("tur aralığı:"):
             turn_interval = line.partition(":")[2].strip()
@@ -108,10 +152,8 @@ def parse_report(text: str) -> ReportRead:
             raw_pairs = line.partition(":")[2].strip()
             pairs = tuple(p.strip() for p in raw_pairs.split(",") if p.strip())
         elif line.startswith("spread:"):
-            raw_spread = line.partition(":")[2].strip()
-            try:
-                spread = Decimal(raw_spread)
-            except DecimalException:
+            spread = _finite(line.partition(":")[2].strip())
+            if spread is None:
                 return ReportRead(None, ReportReadProblem.CORRUPT, "geçersiz spread değeri")
         elif line.startswith("strateji:"):
             raw_strategy = line.partition(":")[2].strip()
@@ -123,7 +165,7 @@ def parse_report(text: str) -> ReportRead:
             # Başlık bölümü bitti
             break
 
-    if candle_interval is None or turn_interval is None or pairs is None or spread is None:
+    if candle_interval is None or turn_interval is None or pairs is None:
         return ReportRead(None, ReportReadProblem.CORRUPT, "başlık bilgileri eksik")
 
     if not pairs:
@@ -198,28 +240,35 @@ def parse_report(text: str) -> ReportRead:
         spread=spread,
         candidate=candidate,
         strategy=strategy,
+        generated_at=generated_at,
+        conditions=conditions,
     )
     return ReportRead(data=data, problem=None)
 
 
 def read_report(path: str | Path) -> ReportRead:
-    """Rapor dosyasını okur ve ayrıştırır."""
+    """Rapor dosyasını bir kez okur; aynı baytları özetler ve ayrıştırır (spec 0040, Risk 4)."""
     p = Path(path)
     if not p.is_file():
         return ReportRead(None, ReportReadProblem.MISSING, "rapor dosyası yok")
     try:
-        text = p.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        return ReportRead(
-            None,
-            ReportReadProblem.UNREADABLE,
-            "rapor dosyası okunamıyor: UTF-8 değil",
-        )
+        data = p.read_bytes()
     except OSError as err:
         return ReportRead(
             None,
             ReportReadProblem.UNREADABLE,
             f"rapor dosyası okunamıyor: {type(err).__name__}",
         )
-
-    return parse_report(text)
+    sha256 = fingerprint_of(data)
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return ReportRead(
+            None,
+            ReportReadProblem.UNREADABLE,
+            "rapor dosyası okunamıyor: UTF-8 değil",
+            sha256,
+        )
+    # parsing sees universal newlines as before; the fingerprint is of the raw bytes (G-1)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    return replace(parse_report(text), sha256=sha256)

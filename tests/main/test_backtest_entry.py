@@ -1,9 +1,10 @@
 """Spec 0025 giriş noktası `python -m crytobot backtest` (AC-3, AC-4 yol yazımı, AC-10).
 
 `run` gerçek kodu koşar: gerçek ayar yükleyicisi, okuyucu (`read_history`), koşu ve rapor yazıcısı.
-Saat ve borsa yoktur: backtest ikisini de kullanmaz.
+Borsa yoktur; saat yalnız raporun üretim anı içindir (spec 0040) ve burada sabittir.
 """
 
+import hashlib
 import io
 import json
 import tomllib
@@ -25,7 +26,7 @@ from crytobot.__main__ import (
 from crytobot.app import StopRequest, _backtest, load_backtest_config, run_turn
 from tests.app.backtest_helpers import at, candles, history, write_history
 from tests.main.test_entry import EXAMPLE, Bot, config_text
-from tests.market_data.helpers import BTC, ETH
+from tests.market_data.helpers import BTC, ETH, NOW
 
 SECRETS = {
     "BINANCE_API_KEY": "AKIAKEY0123456789",
@@ -73,6 +74,7 @@ class Backtester:
             config_path=self.bot.config_path,
             console=out,
             stop=self.stop,
+            clock=lambda: NOW,
         )
         return code, out.getvalue()
 
@@ -121,6 +123,16 @@ def test_console_lines_carry_no_time_stamp(tester: Backtester) -> None:
     assert "CrytoBot backtest raporu" in rows
     assert rows[-1] == f"backtest tamam: rapor dosyası {tester.report.as_posix()}"
     assert tester.report.read_text(encoding="utf-8") in console
+
+
+def test_report_carries_the_entry_clock_and_its_fingerprint(tester: Backtester) -> None:
+    """Spec 0040 CB-1, CB-2: giriş noktası saati verir; konsoldaki parmak izi dosyanınkidir."""
+    code, console = tester.run()
+    assert code == EXIT_OK
+    report = tester.report.read_bytes()
+    assert f"üretim anı: {NOW.isoformat()}\n".encode() in report
+    rows = console.splitlines()
+    assert rows[-2] == f"rapor parmak izi: {hashlib.sha256(report).hexdigest()}"
 
 
 def test_completes_while_bot_holds_lock(tester: Backtester) -> None:

@@ -43,6 +43,7 @@ START = datetime(2026, 1, 1, tzinfo=UTC)
 COUNT = 4
 MARKET_RULES = MarketRules(Decimal("0.001"), Decimal("0.001"), Decimal(10))  # helpers.RULES
 DOWNLOADED_AT = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
+GENERATED_AT = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)  # spec 0040: the fixed generation clock
 CROSS_BEFORE = (10, 8, 9, 10)  # the closed series that proposes a buy at entry 10
 Price = int | float | str | Decimal
 Row = Price | tuple[Price, Price, Price, Price] | None
@@ -172,12 +173,14 @@ def config(
 
 @dataclass
 class Run:
-    """Bir koşu: gerçek okuyucu ve rapor yazıcısı, satırlar listede, geçici depo `work`'te."""
+    """Bir koşu: gerçek okuyucu ve rapor yazıcısı, satırlar listede, geçici depo `work`'te; saat
+    sabit `GENERATED_AT`, her okuması `clock_reads`'e sayılır (spec 0040)."""
 
     root: Path
     lines: list[str] = field(default_factory=list)
     stop: StopRequest = field(default_factory=StopRequest)
     reads: list[str] = field(default_factory=list)
+    clock_reads: int = 0
 
     @property
     def work(self) -> Path:
@@ -189,6 +192,10 @@ class Run:
         self.reads.append(path)
         return read_history(path)
 
+    def clock(self) -> datetime:
+        self.clock_reads += 1
+        return GENERATED_AT
+
     def parts(self, **changes: Any) -> BacktestParts:
         parts = BacktestParts(
             self.read,
@@ -197,6 +204,7 @@ class Run:
             self.lines.append,
             self.stop,
             str(self.work / "backtest.db"),
+            self.clock,
         )
         return replace(parts, **changes)
 

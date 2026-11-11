@@ -128,13 +128,23 @@ START_NOT_RECORDED = "başlatma reddedildi: başlatma kaydı yazılamadı"
 
 
 def record_start(
-    store_path: str, *, trial: bool, report_path: str | None, now: datetime
+    store_path: str,
+    *,
+    trial: bool,
+    report_path: str | None,
+    now: datetime,
+    report_sha256: str | None = None,
 ) -> StartCheck:
     """Spec 0038 CB-1, plan Risk 6: paper başlatmasını depoya yazar; depo `READY` olduktan sonra,
     tur atılmadan çağrılır. `--trial` "deneme"dir, raporu yoktur; kanıtlı başlatmanın raporu
-    mutlak yoldur (çözümü `__main__` yapar). Yazılamazsa başlatma reddedilir: kaydı olmayan bir
-    koşu kanıt sayılamaz."""
-    record = StartRecord(now, trial, None if trial else report_path)
+    mutlak yoldur (çözümü `__main__` yapar) ve kapının onayladığı parmak izini taşır (spec 0040
+    CB-5). Yazılamazsa başlatma reddedilir: kaydı olmayan bir koşu kanıt sayılamaz."""
+    record = StartRecord(
+        now,
+        trial,
+        None if trial else report_path,
+        report_sha256=None if trial else report_sha256,
+    )
     written = append_start_record(store_path, record)
     if written.outcome is not StoreOutcome.SAVED:
         return StartCheck(StartOutcome.START_NOT_RECORDED, START_NOT_RECORDED, None)

@@ -29,7 +29,6 @@ import tomllib
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 from types import FrameType
 from typing import IO, TextIO
@@ -391,9 +390,10 @@ def _backtest_config(path: Path, output: Output) -> BacktestConfig | None:
     return config
 
 
-def _backtest(config_path: Path, output: Output, stop: StopRequest) -> int:
-    """Ağ yok, saat yok, kilit yok; bot deposu ve kayıt dosyası açılmaz (spec 0025 R-1). Geçici
-    dizin her çıkışta silinir; `.part`'ı rapor yazıcısı siler (R-13)."""
+def _backtest(config_path: Path, output: Output, stop: StopRequest, clock: Clock) -> int:
+    """Ağ yok, kilit yok; bot deposu ve kayıt dosyası açılmaz (spec 0025 R-1). Saat yalnız raporun
+    üretim anı içindir (spec 0040 CB-2). Geçici dizin her çıkışta silinir; `.part`'ı rapor
+    yazıcısı siler (R-13)."""
     config = _backtest_config(config_path, output)
     if config is None:
         return EXIT_REFUSED
@@ -407,6 +407,7 @@ def _backtest(config_path: Path, output: Output, stop: StopRequest) -> int:
             output.say,
             stop,
             str(Path(work) / "backtest.db"),
+            clock,
         )
         try:
             exit_ = run_backtest(config, parts)
@@ -444,36 +445,33 @@ def _stage_gate(
     clock: Clock,
     *,
     mode: str = "paper",
-) -> tuple[bool, str | None, str | None]:
+) -> tuple[bool, str | None, str | None, str | None]:
     """BR-10 aşama kapısı: kilit alınmadan, depo açılmadan ve ağa gitmeden önce denetlenir.
 
-    Döndürür: (geçti_mi, onaylayan_adı, rapor_yolu).
+    `[backtest] spread` ham değeriyle kapıya gider (yoksa `None`; spec 0040 CB-4, plan Risk 6).
+    Döndürür: (geçti_mi, onaylayan_adı, rapor_yolu, rapor_parmak_izi).
     """
     document = _load_toml(config_path)
     if isinstance(document, str):
         output.say(line(clock(), "başlatma", f"başlatma reddedildi: {document}"))
-        return False, None, None
+        return False, None, None, None
 
     stage_res = load_stage_config(document, mode=mode)
     if stage_res.config is None:
         output.say(line(clock(), "başlatma", f"başlatma reddedildi: {stage_res.message}"))
-        return False, None, None
+        return False, None, None, None
 
     stage = stage_res.config
     report_read = read_report(stage.report_path)
-    expected_spread: Decimal | None = None
     backtest_tbl = document.get("backtest")
-    if isinstance(backtest_tbl, Mapping) and "spread" in backtest_tbl:
-        raw_spread = backtest_tbl["spread"]
-        if isinstance(raw_spread, (str, int, Decimal)):
-            expected_spread = Decimal(str(raw_spread))
+    raw_spread = backtest_tbl.get("spread") if isinstance(backtest_tbl, Mapping) else None
 
-    gate_res = check_stage_gate(stage, bot, report_read, expected_spread=expected_spread)
+    gate_res = check_stage_gate(stage, bot, report_read, raw_spread, clock())
     if not gate_res.passed:
         output.say(line(clock(), "başlatma", f"başlatma reddedildi: {gate_res.message}"))
-        return False, None, None
+        return False, None, None, None
 
-    return True, stage.approved_by, stage.report_path
+    return True, stage.approved_by, stage.report_path, stage.report_sha256
 
 
 def _paper_proof_gate(
@@ -563,6 +561,7 @@ def _start(
     trial: bool = True,
     approved_by: str | None = None,
     report_path: str | None = None,
+    report_sha256: str | None = None,
     reporter: ReportingService | None = None,
     exchange: object = None,
     paper_proof: PaperProof | None = None,
@@ -572,7 +571,11 @@ def _start(
         # spec 0038 CB-1: after READY, before any turn; the report as an absolute path (G-5)
         absolute = None if report_path is None else str(Path(report_path).resolve())
         check = record_start(
-            config.store_path, trial=trial, report_path=absolute, now=parts.clock()
+            config.store_path,
+            trial=trial,
+            report_path=absolute,
+            report_sha256=report_sha256,
+            now=parts.clock(),
         )
     if check.outcome is not StartOutcome.READY:
         hint = f"; {check.hint}" if check.hint is not None else ""
@@ -616,7 +619,7 @@ def run(
     if argv[0] == "download":
         return _download(config_path, output, clock, stop, download)
     if argv[0] == "backtest":
-        return _backtest(config_path, output, stop)
+        return _backtest(config_path, output, stop, clock)
     config = _config(config_path, output, clock)
     if config is None:
         return EXIT_REFUSED
@@ -698,12 +701,13 @@ def run(
     trial = len(argv) > 1 and argv[1] == "--trial"
     approved_by: str | None = None
     report_path: str | None = None
+    report_sha256: str | None = None
     live_exchange: object = None
     paper_proof: PaperProof | None = None
 
     if argv[0] == "start":
         if is_live:
-            passed, approved_by, report_path = _stage_gate(
+            passed, approved_by, report_path, report_sha256 = _stage_gate(
                 config_path, config, output, clock, mode="live"
             )
             if not passed:
@@ -730,7 +734,7 @@ def run(
             if testnet:
                 output.say(line(clock(), "başlatma", "Binance Spot Testnet modunda çalışıyor"))
         elif not trial:
-            passed, approved_by, report_path = _stage_gate(
+            passed, approved_by, report_path, report_sha256 = _stage_gate(
                 config_path, config, output, clock, mode="paper"
             )
             if not passed:
@@ -788,6 +792,7 @@ def run(
             trial=trial,
             approved_by=approved_by,
             report_path=report_path,
+            report_sha256=report_sha256,
             reporter=reporter,
             exchange=live_exchange,
             paper_proof=paper_proof,

@@ -1,10 +1,13 @@
 """Aşama onayı ve BR-10 başlatma kapısı (spec 0028 R-2, R-4, R-5; plan Adım 2).
 
 `load_stage_config`: ayar dosyasındaki `[stage]` bölümünü denetler (dosya sırasıyla `report_path`,
-`approved_by`, `approved_at`, `min_trades`, `min_profit_factor`; canlıda ayrıca `live_approved_*` ve
-spec 0038'in `paper_store_path`, `paper_min_days`, `paper_min_trades`'i) ve bilinmeyen anahtarları
-reddeder.
-`check_stage_gate`: metrik eşiklerini ve ayar uyumunu denetler.
+spec 0040'ın `report_sha256`'sı, `approved_by`, `approved_at`, `min_trades`, `min_profit_factor`;
+canlıda ayrıca `live_approved_*` ve spec 0038'in `paper_store_path`, `paper_min_days`,
+`paper_min_trades`'i) ve bilinmeyen anahtarları reddeder.
+`check_stage_gate`: spec 0040 CB-6/G-6 sırasıyla rapor okunabilirliği → parmak izi (CB-1) → onay
+anı (CB-2) → rapor ve ayar eksikleri (CB-4) → metrik eşikleri → ayar uyuşmazlıkları (mevcutlar,
+sonra rapor koşulları, CB-3); ilk karşılanmayan denetimin adıyla döner. Hiçbir denetim bilgi
+eksikliği yüzünden atlanmaz. Sayılar değerle karşılaştırılır (`"0.001"` = `"0.0010"`, G-3).
 """
 
 from collections.abc import Mapping
@@ -12,13 +15,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, DecimalException
 
-from crytobot.app._config import BotConfig
-from crytobot.backtest import ParsedReport, ReportRead
+from crytobot.app._config import BotConfig, _Bad, _number
+from crytobot.backtest import CONDITIONS, ReportRead
 from crytobot.market_data import CANDLE_INTERVALS
 
 _STAGE_SECTION = "stage"
 _STAGE_KEYS = (
     "report_path",
+    "report_sha256",
     "approved_by",
     "approved_at",
     "min_trades",
@@ -32,6 +36,16 @@ _STAGE_KEYS = (
 # spec 0038 CB-4: defaults and the floors below which a value is a setting error
 PAPER_MIN_DAYS, PAPER_DAYS_FLOOR = 14, 7
 PAPER_MIN_TRADES, PAPER_TRADES_FLOOR = 10, 5
+_HEX = frozenset("0123456789abcdef")
+_STRATEGY = (
+    "fast_period",
+    "slow_period",
+    "rsi_period",
+    "rsi_threshold",
+    "atr_period",
+    "k",
+    "r",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +53,7 @@ class StageConfig:
     """`[stage]` bölümünün doğrulanmış ayarları."""
 
     report_path: str
+    report_sha256: str
     approved_by: str
     approved_at: datetime
     min_trades: int = 10
@@ -84,6 +99,15 @@ def load_stage_config(document: object, mode: str = "paper") -> StageConfigResul
     if type(val_rp) is not str or not val_rp.strip():
         return StageConfigResult(None, "stage.report_path", "ayar geçersiz: stage.report_path")
     report_path = val_rp.strip()
+
+    # 1b. report_sha256 (spec 0040 CB-1, G-2: case-insensitive, stored lower-case)
+    name_sha = "stage.report_sha256"
+    if "report_sha256" not in table:
+        return StageConfigResult(None, name_sha, f"ayar eksik: {name_sha}")
+    val_sha = table["report_sha256"]
+    report_sha256 = val_sha.strip().lower() if type(val_sha) is str else ""
+    if len(report_sha256) != 64 or not set(report_sha256) <= _HEX:
+        return StageConfigResult(None, name_sha, f"ayar geçersiz: {name_sha}")
 
     # 2. approved_by
     if "approved_by" not in table:
@@ -230,6 +254,7 @@ def load_stage_config(document: object, mode: str = "paper") -> StageConfigResul
     return StageConfigResult(
         StageConfig(
             report_path=report_path,
+            report_sha256=report_sha256,
             approved_by=approved_by,
             approved_at=approved_at,
             min_trades=min_trades,
@@ -245,83 +270,119 @@ def load_stage_config(document: object, mode: str = "paper") -> StageConfigResul
     )
 
 
+def _refused(message: str) -> StageGateResult:
+    return StageGateResult(passed=False, message=message)
+
+
+def bot_conditions(bot: BotConfig) -> dict[str, Decimal]:
+    """Spec 0040 CB-3, G-5: çalışan ayarın etkin rapor koşulları, `CONDITIONS` adlarıyla."""
+    limits = bot.turn.limits
+    return {
+        "fee": Decimal(bot.turn.fee),
+        "slippage": Decimal(bot.turn.slippage),
+        "per_trade_risk": limits.per_trade_risk,
+        "daily_loss_limit": limits.daily_loss_limit,
+        "max_drawdown": limits.max_drawdown,
+        "max_open_positions": Decimal(limits.max_open_positions),
+        "profit_cost_multiple": limits.profit_cost_multiple,
+        "opening_balance": bot.opening_balance,
+    }
+
+
+def _backtest_spread(value: object) -> Decimal | None:
+    """`[backtest] spread`'in değeri (`[backtest]` kuralıyla: tam sayı ya da düz ondalık metin;
+    çağıranın verdiği `Decimal` de); geçersizse `None` (plan Risk 6)."""
+    if isinstance(value, Decimal):
+        return value if value.is_finite() else None
+    try:
+        number = Decimal(_number(value))
+    except _Bad:
+        return None
+    return number if number.is_finite() else None
+
+
 def check_stage_gate(
     stage: StageConfig,
     bot: BotConfig,
-    report: ParsedReport | ReportRead,
-    expected_spread: Decimal | str | None = None,
+    report: ReportRead,
+    backtest_spread: object,
+    now: datetime,
 ) -> StageGateResult:
-    """BR-10 aşama kapısı: metrik eşiklerini ve ayar uyumunu doğrular (R-4, R-5, AC-6, AC-7)."""
-    if isinstance(report, ReportRead):
-        if report.problem is not None:
-            return StageGateResult(passed=False, message=report.detail or report.problem.value)
-        assert report.data is not None
-        rep = report.data
-    else:
-        rep = report
+    """BR-10 aşama kapısı (spec 0028 R-4, R-5; spec 0040 CB-1…CB-4, CB-6).
 
-    # 1. Metrik eşikleri (R-4, AC-6)
+    `backtest_spread`: çalışan ayarın `[backtest] spread` ham değeri, yoksa `None`. `now`: şimdiki
+    an (UTC), onay anı sınırı için.
+    """
+    # 1. Rapor okunabilirliği (metinler aynı)
+    if report.problem is not None:
+        return _refused(report.detail or report.problem.value)
+    assert report.data is not None
+    rep = report.data
+
+    # 2. Parmak izi (CB-1): ham baytlar onaylanan özetle aynı olmalı
+    if report.sha256 is None or report.sha256.lower() != stage.report_sha256:
+        return _refused("rapor onaylanandan farklı")
+
+    # 3. Onay anı (CB-2): üretim anı ≤ onay ≤ şimdi; tolerans yok
+    if rep.generated_at is None:
+        return _refused("rapor eksik: üretim anı")
+    if stage.approved_at < rep.generated_at:
+        return _refused("onay rapordan önce")
+    if stage.approved_at > now:
+        return _refused("onay gelecekte")
+
+    # 4. Eksik bilgi (CB-4): hiçbir denetim atlanmaz
+    if rep.spread is None:
+        return _refused("rapor eksik: spread")
+    strategy = rep.strategy
+    if strategy is None or any(name not in strategy for name in _STRATEGY):
+        return _refused("rapor eksik: strateji")
+    for name in CONDITIONS:
+        if name not in rep.conditions:
+            return _refused(f"rapor eksik: {name}")
+    if backtest_spread is None:
+        return _refused("ayar eksik: backtest.spread")
+    expected_spread = _backtest_spread(backtest_spread)
+    if expected_spread is None:
+        return _refused("ayar geçersiz: backtest.spread")
+
+    # 5. Metrik eşikleri (R-4, AC-6)
     cand = rep.candidate
     # (a) Net kâr sıfırdan büyük olmalı
     if cand.net <= Decimal(0):
-        return StageGateResult(
-            passed=False, message="eşik karşılanmadı: net kâr sıfırdan büyük olmalı"
-        )
+        return _refused("eşik karşılanmadı: net kâr sıfırdan büyük olmalı")
 
     # (b) Drawdown sınırı
     dd_limit = min(bot.turn.limits.max_drawdown, Decimal("0.25"))
     if cand.max_drawdown is None or cand.max_drawdown > dd_limit:
-        return StageGateResult(passed=False, message="eşik karşılanmadı: max_drawdown")
+        return _refused("eşik karşılanmadı: max_drawdown")
 
     # (c) İşlem sayısı
     if cand.trades < stage.min_trades or cand.trades == 0:
-        return StageGateResult(passed=False, message="eşik karşılanmadı: min_trades")
+        return _refused("eşik karşılanmadı: min_trades")
 
     # (d) Kâr faktörü
     if stage.min_profit_factor is not None and (
         cand.profit_factor is None or cand.profit_factor < stage.min_profit_factor
     ):
-        return StageGateResult(passed=False, message="eşik karşılanmadı: min_profit_factor")
+        return _refused("eşik karşılanmadı: min_profit_factor")
 
-    # 2. Ayar ve evren uyumu (R-5, AC-7)
-    # whitelist
+    # 6. Ayar ve evren uyumu (R-5, AC-7), sonra rapor koşulları (CB-3)
     if set(rep.pairs) != set(bot.turn.whitelist):
-        return StageGateResult(passed=False, message="ayar uyuşmazlığı: whitelist")
-
-    # candle_interval
-    bot_candle_text = CANDLE_INTERVALS.get(bot.turn.candle_interval)
-    if rep.candle_interval != bot_candle_text:
-        return StageGateResult(passed=False, message="ayar uyuşmazlığı: candle_interval")
-
-    # turn_interval
-    bot_turn_text = CANDLE_INTERVALS.get(bot.turn_interval)
-    if rep.turn_interval != bot_turn_text:
-        return StageGateResult(passed=False, message="ayar uyuşmazlığı: turn_interval")
-
-    # spread
-    if expected_spread is not None:
-        exp_spread = Decimal(str(expected_spread))
-        if rep.spread != exp_spread:
-            return StageGateResult(passed=False, message="ayar uyuşmazlığı: spread")
-
-    # Strateji parametreleri
-    if rep.strategy is not None:
-        strat = bot.turn.strategy
-        if "fast_period" in rep.strategy and rep.strategy["fast_period"] != strat.fast_period:
-            return StageGateResult(passed=False, message="ayar uyuşmazlığı: fast_period")
-        if "slow_period" in rep.strategy and rep.strategy["slow_period"] != strat.slow_period:
-            return StageGateResult(passed=False, message="ayar uyuşmazlığı: slow_period")
-        if "rsi_period" in rep.strategy and rep.strategy["rsi_period"] != strat.rsi_period:
-            return StageGateResult(passed=False, message="ayar uyuşmazlığı: rsi_period")
-        if "rsi_threshold" in rep.strategy and Decimal(
-            str(rep.strategy["rsi_threshold"])
-        ) != Decimal(str(strat.rsi_threshold)):
-            return StageGateResult(passed=False, message="ayar uyuşmazlığı: rsi_threshold")
-        if "atr_period" in rep.strategy and rep.strategy["atr_period"] != strat.atr_period:
-            return StageGateResult(passed=False, message="ayar uyuşmazlığı: atr_period")
-        if "k" in rep.strategy and Decimal(str(rep.strategy["k"])) != Decimal(str(strat.k)):
-            return StageGateResult(passed=False, message="ayar uyuşmazlığı: k")
-        if "r" in rep.strategy and Decimal(str(rep.strategy["r"])) != Decimal(str(strat.r)):
-            return StageGateResult(passed=False, message="ayar uyuşmazlığı: r")
+        return _refused("ayar uyuşmazlığı: whitelist")
+    if rep.candle_interval != CANDLE_INTERVALS.get(bot.turn.candle_interval):
+        return _refused("ayar uyuşmazlığı: candle_interval")
+    if rep.turn_interval != CANDLE_INTERVALS.get(bot.turn_interval):
+        return _refused("ayar uyuşmazlığı: turn_interval")
+    if rep.spread != expected_spread:
+        return _refused("ayar uyuşmazlığı: spread")
+    strat = bot.turn.strategy
+    for name in _STRATEGY:
+        if Decimal(str(strategy[name])) != Decimal(str(getattr(strat, name))):
+            return _refused(f"ayar uyuşmazlığı: {name}")
+    running = bot_conditions(bot)
+    for name in CONDITIONS:
+        if rep.conditions[name] != running[name]:
+            return _refused(f"ayar uyuşmazlığı: {name}")
 
     return StageGateResult(passed=True, message="aşama onayı ve rapor geçerli")
