@@ -284,6 +284,26 @@ def test_start_text_trial_and_confirmed() -> None:
     assert "onaylı: onaylayan=Galip Badem rapor=report.txt" in confirmed
 
 
+def test_paper_start_text_is_byte_for_byte_unchanged_without_paper_proof() -> None:
+    """Spec 0038 PB-1: paper kanıtı verilmeyen başlatma satırı 0038 öncesiyle aynıdır."""
+    from datetime import timedelta
+
+    from crytobot.app._events import TRIAL_MARK, start_text
+
+    interval, pairs = timedelta(hours=1), ("BTC/USDT", "ETH/USDT")
+    prefix = "başladı: mod=paper aralık=1h depo=bot.db çiftler=BTC/USDT,ETH/USDT"
+
+    assert start_text(interval, "bot.db", pairs, trial=True) == f"{prefix} — {TRIAL_MARK}"
+    assert start_text(
+        interval,
+        "bot.db",
+        pairs,
+        trial=False,
+        approved_by="Galip Badem",
+        report_path="report.txt",
+    ) == (f"{prefix} onaylı: onaylayan=Galip Badem rapor=report.txt")
+
+
 def test_turn_text_trial_and_confirmed() -> None:
     from crytobot.app import TRIAL_MARK
     from crytobot.app._events import turn_text
