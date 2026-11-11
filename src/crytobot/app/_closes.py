@@ -2,6 +2,10 @@
 
 Dolan emir ve defter kaydı tek kayıtta yazılır. Defter dolu emri reddederse emir yine yazılır:
 `save_store` çelişkiyi işaretler, `TurnRun.save` alımı durdurur (R-2, R-7).
+
+Spec 0037 R-3 (D-2): canlıda kapanış satışı kısmen dolabilir; dolan kısım kapanış olarak yazılır,
+kalan pozisyon açık kalır ve borsa stopu kalan miktarla yeni nesil kimlikle hemen verilir. Kapanış
+ve stop kimliğinin nesli pozisyonun kısmi kapanış sayısıdır (`Ledger.parts`, plan Risk 3).
 """
 
 from decimal import Decimal
@@ -10,6 +14,7 @@ from crytobot.app._inputs import PairMarket
 from crytobot.app._notices import NoticeKind
 from crytobot.app._session import TurnRun, buy_fill
 from crytobot.execution import (
+    PARTS,
     SELL,
     CloseOrder,
     CloseOrderRequest,
@@ -27,6 +32,7 @@ from crytobot.execution import (
 from crytobot.portfolio import (
     Close,
     CloseReason,
+    Closure,
     Decision,
     Ledger,
     close_position,
@@ -40,20 +46,29 @@ def _record_buy(run: TurnRun, order: Order) -> Ledger:
     return record_fill(run.state.ledger, buy_fill(order, run.now)).ledger
 
 
-def _record_close(run: TurnRun, order: CloseOrder) -> Ledger:
+def _record_close(run: TurnRun, order: CloseOrder) -> tuple[Ledger, Closure | None]:
+    """Dolan kapanış emrinin defter kaydı; canlıda dolan kısım (spec 0037 R-3, D-2), paper ve
+    backtest'te tam kapanış (R-7)."""
     close = Close(
         order.client_order_id,
         order.position_id,
-        order.amount,
+        order.position_amount,
         order.fill_price,
         order.fee,
         CloseReason(order.reason),
         run.now,
     )
-    res = close_position(run.state.ledger, close)
+    if run.state.mode == "live":
+        res = close_position(run.state.ledger, close, partial=True)
+    else:  # paper and backtest call exactly as before: a full close only (R-7)
+        res = close_position(run.state.ledger, close)
     if res.closure is not None:
         run.closures.append(res.closure)
-    return res.ledger
+    return res.ledger, res.closure
+
+
+def _is_partial(closure: Closure | None) -> bool:
+    return closure is not None and closure.amount < closure.position.amount
 
 
 def _step(run: TurnRun, order: Order | CloseOrder) -> Decimal | None:
@@ -80,6 +95,7 @@ def resolve_unknown(run: TurnRun) -> None:
             run.now,
             step=_step(run, pending),
             missing_seen=client_order_id in missing,
+            fee_rate=Decimal(run.settings.fee),  # spec 0037 R-4: an unpriced third asset's fee
         )
         if queried.not_found:
             missing.add(client_order_id)
@@ -93,10 +109,14 @@ def resolve_unknown(run: TurnRun) -> None:
         run.notices.clear(NoticeKind.UNSUPPORTED_FILL, client_order_id)
         ledger = run.state.ledger
         if order.status is OrderStatus.FILLED:
+            # a partial close's rest gets its stop from sync_exchange_stops (spec 0037 R-3)
             ledger = (
-                _record_buy(run, order) if isinstance(order, Order) else _record_close(run, order)
+                _record_buy(run, order)
+                if isinstance(order, Order)
+                else _record_close(run, order)[0]
             )
         run.save(ledger=ledger, execution=queried.state)
+        run.note_fill(order)
         if isinstance(order, Order):
             run.buys.append(order)
         else:
@@ -118,7 +138,17 @@ def _stop_fill(run: TurnRun, stop_id: str, pair: str, amount: Decimal) -> Exchan
     if getattr(reply, "missing", False) or order is None:
         return ExchangeFill(FillVerdict.INCOMPLETE, "borsa dolumu bildirmedi")
     trades = getattr(reply, "trades", None)
-    return judge_fill(order, trades, side=SELL, pair=pair, amount=amount, step=None)
+    price_fn = getattr(run.exchange, "last_price", None)
+    return judge_fill(  # spec 0037 R-4; a ban while pricing the fee is not swallowed (Risk 9)
+        order,
+        trades,
+        side=SELL,
+        pair=pair,
+        amount=amount,
+        step=None,
+        asset_price=price_fn if callable(price_fn) else None,
+        fee_rate=Decimal(run.settings.fee),
+    )
 
 
 def _record_stop_fill(run: TurnRun, subject: str) -> None:
@@ -126,7 +156,8 @@ def _record_stop_fill(run: TurnRun, subject: str) -> None:
     emri olarak tek kayıtta yazılır; mutabakat çelişki görmez. Spec 0036: borsanın gerçek dolumuyla;
     eksik ya da desteklenmeyen dolum deftere yazılmaz, alım durur."""
     position = run.state.ledger.positions[subject]
-    stop_id = stop_client_id(subject)
+    part = run.state.ledger.parts(subject)
+    stop_id = stop_client_id(subject, part)
     fill = _stop_fill(run, stop_id, position.pair, position.amount)
     if fill.verdict is not FillVerdict.COMPLETE or fill.price is None or fill.fee is None:
         run.stop_failed(subject, f"dolan borsa stopu deftere yazılamadı ({stop_id}): {fill.reason}")
@@ -138,11 +169,12 @@ def _record_stop_fill(run: TurnRun, subject: str) -> None:
         run.stop_failed(subject, f"dolan borsa stopu deftere yazılamadı ({stop_id}): {res.message}")
         return
     order, execution = record_stop_fill(
-        run.state.execution, subject, position.pair, position.amount, fill, run.now
+        run.state.execution, subject, position.pair, position.amount, fill, run.now, part
     )
     run.closures.append(res.closure)
     run.save(ledger=res.ledger, execution=execution)
     run.closes.append(order)
+    run.note_fill(order)
 
 
 def _stop_missing(run: TurnRun, stop_id: str, pair: str) -> bool:
@@ -167,10 +199,14 @@ def sync_exchange_stops(run: TurnRun) -> None:
     if not callable(query_fn):
         return
     for subject, position in list(run.state.ledger.positions.items()):
-        stop_id = stop_client_id(subject)
+        part = run.state.ledger.parts(subject)  # spec 0037: the stop of the current generation
         if run.now < position.opened_at:  # the ledger would refuse the close (plan Risk 3)
             run.notices.keep(NoticeKind.STOP_ORDER_FAILED, subject)
             continue
+        if part >= PARTS:
+            run.stop_failed(subject, f"pozisyon {part} kez kısmen kapandı; elle bakılmalı")
+            continue
+        stop_id = stop_client_id(subject, part)
         try:
             status = query_fn(stop_id, symbol=position.pair)
         except Exception as error:
@@ -184,7 +220,7 @@ def sync_exchange_stops(run: TurnRun) -> None:
         elif status is OrderStatus.UNKNOWN:
             run.stop_failed(subject, f"stop emri durumu belirsiz ({stop_id})")
         elif _stop_missing(run, stop_id, position.pair):
-            run.place_exchange_stop(subject, position.pair, position.amount, position.stop)
+            run.place_exchange_stop(subject, position.pair, position.amount, position.stop, part)
         else:  # canceled or rejected under this id: the id cannot be reused safely
             run.stop_failed(
                 subject, f"pozisyonun borsa stopu yok ({stop_id}, {status.value}); elle bakılmalı"
@@ -208,7 +244,12 @@ def _close_one(run: TurnRun, decision: Decision) -> None:
     if not approval.approved:
         run.refuse_close(subject, approval.message)
         return
-    if run.state.mode == "live" and not _stop_cancelled(run, subject, decision.pair):
+    part = run.state.ledger.parts(subject)
+    if part >= PARTS:  # plan 0037 Risk 3: no close id is left; fail-closed
+        run.stop_failed(subject, f"pozisyon {part} kez kısmen kapandı; elle bakılmalı")
+        run.refuse_close(subject, f"{decision.pair}: {subject}: kapanış kimliği kalmadı")
+        return
+    if run.state.mode == "live" and not _stop_cancelled(run, subject, decision.pair, part):
         return
     placed = place_close_order(
         run.state.execution,
@@ -219,6 +260,7 @@ def _close_one(run: TurnRun, decision: Decision) -> None:
             run.settings.fee,
             run.settings.slippage,
             run.state.mode,
+            part,
         ),
         run.exchange,
         run.now,
@@ -235,19 +277,25 @@ def _close_one(run: TurnRun, decision: Decision) -> None:
         if order.status is OrderStatus.REJECTED:
             run.refuse_close(subject, placed.message)
         return
-    ledger = run.state.ledger
+    ledger, closure = run.state.ledger, None
     if order.status is OrderStatus.FILLED:
-        ledger = _record_close(run, order)
+        ledger, closure = _record_close(run, order)
     elif order.status is OrderStatus.REJECTED:
         run.refuse_close(subject, placed.message)
     run.save(ledger=ledger, execution=placed.state)
     run.closes.append(order)
+    run.note_fill(order)
+    if _is_partial(closure):  # spec 0037 R-3: the rest is protected again at once
+        rest = run.state.ledger.positions[subject]
+        part = run.state.ledger.parts(subject)
+        run.place_exchange_stop(subject, rest.pair, rest.amount, rest.stop, part)
 
 
-def _stop_cancelled(run: TurnRun, subject: str, pair: str) -> bool:
+def _stop_cancelled(run: TurnRun, subject: str, pair: str, part: int) -> bool:
     """Spec 0034 R-7, review round 1 F-5: satışa yalnız stopun iptali teyit edilince (ya da borsada
-    hiç yoksa) geçilir. Dolmuşsa kapanış stop dolumudur; başka her sonuçta kapanış reddedilir."""
-    stop_id = stop_client_id(subject)
+    hiç yoksa) geçilir. Dolmuşsa kapanış stop dolumudur; başka her sonuçta kapanış reddedilir.
+    Spec 0037: iptal edilen, pozisyonun bugünkü nesildeki stopudur."""
+    stop_id = stop_client_id(subject, part)
     cancel_fn = getattr(run.exchange, "cancel_order", None)
     if not callable(cancel_fn):
         run.stop_failed(subject, f"borsa stop iptali yapılamıyor ({stop_id})")

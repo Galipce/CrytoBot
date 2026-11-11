@@ -8,7 +8,7 @@ from decimal import Decimal, DecimalException, localcontext
 from enum import Enum
 from types import MappingProxyType
 
-from crytobot.execution._fills import ExchangeFill, Settled, settle_reply
+from crytobot.execution._fills import AssetPrice, ExchangeFill, Settled, settle_reply
 from crytobot.execution._live import LiveExchange
 from crytobot.execution._numbers import (
     BOUNDED,
@@ -29,19 +29,50 @@ LIVE = "live"
 BUY = "buy"
 CLIENT_ID_PREFIX = "cb-"
 STOP_ID_PREFIX = "cs-"
+CLOSE_ID_PREFIX = "cx-"
 # ASCII only: exchanges accept at most 36 of [A-Za-z0-9_-] in a client order id (R-6)
 _INTENT_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
 # spec 0036 R-8: "no such order" refuses a buy or close only this long after it was placed; fixed
 NOT_FOUND_GRACE = timedelta(minutes=5)
+# spec 0037 (plan Risk 3): a close or stop id per generation; part n >= 1 is "cx{n+1}-"/"cs{n+1}-".
+# A 32-character intent id leaves one character of the 36: generations 0…8 ("cx-", "cx2-"…"cx9-")
+PARTS = 9
+_GENERATION = re.compile(r"(cx|cs)([2-9]?)-([A-Za-z0-9_-]{1,32})")
 
 
-def stop_client_id(position_id: str) -> str:
-    """Pozisyon kimliğinden tekil şartlı borsa stop emri kimliği türetir (cs-<intent_id>)."""
-    return STOP_ID_PREFIX + position_id.removeprefix(CLIENT_ID_PREFIX)
+def _generation_id(kind: str, position_id: str, part: int) -> str:
+    if type(part) is not int or not 0 <= part < PARTS:
+        raise ValueError(f"kısım {part!r} 0 ile {PARTS - 1} arasında olmalı")
+    return f"{kind}{'' if part == 0 else part + 1}-" + position_id.removeprefix(CLIENT_ID_PREFIX)
+
+
+def close_client_id(position_id: str, part: int = 0) -> str:
+    """Pozisyon kimliğinden kapanış emri kimliği (spec 0009 R-8): `cx-<intent_id>`; pozisyonun
+    `part` kez kısmen kapanmasından sonraki kapanış `cx{part+1}-<intent_id>` (spec 0037)."""
+    return _generation_id("cx", position_id, part)
+
+
+def stop_client_id(position_id: str, part: int = 0) -> str:
+    """Pozisyon kimliğinden tekil şartlı borsa stop emri kimliği türetir (cs-<intent_id>); kısmi
+    kapanıştan sonraki stop `cs{part+1}-<intent_id>` (spec 0037)."""
+    return _generation_id("cs", position_id, part)
+
+
+def client_id_part(client_order_id: str) -> tuple[str, str, int] | None:
+    """Kapanış ya da stop kimliğinin türü (`cx`/`cs`), pozisyon kimliği ve kısım numarası;
+    böyle bir kimlik değilse `None`."""
+    match = _GENERATION.fullmatch(client_order_id) if isinstance(client_order_id, str) else None
+    if match is None:
+        return None
+    kind, generation, suffix = match.groups()
+    return kind, CLIENT_ID_PREFIX + suffix, int(generation) - 1 if generation else 0
 
 
 def position_id_from_stop_id(stop_order_id: str) -> str:
-    """Stop emri kimliğinden pozisyon kimliği türetir (cb-<intent_id>)."""
+    """Stop emri kimliğinden pozisyon kimliği türetir (cb-<intent_id>); her kısım nesli için."""
+    parsed = client_id_part(stop_order_id)
+    if parsed is not None and parsed[0] == "cs":
+        return parsed[1]
     return CLIENT_ID_PREFIX + stop_order_id.removeprefix(STOP_ID_PREFIX)
 
 
@@ -79,7 +110,9 @@ class Order:
 
     Spec 0036: canlı dolumda `fill_price` ve `fee` borsanın gerçek dolumudur (fee: USDT karşılığı,
     plan Risk 1); `filled` dolan, `net` pozisyona giren miktar, `commission` ve `commission_asset`
-    borsanın kestiği komisyon, `dust` toz. Paper'da ve dolmamış emirde bu beşi `None`'dır."""
+    borsanın kestiği komisyon, `dust` toz. Paper'da ve dolmamış emirde bu beşi `None`'dır.
+    Spec 0037: canlıda `filled` emrin miktarından küçük olabilir (kısmi dolum, R-1);
+    `fee_estimated`, üçüncü varlık komisyonunun USDT değerinin tahmin olduğudur (R-4)."""
 
     client_order_id: str
     intent_id: str
@@ -98,6 +131,7 @@ class Order:
     commission: Decimal | None = None
     commission_asset: str | None = None
     dust: Decimal | None = None
+    fee_estimated: bool = False
 
     @property
     def position_amount(self) -> Decimal:
@@ -110,7 +144,8 @@ class Order:
 class CloseOrder:
     """Kapanış emri kaydı (spec 0009 R-10): yön `sell`; stop ve hedef yerine kapatılan pozisyonun
     kimliği ve kapanış nedeni. Dolum fiyatı ve komisyon yalnızca `FILLED` iken dolu; canlı
-    dolumun alanları `Order`'daki gibidir (spec 0036)."""
+    dolumun alanları `Order`'daki gibidir (spec 0036). Kısmi dolan satışta `filled` satılan kısımdır
+    (spec 0037 R-3)."""
 
     client_order_id: str
     position_id: str
@@ -127,6 +162,7 @@ class CloseOrder:
     commission: Decimal | None = None
     commission_asset: str | None = None
     dust: Decimal | None = None
+    fee_estimated: bool = False
 
     @property
     def position_amount(self) -> Decimal:
@@ -462,7 +498,15 @@ def place_order(
             side=checked.side,
             amount=amount,
         )
-        settled = settle_reply(reply, side=BUY, pair=checked.pair, amount=amount, step=checked.step)
+        settled = settle_reply(
+            reply,
+            side=BUY,
+            pair=checked.pair,
+            amount=amount,
+            step=checked.step,
+            asset_price=asset_price(exchange),
+            fee_rate=checked.fee,
+        )
         status = settled.status
     else:
         status = exchange.place(client_order_id)
@@ -504,8 +548,23 @@ def place_order(
     )
 
 
+def asset_price(exchange: LiveExchange) -> AssetPrice:
+    """Spec 0037 R-4 (plan Risk 9): emir yolunda üçüncü varlık fiyatı. Hiçbir hata dışarı çıkmaz,
+    ban dahil (spec 0034 F-4: dolum önce kayda geçer); ücret tahmin edilir, ban bir sonraki borsa
+    çağrısında yine gelir ve döngüyü durdurur."""
+
+    def price(symbol: str) -> Decimal | None:
+        try:
+            return exchange.last_price(symbol)
+        except Exception:  # the fill must reach the store first (spec 0034 F-4)
+            return None
+
+    return price
+
+
 def with_exchange_fill[T: Order | CloseOrder](order: T, fill: ExchangeFill) -> T:
-    """Spec 0036 R-1, R-9: dolan emrin kaydına borsanın gerçek dolumu yazılır."""
+    """Spec 0036 R-1, R-9: dolan emrin kaydına borsanın gerçek dolumu yazılır; spec 0037 R-4:
+    tahmini ücret işaretiyle."""
     return replace(
         order,
         fill_price=fill.price,
@@ -515,6 +574,7 @@ def with_exchange_fill[T: Order | CloseOrder](order: T, fill: ExchangeFill) -> T
         commission=fill.commission,
         commission_asset=fill.commission_asset,
         dust=fill.dust,
+        fee_estimated=fill.estimated,
     )
 
 
@@ -557,12 +617,11 @@ def _close_problem(order: CloseOrder) -> str | None:
         return "pozisyon kimliği geçersiz"
     if not _INTENT_ID.fullmatch(position_id.removeprefix(CLIENT_ID_PREFIX)):
         return "pozisyon kimliği geçersiz"
-    suffix = position_id.removeprefix(CLIENT_ID_PREFIX)
-    if order.client_order_id == STOP_ID_PREFIX + suffix:  # an exchange stop's fill (spec 0034)
-        if order.reason != "stop":
-            return "borsa stop emrinin nedeni stop değil"
-    elif order.client_order_id != "cx-" + suffix:
+    parsed = client_id_part(order.client_order_id)  # every generation (spec 0037, plan Risk 3)
+    if parsed is None or parsed[1] != position_id:
         return "kimlik pozisyon kimliğinden türemiyor"
+    if parsed[0] == "cs" and order.reason != "stop":  # an exchange stop's fill (spec 0034)
+        return "borsa stop emrinin nedeni stop değil"
     if order.side != "sell":
         return "kapanış emrinin yönü satış değil"
     if order.reason not in CLOSE_REASONS:
@@ -580,7 +639,7 @@ def _exchange_fill_problem(order: Order | CloseOrder) -> str | None:
         and order.commission_asset is None
         and order.dust is None
     ):
-        return None
+        return None if order.fee_estimated is False else "borsa dolumu olmadan tahmini ücret"
     if order.status is not OrderStatus.FILLED:
         return "dolmamış emirde borsa dolumu var"
     filled, net, commission, dust = order.filled, order.net, order.commission, order.dust
@@ -591,10 +650,11 @@ def _exchange_fill_problem(order: Order | CloseOrder) -> str | None:
         and _valid_number(dust, zero=True, digits=CALC_DIGITS)
         and type(order.commission_asset) is str
         and order.commission_asset
+        and type(order.fee_estimated) is bool
     ):
         return "borsa dolumu geçersiz"
     assert isinstance(filled, Decimal) and isinstance(net, Decimal)  # checked above
-    if net > filled or filled != order.amount:
+    if net > filled or filled > order.amount:  # a live part fill is <= the order (spec 0037)
         return "borsa dolumunun miktarı emirle uyuşmuyor"
     if isinstance(order, CloseOrder) and net != filled:
         return "kapanışın net miktarı dolan miktar değil"
@@ -675,6 +735,7 @@ def _query_live(
     now: datetime,
     step: Decimal | None,
     missing_seen: bool,
+    fee_rate: Decimal | None,
 ) -> QueryResult | tuple[OrderStatus, ExchangeFill | None]:
     """Spec 0036 R-8, R-9: canlı sorgunun durumu ve gerçek dolumu ya da değişmeyen sonuç."""
     reply = exchange.query_fill(order.client_order_id, symbol=order.pair)
@@ -695,6 +756,8 @@ def _query_live(
         pair=order.pair,
         amount=order.amount,
         step=step if is_buy else None,
+        asset_price=asset_price(exchange),
+        fee_rate=fee_rate,
     )
     if settled.status is OrderStatus.UNKNOWN:
         detail = settled.unsupported or settled.problem or "durumu hâlâ bilinmiyor"
@@ -716,6 +779,7 @@ def query_order(
     *,
     step: Decimal | None = None,
     missing_seen: bool = False,
+    fee_rate: Decimal | None = None,
 ) -> QueryResult:
     """R-9: durumu bilinmeyen emrin durumunu simülatörden veya borsadan sorar; son bilinmeyen emir
     netleşince güvenli mod biter ve bir çıkış bildirimi üretilir.
@@ -723,7 +787,8 @@ def query_order(
     Canlıda (spec 0036): dolan emre borsanın gerçek dolumu yazılır, kayıtlı tahmin değil (R-9,
     D-1); alımın net miktarı için çiftin miktar adımı `step` gerekir. "Emir yok" yanıtı emri yalnız
     verilişinden `NOT_FOUND_GRACE` sonra ve önceki turda da aynı yanıt alındıysa (`missing_seen`)
-    reddeder (R-8)."""
+    reddeder (R-8). Spec 0037 R-4: üçüncü varlık komisyonu fiyatı okunamazsa `fee_rate` ile
+    tahmin edilir; oran yoksa dolum eksik bilgidir."""
     if not isinstance(now, datetime) or now.utcoffset() is None:
         return QueryResult(
             state,
@@ -752,7 +817,7 @@ def query_order(
             f"geçersiz girdi: {order.client_order_id} için dolum tahmini yok",
         )
     if isinstance(exchange, LiveExchange):
-        live = _query_live(state, order, exchange, now, step, missing_seen)
+        live = _query_live(state, order, exchange, now, step, missing_seen, fee_rate)
         if isinstance(live, QueryResult):
             return live
         status, exchange_fill = live

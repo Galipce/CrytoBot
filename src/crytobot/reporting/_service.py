@@ -141,20 +141,27 @@ class ReportingService:
                 else None
             )
         )
+        remaining: Decimal | None = None
         if cl is not None:
             pos = getattr(cl, "position", None)
+            actual_realized = getattr(cl, "realized", Decimal(0))
             if pos is not None:
                 actual_pair = str(getattr(pos, "pair", ""))
                 amount = getattr(pos, "amount", Decimal(0))
                 cost_price = getattr(pos, "cost_price", Decimal(0))
                 fee = getattr(pos, "fee", Decimal(0))
                 cost = amount * cost_price + fee
+                part = getattr(cl, "amount", amount)
+                if part < amount:
+                    # spec 0037 R-3: kısmi kapanış — oran yalnız kapanan kısmın maliyetine
+                    # (gelir - kâr/zarar = orantılı maliyet, G-7) bölünür
+                    remaining = amount - part
+                    cost = getattr(cl, "proceeds", Decimal(0)) - actual_realized
             else:
                 actual_pair = ""
                 cost = Decimal(0)
             reason_obj = getattr(cl, "reason", None)
             actual_reason = str(getattr(reason_obj, "value", reason_obj))
-            actual_realized = getattr(cl, "realized", Decimal(0))
             if cost > 0:
                 actual_pnl_pct = ((actual_realized / cost) * Decimal(100)).quantize(Decimal("0.01"))
             else:
@@ -165,7 +172,9 @@ class ReportingService:
             actual_realized = realized_pnl if realized_pnl is not None else Decimal(0)
             actual_pnl_pct = pnl_pct if pnl_pct is not None else Decimal(0)
 
-        text = format_close_notice(actual_pair, actual_reason, actual_realized, actual_pnl_pct)
+        text = format_close_notice(
+            actual_pair, actual_reason, actual_realized, actual_pnl_pct, remaining
+        )
         return self.dispatch(text)
 
     def send_daily_summary(

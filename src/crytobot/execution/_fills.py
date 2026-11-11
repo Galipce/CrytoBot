@@ -1,9 +1,17 @@
-"""Canlı dolum yargısı (spec 0036 R-1…R-5, R-11): borsa yanıtından deftere yazılabilecek dolum.
+"""Canlı dolum yargısı (spec 0036 R-1…R-5, R-11; spec 0037 R-1, R-3, R-4): borsa yanıtından
+deftere yazılabilecek dolum.
 
-Saf hesaptır; borsaya çıkmaz. Üç sonuç vardır: `COMPLETE` (tam dolum: fiyat, dolan ve net miktar,
-USDT karşılığı ücret, komisyon ve varlığı, toz), `UNSUPPORTED` (kısmi dolum, üçüncü varlıktan ya da
-satışta coinden komisyon: spec 0037'ye kadar deftere yazılmaz) ve `INCOMPLETE` (eksik ya da
-tutarsız bilgi). Son ikisi emri `UNKNOWN` bırakır, tahmin hiçbir zaman yazılmaz.
+Borsaya yalnız üçüncü varlık komisyonunun fiyatı için, çağıranın verdiği `asset_price` ile çıkar.
+Üç sonuç vardır: `COMPLETE` (fiyat, dolan ve net miktar, USDT karşılığı ücret, komisyon ve varlığı,
+toz; kalanı borsada sona ermiş emirde dolan kısım, `partial`), `UNSUPPORTED` (iki varlıktan ya da
+satışta coinden komisyon, komisyondan sonra net sıfır: deftere yazılmaz) ve `INCOMPLETE` (eksik
+ya da tutarsız bilgi; "doldu" denen emirde dolan < emir de budur). Son ikisi emri `UNKNOWN`
+bırakır.
+
+Spec 0037 R-4 (D-4): komisyon üçüncü bir varlıktan (ör. BNB) kesildiyse miktar dolan miktardır;
+komisyonun USDT değeri `<varlık>/USDT` fiyatıyla, fiyat okunamazsa dolan * fiyat * ayardaki ücret
+oranıyla tahmin edilir (`estimated`). Değer 28 anlamlı basamağa ROUND_HALF_EVEN yuvarlanır: bir
+değerlemedir, borsanın kestiği tutar `commission`'da tam durur.
 
 Defter `maliyet = miktar * fiyat + ücret` yazar (plan 0036 Risk 1). Pozisyon miktarı net miktardır;
 fiyat ödenen USDT'nin dolan miktara bölümüdür (Risk 5: 28 basamağa, alımda aşağı, satışta yukarı
@@ -12,10 +20,11 @@ diye `ödenen - net * fiyat` (+ USDT komisyonu) olarak hesaplanır: coin komisyo
 ücrete girer, kasaya girmez.
 """
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from decimal import (
     ROUND_DOWN,
+    ROUND_HALF_EVEN,
     ROUND_UP,
     Context,
     Decimal,
@@ -32,6 +41,8 @@ from crytobot.execution._numbers import BOUNDED, CALC_DIGITS, DIGITS, SCALE, _in
 from crytobot.execution._paper import OrderStatus
 
 _BUY, _SELL = "buy", "sell"
+# spec 0037 R-4: what `asset_price` answers for "<asset>/USDT"; `None` when it cannot be read
+AssetPrice = Callable[[str], Decimal | None]
 
 
 class FillVerdict(Enum):
@@ -54,7 +65,9 @@ class LiveReply:
 @dataclass(frozen=True)
 class ExchangeFill:
     """Yargılanmış dolum; sayılar yalnız `COMPLETE` iken dolu. `fee`, defterin USDT ücretidir;
-    `commission` ve `commission_asset` borsanın kestiği ham komisyondur."""
+    `commission` ve `commission_asset` borsanın kestiği ham komisyondur. `partial`: emrin bir
+    kısmı doldu, kalanı borsada sona erdi (spec 0037 R-1, R-3); `estimated`: üçüncü varlık
+    komisyonunun USDT değeri ayardaki orandan tahmin (R-4)."""
 
     verdict: FillVerdict
     reason: str
@@ -65,6 +78,8 @@ class ExchangeFill:
     commission: Decimal | None = None
     commission_asset: str | None = None
     dust: Decimal | None = None
+    partial: bool = False
+    estimated: bool = False
 
 
 @dataclass(frozen=True)
@@ -145,6 +160,40 @@ def _fits(number: Decimal, digits: int) -> bool:
     return _in_scale(number) and _significant(number) <= digits
 
 
+# R-4: a third asset's commission valued in USDT, 28 significant digits
+_VALUE = Context(
+    prec=DIGITS,
+    rounding=ROUND_HALF_EVEN,
+    Emax=SCALE,
+    Emin=-SCALE,
+    traps=[InvalidOperation, DivisionByZero, Overflow],
+)
+
+
+def _third_value(
+    asset: str,
+    quote: str,
+    commission: Decimal,
+    filled: Decimal,
+    average: Decimal,
+    asset_price: AssetPrice | None,
+    fee_rate: Decimal | None,
+) -> tuple[Decimal, bool] | None:
+    """Spec 0037 R-4: üçüncü varlık komisyonunun USDT değeri ve "tahmini" işareti; fiyat da oran da
+    yoksa `None`. Fiyat sıfırdan büyük, ölçek içinde bir sayı olmalı (G-9)."""
+    price = asset_price(f"{asset}/{quote}") if asset_price is not None else None
+    if price is not None and not (
+        isinstance(price, Decimal) and price.is_finite() and price > 0 and _in_scale(price)
+    ):
+        price = None
+    with localcontext(_VALUE):
+        if price is not None:
+            return +(commission * price), False
+        if fee_rate is None:
+            return None
+        return +(filled * average * fee_rate), True
+
+
 def judge_fill(
     order: object,
     trades: object,
@@ -153,15 +202,23 @@ def judge_fill(
     pair: str,
     amount: Decimal,
     step: Decimal | None,
+    ended: bool = False,
+    asset_price: AssetPrice | None = None,
+    fee_rate: Decimal | None = None,
 ) -> ExchangeFill:
-    """R-1…R-5, R-11: "doldu" denen emrin yanıtından deftere yazılabilir dolum ya da nedeni."""
+    """R-1…R-5, R-11: "doldu" denen emrin yanıtından deftere yazılabilir dolum ya da nedeni.
+
+    Spec 0037: `ended` iken (kalanı borsada sona ermiş ya da iptal edilmiş emir) dolan < emir kısmi
+    dolumdur ve `COMPLETE`'tir (R-1, R-3); "doldu" denen emirde tutarsızlıktır (`INCOMPLETE`).
+    Üçüncü varlık komisyonunun değeri `asset_price` ile, okunamazsa `fee_rate` ile (R-4)."""
     if not isinstance(order, Mapping):
         return _incomplete("emir yanıtı yok")
     filled = _decimal(order.get("filled"))
     if filled is None or filled <= 0:
         return _incomplete("dolan miktar bildirilmedi")
-    if filled < amount:
-        return _unsupported(f"kısmi dolum (dolan {filled}, emir {amount})")
+    partial = filled < amount
+    if partial and not ended:
+        return _incomplete(f"doldu denen emirde dolan ({filled}) emirden ({amount}) küçük")
     if filled > amount:
         return _incomplete(f"dolan miktar ({filled}) emirden ({amount}) büyük")
     average = _decimal(order.get("average"))
@@ -178,6 +235,7 @@ def judge_fill(
         return _incomplete("komisyon bildirilmedi")
     base, _, quote = pair.partition("/")
     coin, usdt = Decimal(0), Decimal(0)
+    third: dict[str, Decimal] = {}
     for entry in entries:
         value = _decimal(entry.get("cost"))
         if value is None or value < 0:
@@ -187,19 +245,41 @@ def judge_fill(
         currency = entry.get("currency")
         if not isinstance(currency, str) or not currency:
             return _incomplete("komisyon varlığı bildirilmedi")
-        with localcontext(BOUNDED):
-            if currency == base and side == _BUY:
-                coin += value
-            elif currency == quote:
-                usdt += value
-            else:
-                return _unsupported(f"komisyon {currency} varlığından kesildi")
-    if coin > 0 and usdt > 0:
+        try:
+            with localcontext(BOUNDED):
+                if currency == base:
+                    if side != _BUY:
+                        return _unsupported(f"satışta komisyon {currency} coininden kesildi")
+                    coin += value
+                elif currency == quote:
+                    usdt += value
+                else:  # spec 0037 R-4: a third asset, e.g. BNB
+                    third[currency] = third.get(currency, Decimal(0)) + value
+        except DecimalException:
+            return _incomplete("komisyon tutarı geçersiz")
+    if (coin > 0) + (usdt > 0) + len(third) > 1:
         return _unsupported("komisyon iki varlıktan kesildi")
     try:
-        return _complete(side, base, quote, filled, average, cost, coin, usdt, step)
+        if third:
+            ((asset, commission),) = third.items()
+            valued = _third_value(asset, quote, commission, filled, average, asset_price, fee_rate)
+            if valued is None:
+                return _incomplete(f"komisyonun ({asset}) USDT değeri hesaplanamıyor")
+            value, estimated = valued
+            fill = _complete(side, base, quote, filled, average, cost, coin, value, step)
+            if fill.verdict is not FillVerdict.COMPLETE:
+                return fill
+            return replace(
+                fill,
+                commission=commission,
+                commission_asset=asset,
+                partial=partial,
+                estimated=estimated,
+            )
+        fill = _complete(side, base, quote, filled, average, cost, coin, usdt, step)
     except DecimalException:
         return _incomplete("dolum ölçeği hesaplanamıyor")
+    return replace(fill, partial=partial) if fill.verdict is FillVerdict.COMPLETE else fill
 
 
 def _complete(
@@ -244,7 +324,7 @@ def _complete(
         return _incomplete("dolum defterin basamak sınırına sığmıyor")
     return ExchangeFill(
         FillVerdict.COMPLETE,
-        "tam dolum",
+        "dolum",
         price,
         filled,
         net,
@@ -256,10 +336,18 @@ def _complete(
 
 
 def settle_reply(
-    reply: LiveReply, *, side: str, pair: str, amount: Decimal, step: Decimal | None
+    reply: LiveReply,
+    *,
+    side: str,
+    pair: str,
+    amount: Decimal,
+    step: Decimal | None,
+    asset_price: AssetPrice | None = None,
+    fee_rate: Decimal | None = None,
 ) -> Settled:
-    """R-5, R-7, R-11: yanıtın emir durumu. Yalnız tam ve desteklenen dolum `FILLED`; hiçbir şey
-    dolmadan biten emir `REJECTED`; geri kalan her şey `UNKNOWN` (plan 0036 Risk 9)."""
+    """R-5, R-7, R-11: yanıtın emir durumu. Yalnız desteklenen dolum `FILLED`; hiçbir şey
+    dolmadan biten emir `REJECTED`; geri kalan her şey `UNKNOWN` (plan 0036 Risk 9). Spec 0037
+    R-1, R-3: bir kısmı dolup kalanı borsada sona eren emir dolan kısmıyla `FILLED`'dır."""
     if reply.status is OrderStatus.REJECTED and reply.order is None:
         return Settled(OrderStatus.REJECTED, None)  # a definite refusal (R-7)
     if reply.status is OrderStatus.REJECTED:
@@ -270,7 +358,17 @@ def settle_reply(
             return Settled(OrderStatus.REJECTED, None)
     elif reply.status is not OrderStatus.FILLED:
         return Settled(OrderStatus.UNKNOWN, None)
-    fill = judge_fill(reply.order, reply.trades, side=side, pair=pair, amount=amount, step=step)
+    fill = judge_fill(
+        reply.order,
+        reply.trades,
+        side=side,
+        pair=pair,
+        amount=amount,
+        step=step,
+        ended=reply.status is OrderStatus.REJECTED,  # ended on the exchange with a part filled
+        asset_price=asset_price,
+        fee_rate=fee_rate,
+    )
     if fill.verdict is FillVerdict.COMPLETE:
         return Settled(OrderStatus.FILLED, fill)
     if fill.verdict is FillVerdict.UNSUPPORTED:

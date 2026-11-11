@@ -135,8 +135,6 @@ def test_zero_fee_is_valid(asset: str) -> None:
 @pytest.mark.parametrize(
     ("raw", "why"),
     [
-        (order(filled="0.5", fee={"cost": "0.05", "currency": "USDT"}), "kısmi dolum"),
-        (order(fee={"cost": "0.0001", "currency": "BNB"}), "BNB"),
         (
             order(fees=[{"cost": "0.001", "currency": "BTC"}, {"cost": "0.1", "currency": "USDT"}]),
             "iki varlık",
@@ -145,7 +143,9 @@ def test_zero_fee_is_valid(asset: str) -> None:
     ],
 )
 def test_unsupported_buy_fills(raw: dict[str, Any], why: str) -> None:
-    """AC-5 (R-5): kısmi dolum ve üçüncü varlıktan komisyon desteklenmez; emir `UNKNOWN`."""
+    """AC-5 (R-5): iki varlıktan komisyon ve komisyondan sonra net sıfır desteklenmez; emir
+    `UNKNOWN`. Spec 0037 AC-6 (R-6; plan Risk 6): kısmi dolum ve üçüncü varlıktan komisyon artık
+    desteklenir — `tests/execution/test_live_partial_fills.py`."""
     amount = raw["filled"] if why == "net miktar" else "1"
     fill = buy(raw, amount=amount)
     assert fill.verdict is FillVerdict.UNSUPPORTED

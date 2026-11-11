@@ -1,4 +1,5 @@
-"""Canlı borsa adaptörü: emirleri ve sorguları ccxt istemcisine iletir (spec 0032, 0034, 0036)."""
+"""Canlı borsa adaptörü: emirleri ve sorguları ccxt istemcisine iletir (spec 0032, 0034, 0036,
+0037)."""
 
 from dataclasses import dataclass
 from decimal import Decimal
@@ -7,6 +8,8 @@ from typing import Any
 
 from crytobot.execution._fills import LiveReply, fee_entries
 from crytobot.execution._live_client import (
+    AssetBalance,
+    BannedError,
     BinanceLiveClient,
     LiveExchangeCallError,
 )
@@ -17,9 +20,11 @@ _ENDED_STATUSES = ("canceled", "cancelled", "expired", "rejected")
 
 
 def _is_stop_order(client_order_id: str) -> bool:
-    from crytobot.execution._orders import STOP_ID_PREFIX
+    """Borsa stop emri kimliği mi (`cs-`, kısmi kapanıştan sonra `cs2-`…`cs9-`, spec 0037)."""
+    from crytobot.execution._orders import client_id_part
 
-    return client_order_id.startswith(STOP_ID_PREFIX)
+    parsed = client_id_part(client_order_id)
+    return parsed is not None and parsed[0] == "cs"
 
 
 def _map_stop_order_status(res: dict[str, Any]) -> OrderStatus:
@@ -108,7 +113,9 @@ class LiveExchange:
             return LiveReply(OrderStatus.UNKNOWN, MappingProxyType(dict(res)))
         trades: tuple[dict[str, Any], ...] | None = None
         order_id = res.get("id")
-        wanted = status is OrderStatus.FILLED and fee_entries(res) is None
+        # spec 0037 R-1, R-3: an order that ended with a part filled needs its fee too
+        some = status is OrderStatus.FILLED or _filled_some(res.get("filled"))
+        wanted = some and fee_entries(res) is None
         if wanted and isinstance(order_id, str) and order_id:
             try:
                 trades = tuple(self.client.fetch_order_trades(symbol, order_id))
@@ -208,3 +215,27 @@ class LiveExchange:
     def fetch_free_balance(self, asset: str = "USDT") -> Decimal:
         """Borsadaki serbest bakiyeyi çeker."""
         return self.client.fetch_free_balance(asset=asset)
+
+    def fetch_balances(self) -> dict[str, AssetBalance]:
+        """Spec 0037 R-5 (plan Risk 8): varlık → serbest ve toplam (serbest + emirde bekleyen),
+        tek bakiye çağrısıyla. Hata dışarı çıkar: çağıran güvenli moda geçer (G-8)."""
+        return self.client.fetch_balances()
+
+    def last_price(self, symbol: str) -> Decimal | None:
+        """Spec 0037 R-4 (D-4, G-9; plan Risk 9): çiftin son fiyatı, beyaz liste dışında da. Çift
+        borsada yoksa ya da fiyat okunamazsa `None` (çağıran tahmine düşer); ban yutulmaz."""
+        try:
+            return self.client.fetch_last_price(symbol)
+        except BannedError:
+            raise
+        except Exception:  # any other failure: the fee is estimated instead (R-4)
+            return None
+
+
+def _filled_some(value: object) -> bool:
+    """Yanıtın dolan miktarı sıfırdan büyük bir sayı mı."""
+    try:
+        number = Decimal(str(value)) if isinstance(value, str | int | float | Decimal) else None
+    except ArithmeticError:
+        return False
+    return number is not None and number.is_finite() and number > 0

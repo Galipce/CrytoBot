@@ -21,26 +21,29 @@ from crytobot.execution._numbers import (
 from crytobot.execution._orders import (
     LIVE,
     PAPER,
+    PARTS,
     CloseOrder,
     ExecutionState,
     Notification,
     NotificationKind,
     OrderOutcome,
     _notify,
+    asset_price,
+    close_client_id,
     stop_client_id,
     with_exchange_fill,
 )
 from crytobot.execution._paper import Exchange, OrderStatus
 from crytobot.risk import CloseApproval, CloseRequest, PairRules, close_request_problems
 
-CLOSE_ID_PREFIX = "cx-"
 SELL = "sell"
 
 
 @dataclass(frozen=True)
 class CloseOrderRequest:
     """Ham kapanış emri isteği (R-3): kapanış onayı, çiftin borsa kuralları, güncel fiyat, komisyon
-    ve slippage oranı, mod. Alanlar doğrulanmadan gelir."""
+    ve slippage oranı, mod. Alanlar doğrulanmadan gelir. `part`: pozisyonun bugüne kadarki kısmi
+    kapanış sayısı; kimliğin neslini seçer (spec 0037, plan Risk 3), paper'da hep 0."""
 
     approval: object
     rules: object
@@ -48,6 +51,7 @@ class CloseOrderRequest:
     fee: object
     slippage: object
     mode: object
+    part: object = 0
 
 
 @dataclass(frozen=True)
@@ -107,6 +111,8 @@ def _own_problems(
         problems.append(f"fiyat {_brief(numbers.pop('fiyat'))} {DIGITS} anlamlı basamaktan uzun")
     number("ücret", request.fee, "rate")
     number("slippage", request.slippage, "rate")
+    if not (type(request.part) is int and 0 <= request.part < PARTS):
+        problems.append(f"kısım {_show(request.part)} 0 ile {PARTS - 1} arasında tam sayı olmalı")
     if not _aware(now):
         problems.append(f"şu anki zaman {_show(now)} zaman dilimi taşımalı")
     return problems
@@ -199,10 +205,11 @@ def place_close_order(
             f"geçersiz girdi: ölçek hesaplanamıyor (miktar {_brief(amount)}, dolum fiyatı"
             f" {_brief(fill)}, ücret {_brief(numbers['ücret'])}, adım {_brief(step)})",
         )
-    client_order_id = CLOSE_ID_PREFIX + position_id.removeprefix("cb-")  # deterministic (R-8)
+    assert isinstance(request.part, int)  # checked with the order's own inputs
+    client_order_id = close_client_id(position_id, request.part)  # deterministic (R-8)
     existing = state.orders.get(client_order_id)
     if existing is not None:
-        assert isinstance(existing, CloseOrder)  # a "cx-" id is a close's
+        assert isinstance(existing, CloseOrder)  # a "cx…-" id is a close's
         content = (existing.position_id, existing.pair, existing.amount, existing.reason)
         if content == (position_id, pair, amount, reason):
             return CloseOrderResult(
@@ -237,7 +244,15 @@ def place_close_order(
     settled: Settled | None = None
     if isinstance(exchange, LiveExchange):  # spec 0036 R-4: sells the position's net amount
         reply = exchange.place_market(client_order_id, symbol=pair, side=SELL, amount=amount)
-        settled = settle_reply(reply, side=SELL, pair=pair, amount=amount, step=None)
+        settled = settle_reply(
+            reply,
+            side=SELL,
+            pair=pair,
+            amount=amount,
+            step=None,
+            asset_price=asset_price(exchange),
+            fee_rate=numbers["ücret"],
+        )
         status = settled.status
     else:
         status = exchange.place(client_order_id)
@@ -271,7 +286,9 @@ def place_close_order(
         OrderOutcome.CREATED,
         order,
         f"{_show(pair)}: {client_order_id} {status.value}: {position_id} satışı, miktar"
-        f" {_brief(amount)}" + (f", dolum fiyatı {_brief(fill)}" if filled else ""),
+        f" {_brief(amount)}"
+        + ("" if order.filled in (None, amount) else f", dolan {_brief(order.filled)}")
+        + (f", dolum fiyatı {_brief(fill)}" if filled else ""),
         notifications,
         None if settled is None else settled.unsupported,
     )
@@ -284,13 +301,15 @@ def record_stop_fill(
     amount: Decimal,
     fill: ExchangeFill,
     now: datetime,
+    part: int = 0,
 ) -> tuple[CloseOrder, ExecutionState]:
     """Spec 0034 R-6, review round 1 F-1: borsada dolan şartlı stop emri, deftere yazılan kapanışla
     aynı kimlikle (`cs-`) FILLED kapanış emri olur; mutabakat iki tarafı eşler. Kayıtlıysa aynen.
-    Spec 0036 (plan Risk 3): yalnız yargılanmış tam dolum yazılır, tahmin hiçbir zaman."""
+    Spec 0036 (plan Risk 3): yalnız yargılanmış tam dolum yazılır, tahmin hiçbir zaman. Spec 0037:
+    kısmi kapanıştan sonraki stopun kimliği `part` neslidir (`cs{part+1}-`)."""
     if fill.verdict is not FillVerdict.COMPLETE or fill.price is None or fill.fee is None:
         raise ValueError("borsa stop dolumu tam değil")
-    client_order_id = stop_client_id(position_id)
+    client_order_id = stop_client_id(position_id, part)
     existing = state.orders.get(client_order_id)
     if isinstance(existing, CloseOrder):
         return existing, state

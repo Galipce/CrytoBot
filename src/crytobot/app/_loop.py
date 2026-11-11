@@ -340,7 +340,7 @@ class _Loop:
                         err = send_fill(
                             pair=buy.pair,
                             side=buy.side,
-                            amount=buy.amount,
+                            amount=buy.position_amount,  # spec 0037: the part that filled, net
                             price=price,
                             stop=buy.stop,
                         )
