@@ -1,5 +1,6 @@
 """Spec 0029 (AC-3..AC-7): App döngüsü Telegram bildirim ve raporlama entegrasyon testleri."""
 
+import threading
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -17,6 +18,7 @@ from crytobot.execution import Order, OrderStatus
 from crytobot.portfolio import CloseReason, Closure, Position
 from crytobot.reporting import (
     NotificationQueue,
+    OutgoingMessage,
     ReportingService,
     TelegramConfig,
 )
@@ -362,3 +364,153 @@ def test_reporting_error_does_not_break_turn_loop(tmp_path: Path) -> None:
     exit_ = bot.run(reporter=reporter)
     assert exit_.reason is ExitReason.STOPPED
     assert exit_.turns == 2
+
+
+# --- Spec 0039: Telegram güvenilirliği döngüde ------------------------------------------------
+SECRET = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+SECRET_CONFIG = TelegramConfig(enabled=True, bot_token=SECRET, chat_id="chat-456")
+CHAT_NOT_FOUND = (400, '{"ok":false,"error_code":400,"description":"Bad Request: chat not found"}')
+
+
+def _queued_reporter(transport: Any, **kwargs: Any) -> ReportingService:
+    """Önceki turdan kuyrukta bir mesajı olan reporter: tur başında istek gider (CB-4)."""
+    reporter = ReportingService(SECRET_CONFIG, transport=transport, **kwargs)
+    reporter.queue.enqueue(OutgoingMessage(text="<b>bekleyen</b>"))
+    return reporter
+
+
+def test_disable_line_once_without_secret(tmp_path: Path) -> None:
+    # CB-2: iki tur; kapanma tek satır, gerekçesiyle, token yok; sonra istek gitmez.
+    calls: list[str] = []
+
+    def transport(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        calls.append(url)
+        status, body = CHAT_NOT_FOUND
+        return status, body.replace("not found", f"not found {SECRET}")
+
+    reporter = _queued_reporter(transport)
+    bot = harness(opened_store(tmp_path / "s.db"), stop_after=2)
+    exit_ = bot.run(reporter=reporter)
+
+    assert exit_.turns == 2
+    disabled = [text for text in bot.lines if "telegram devre dışı" in text]
+    assert len(disabled) == 1
+    assert disabled[0].endswith("telegram devre dışı (chat bulunamadı)")
+    assert disabled[0].split(" ", 2)[1] == "hata"
+    assert len(calls) == 1
+    assert all(SECRET not in text for text in bot.lines)
+
+
+def test_disable_line_once_from_turn_notice(tmp_path: Path) -> None:
+    # CB-1, CB-2: kapanma bir durum bildiriminde (ilk çağrı değil) görülür; satır tektir.
+    from crytobot.app._notices import TurnNotice
+
+    answers = [(200, '{"ok":true}'), (401, '{"ok":false,"description":"Unauthorized"}')]
+    calls: list[dict[str, Any]] = []
+
+    def transport(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        calls.append(payload)
+        return answers[min(len(calls), len(answers)) - 1]
+
+    reporter = ReportingService(SECRET_CONFIG, transport=transport)
+    bot = harness(opened_store(tmp_path / "s.db"), stop_after=1)
+    loop = _loop._Loop(bot.config, bot.parts(), Exchange(), reporter=reporter)
+    for entering in (True, False, True):
+        loop.notice(TurnNotice(NoticeKind.STALE_DATA, BTC, entering, NOW, "BTC/USDT: veri bayat"))
+
+    assert len(calls) == 2
+    disabled = [text for text in bot.lines if "telegram devre dışı" in text]
+    assert len(disabled) == 1
+    assert disabled[0].endswith("telegram devre dışı (yetkisiz token)")
+    assert not any("iletilemedi" in text for text in bot.lines)
+    assert all(SECRET not in text for text in bot.lines)
+
+
+class _InactiveSpy:
+    """Etkin olmayan reporter: hiçbir yöntemi çağrılmamalı (PB-4)."""
+
+    is_active = False
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def __getattr__(self, name: str) -> Any:
+        def record(*args: Any, **kwargs: Any) -> None:
+            self.calls.append(name)
+
+        return record
+
+
+def test_inactive_reporter_no_turn_calls(tmp_path: Path) -> None:
+    spy = _InactiveSpy()
+    bot = harness(opened_store(tmp_path / "s.db"), stop_after=2)
+    exit_ = bot.run(reporter=spy)
+    assert exit_.turns == 2
+    assert spy.calls == []
+
+    requests: list[str] = []
+
+    def transport(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        requests.append(url)
+        return 200, '{"ok":true}'
+
+    disabled = ReportingService(
+        TelegramConfig(enabled=False, bot_token="", chat_id=""), transport=transport
+    )
+    disabled.queue.enqueue(OutgoingMessage(text="x"))
+    other = harness(opened_store(tmp_path / "t.db"), stop_after=2)
+    assert other.run(reporter=disabled).turns == 2
+    assert requests == []
+
+
+class _BrokenReporter(ReportingService):
+    def begin_turn(self) -> list[str]:
+        raise RuntimeError(f"broken {SECRET}")
+
+    def end_turn(self) -> None:
+        raise RuntimeError(f"broken {SECRET}")
+
+
+def _failure_reporters() -> dict[str, Any]:
+    def answer(status: int, body: str) -> Any:
+        return lambda url, payload: (status, body)
+
+    def raising(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        raise TimeoutError(f"timed out {url}")
+
+    def hanging(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        threading.Event().wait(1.0)
+        return 200, '{"ok":true}'
+
+    parse = '{"ok":false,"description":"Bad Request: can\'t parse entities"}'
+    return {
+        "kalıcı": _queued_reporter(answer(401, '{"ok":false,"description":"Unauthorized"}')),
+        "biçim": _queued_reporter(answer(400, parse)),
+        "ağ": _queued_reporter(answer(0, "URLError: unreachable")),
+        "istisna": _queued_reporter(raising),
+        "zaman aşımı": _queued_reporter(hanging, turn_budget_s=0.05),
+        "429": _queued_reporter(answer(429, '{"ok":false,"parameters":{"retry_after":60}}')),
+        "bozuk reporter": _BrokenReporter(SECRET_CONFIG, transport=answer(200, "{}")),
+    }
+
+
+def test_telegram_failures_leave_turn_unchanged(tmp_path: Path) -> None:
+    # PB-5: her hata türünde tur sonucu ve defter, reporter'sız koşuyla aynı.
+    from crytobot.persistence import load_store
+
+    base = harness(opened_store(tmp_path / "base.db"), stop_after=2)
+    base_exit = base.run()
+    base_state = load_store(str(tmp_path / "base.db"), "paper").state
+    assert base_state is not None
+
+    for index, (kind, reporter) in enumerate(_failure_reporters().items()):
+        store = tmp_path / f"r{index}.db"
+        bot = harness(opened_store(store), stop_after=2)
+        exit_ = bot.run(reporter=reporter)
+        state = load_store(str(store), "paper").state
+        assert state is not None, kind
+        assert exit_.reason is base_exit.reason, kind
+        assert exit_.turns == base_exit.turns, kind
+        assert bot.events("tur") == base.events("tur"), kind
+        assert state.ledger == base_state.ledger, kind
+        assert all(SECRET not in text for text in bot.lines), kind
