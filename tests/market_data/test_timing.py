@@ -224,6 +224,30 @@ def test_unreadable_markets_answer_is_a_bad_response(body: str) -> None:
     assert raised.value.failure is CallFailure.BAD_RESPONSE
 
 
+def test_a_budget_cut_call_ends_the_budget_even_if_the_wait_returns_early(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """B-67: Windows'ta `thread.join(limit)` süre dolmadan dönebilir; bütçeyle kısaltılmış çağrı
+    zaman aşınca bütçe bitmiştir, kalan birkaç ms ile sonraki çağrı gönderilmez."""
+    from crytobot.market_data import _calls
+
+    def returns_early(request: object, limit: float) -> object:
+        raise _calls._CallTimedOut  # the join returned before `limit` elapsed
+
+    monkeypatch.setattr(_calls, "_run_limited", returns_early)
+    caller = Caller(call_timeout=20, read_budget=5)
+    with pytest.raises(CallFailed) as cut:
+        caller.call(lambda timeout: None)
+    assert cut.value.reason is IssueReason.BUDGET_ENDED
+
+    monkeypatch.undo()
+    sent: list[float] = []
+    with pytest.raises(CallFailed) as later:
+        caller.call(sent.append)
+    assert later.value.reason is IssueReason.BUDGET_ENDED
+    assert sent == []
+
+
 def test_market_ccxt_cannot_parse_is_an_exchange_error() -> None:
     client, _ = recorded_client({"exchangeInfo": http_response(200, '{"symbols":[{"a":1}]}')})
     with pytest.raises(ExchangeCallError) as raised:
