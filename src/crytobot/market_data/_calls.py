@@ -98,6 +98,8 @@ class Caller:
             return _run_limited(request, limit)
         except _CallTimedOut:
             if limit < self._call_timeout:
+                # The wait may return a few ms early (Windows timer): the budget is spent (B-67)
+                self._deadline = min(self._deadline, time.monotonic())
                 raise CallFailed(IssueReason.BUDGET_ENDED) from None
             raise
 
