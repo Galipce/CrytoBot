@@ -66,6 +66,7 @@ class ReportingService:
         self._turn_error: str | None = None  # CB-5: turda görülen ilk geçici hata
         self._blocked_until: float | None = None  # CB-6: 429 beklemesinin bittiği an
         self._disabled_reason: str | None = None  # CB-2: bir kez alınır
+        self._dropped: list[str] = []  # CB-3: kuyruktan atılanların hata adları, bir kez alınır
 
     @property
     def is_active(self) -> bool:
@@ -82,13 +83,16 @@ class ReportingService:
 
         Dönüş: kuyruktan atılan mesajların hata adları (CB-3: loga yazılır).
         """
+        self._open_turn()
+        if not self._config.enabled:
+            return []
+        self._flush()
+        return self.take_dropped()
+
+    def _open_turn(self) -> None:
         self._turn_open = True
         self._spent = 0.0
         self._turn_error = None
-        if not self._config.enabled:
-            return []
-        dropped, _stopped = self._flush()
-        return dropped
 
     def end_turn(self) -> None:
         self._turn_open = False
@@ -98,6 +102,12 @@ class ReportingService:
         reason = self._disabled_reason
         self._disabled_reason = None
         return reason
+
+    def take_dropped(self) -> list[str]:
+        """Kuyruktan atılan mesajların hata adları; her biri yalnız bir kez döner (CB-3)."""
+        dropped = self._dropped
+        self._dropped = []
+        return dropped
 
     # --- gönderim kapısı ----------------------------------------------------------------------
     def _gate(self) -> str | None:
@@ -156,13 +166,12 @@ class ReportingService:
             return _Delivery(done=True, error=result.error)  # atılır, kuyruğa girmez
         return self._wait(result, message)
 
-    def _flush(self) -> tuple[list[str], str | None]:
-        """Kuyruğu sırayla iletir: (atılan mesajların hata adları, durma nedeni)."""
-        dropped: list[str] = []
+    def _flush(self) -> str | None:
+        """Kuyruğu sırayla iletir; durma nedeni. Atılanlar `take_dropped`'a birikir (CB-3)."""
         while len(self._queue) > 0 and self.is_active:
             gate = self._gate()
             if gate is not None:
-                return dropped, gate
+                return gate
             head = self._queue.peek()
             if head is None:
                 break
@@ -171,18 +180,19 @@ class ReportingService:
                 if self.is_active:  # kapanınca kuyruk zaten boşaldı
                     self._queue.pop()
                 if delivery.error is not None:
-                    dropped.append(delivery.error)
+                    self._dropped.append(delivery.error)
                 continue
             if delivery.keep is not None and delivery.keep != head:
                 self._queue.replace_head(delivery.keep)
-            return dropped, delivery.error
-        return dropped, None
+            return delivery.error
+        return None
 
     def drain_queue(self) -> list[str]:
         """Kuyruktaki bekleyen bildirimleri sırayla iletmeyi dener; hata adlarını döner."""
         if not self._config.enabled:
             return []
-        dropped, stopped = self._flush()
+        stopped = self._flush()
+        dropped = self.take_dropped()
         return dropped + ([stopped] if stopped is not None and len(self._queue) > 0 else [])
 
     def dispatch(self, text: str, parse_mode: str | None = "HTML") -> str | None:
@@ -194,7 +204,7 @@ class ReportingService:
             return None
         own_turn = not self._turn_open
         if own_turn:
-            self.begin_turn()
+            self._open_turn()  # kuyruğu `_dispatch` iletir; atılanlar çağırana kalır (F-1)
         try:
             return self._dispatch(OutgoingMessage(text=text, parse_mode=parse_mode))
         finally:
@@ -202,7 +212,7 @@ class ReportingService:
                 self.end_turn()
 
     def _dispatch(self, message: OutgoingMessage) -> str | None:
-        dropped, stopped = self._flush()
+        stopped = self._flush()
         if not self.is_active:
             return None  # plan Risk 6: kapanma satırı tektir (CB-2)
         if len(self._queue) > 0:  # yeni mesaj öne geçmez (PB-2)
@@ -217,8 +227,6 @@ class ReportingService:
             return None
         if not delivery.done and delivery.keep is not None:
             self._queue.enqueue(delivery.keep)
-        if delivery.error is None and dropped:
-            return dropped[0]  # kuyruktan atılan mesaj da loga yazılır (CB-3)
         return delivery.error
 
     def send_turn_notice(

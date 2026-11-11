@@ -171,14 +171,17 @@ class _Loop:
         """Gönderimin hata satırı; Telegram kapandıysa gerekçesiyle tek satır (CB-2)."""
         if err:
             self.emit(at, "hata", f"{label} iletilemedi ({err})")
+        take_dropped = getattr(self.reporter, "take_dropped", None)
         take = getattr(self.reporter, "take_disabled_reason", None)
-        if not callable(take):
-            return
         try:
-            reason = take()
+            dropped = take_dropped() if callable(take_dropped) else ()
+            reason = take() if callable(take) else None
         except Exception as error:  # PB-5: Telegram turu düşürmez
             self.emit(at, "hata", error_text("telegram", error))
             return
+        for dropped_err in dropped if isinstance(dropped, list) else ():
+            # CB-3: kuyruktan atılan önceki mesaj da loga yazılır (review round 1 F-1)
+            self.emit(at, "hata", f"telegram bildirimi iletilemedi ({dropped_err})")
         if reason:
             self.emit(at, "hata", f"telegram devre dışı ({reason})")
 

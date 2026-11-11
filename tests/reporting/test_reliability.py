@@ -466,3 +466,24 @@ def test_queue_cap_and_order_preserved() -> None:
     assert service.dispatch("yeni") is None
     assert transport.texts()[before:] == [f"m{n}" for n in range(3, 13)] + ["yeni"]
     assert len(service.queue) == 0
+
+
+# --- review round 1 F-1 (CB-3) ----------------------------------------------------------------
+def test_dropped_from_queue_reported_once_even_when_new_message_fails() -> None:
+    # q1 kuyrukta; tur başında 429 (1 s). Süre dolunca dolum bildirimi gelir: kuyruk iletiminde
+    # q1 atılır (400), yeni mesaj 503 alır. İkisinin de hata adı kaybolmaz.
+    clock = FakeClock()
+    transport = Transport(NETWORK, clock=clock)
+    service = _service(transport, clock=clock)
+    service.dispatch("q1")
+    transport.answers = [(429, _body(429, "Too Many Requests", 1)), TOO_LONG, UNAVAILABLE]
+    transport.calls.clear()
+
+    service.begin_turn()
+    clock.now += 2
+    assert service.dispatch("dolum") == "http_503"
+    service.end_turn()
+    assert transport.texts() == ["q1", "q1", "dolum"]
+    assert _queued(service) == ["dolum"]
+    assert service.take_dropped() == ["http_400_bad_request"]
+    assert service.take_dropped() == []

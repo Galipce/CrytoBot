@@ -514,3 +514,27 @@ def test_telegram_failures_leave_turn_unchanged(tmp_path: Path) -> None:
         assert bot.events("tur") == base.events("tur"), kind
         assert state.ledger == base_state.ledger, kind
         assert all(SECRET not in text for text in bot.lines), kind
+
+
+def test_dropped_queue_message_logged_on_dispatch_path(tmp_path: Path) -> None:
+    # Review round 1 F-1, CB-3: tur dışındaki gönderimde (kendi turu) kuyruktan atılan mesajın
+    # hata adı da satır olur; yeni mesajın hatası ayrı satırdır.
+    from crytobot.app._notices import TurnNotice
+
+    too_long = (400, '{"ok":false,"description":"Bad Request: message is too long"}')
+    answers = [too_long, (503, '{"ok":false,"description":"Service Unavailable"}')]
+    calls: list[str] = []
+
+    def transport(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        calls.append(payload["text"])
+        return answers[min(len(calls), len(answers)) - 1]
+
+    reporter = _queued_reporter(transport)
+    bot = harness(opened_store(tmp_path / "s.db"), stop_after=1)
+    loop = _loop._Loop(bot.config, bot.parts(), Exchange(), reporter=reporter)
+    loop.notice(TurnNotice(NoticeKind.STALE_DATA, BTC, True, NOW, "BTC/USDT: veri bayat"))
+
+    assert calls[0] == "<b>bekleyen</b>"
+    errors = bot.events("hata")
+    assert sum("iletilemedi (http_503)" in text for text in errors) == 1
+    assert sum("iletilemedi (http_400_bad_request)" in text for text in errors) == 1
