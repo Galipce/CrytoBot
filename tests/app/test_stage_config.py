@@ -1,4 +1,4 @@
-"""Spec 0028 AC-4 (R-2) aşama onayı ayar denetimleri (plan Adım 2)."""
+"""Spec 0028 AC-4 (R-2) aşama onayı ayar denetimleri (plan Adım 2); spec 0040 CB-1."""
 
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -6,11 +6,14 @@ from typing import Any
 
 from crytobot.app import load_stage_config
 
+SHA = "0123456789abcdef" * 4  # spec 0040: a valid report fingerprint
+
 
 def valid_document() -> dict[str, Any]:
     return {
         "stage": {
             "report_path": "backtest-report.txt",
+            "report_sha256": SHA,
             "approved_by": "Galip Badem",
             "approved_at": "2026-11-08T12:00:00Z",
             "min_trades": 15,
@@ -35,6 +38,7 @@ def test_stage_config_validation() -> None:
     doc_defaults = {
         "stage": {
             "report_path": "report.txt",
+            "report_sha256": SHA,
             "approved_by": "Ali",
             "approved_at": "2026-11-08T00:00:00+00:00",
         }
@@ -182,3 +186,44 @@ def test_live_stage_approval_required_for_live_mode() -> None:
     assert res_paper_with_live.config is not None
     assert res_paper_with_live.config.live_approved_by == "Galip Badem"
     assert res_paper_with_live.config.live_approved_at == datetime(2026, 11, 9, 20, 0, tzinfo=UTC)
+
+
+def test_report_sha256_missing_or_invalid() -> None:
+    """Spec 0040 CB-1, G-2: anahtar zorunlu, 64 onaltılık; harf büyüklüğü fark etmez."""
+    d = valid_document()
+    del d["stage"]["report_sha256"]
+    for mode in ("paper", "live"):
+        missing = load_stage_config(d, mode=mode)
+        assert missing.config is None
+        assert (missing.setting, missing.message) == (
+            "stage.report_sha256",
+            "ayar eksik: stage.report_sha256",
+        )
+
+    for bad in ("", SHA[:63], SHA + "0", "g" + SHA[1:], " " * 64, 123, None, True, ["a"]):
+        d = valid_document()
+        d["stage"]["report_sha256"] = bad
+        invalid = load_stage_config(d)
+        assert invalid.config is None
+        assert (invalid.setting, invalid.message) == (
+            "stage.report_sha256",
+            "ayar geçersiz: stage.report_sha256",
+        )
+
+    d = valid_document()
+    d["stage"]["report_sha256"] = SHA.upper()
+    upper = load_stage_config(d)
+    assert upper.config is not None
+    assert upper.config.report_sha256 == SHA
+
+
+def test_report_sha256_is_checked_right_after_report_path() -> None:
+    """Dosya sırası: `report_path` sorunu önce, `report_sha256` sonra, `approved_by` en son."""
+    d = valid_document()
+    del d["stage"]["report_path"]
+    d["stage"]["report_sha256"] = "bozuk"
+    assert load_stage_config(d).setting == "stage.report_path"
+    d = valid_document()
+    d["stage"]["report_sha256"] = "bozuk"
+    del d["stage"]["approved_by"]
+    assert load_stage_config(d).setting == "stage.report_sha256"

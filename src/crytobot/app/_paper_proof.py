@@ -85,9 +85,13 @@ def _store_problem(loaded_outcome: StoreOutcome, message: str) -> PaperProofResu
 
 
 def _history_problem(
-    records: Sequence[StartRecord], state: StoredState, report: str, resolve: Callable[[str], str]
+    records: Sequence[StartRecord],
+    state: StoredState,
+    stage: StageConfig,
+    resolve: Callable[[str], str],
 ) -> PaperProofResult | None:
-    """CB-3: kayıt yok · deneme var · kayıt eksik (kayıt öncesi geçmiş, G-8) · rapor uyuşmazlığı."""
+    """CB-3: kayıt yok · deneme var · kayıt eksik (kayıt öncesi geçmiş, G-8) · rapor uyuşmazlığı:
+    yol ve spec 0040 CB-5'in parmak izi (parmak izi olmayan eski kayıt da uyuşmaz)."""
     if not records:
         return _proof("başlatma kaydı yok")
     if any(record.trial for record in records):
@@ -101,7 +105,9 @@ def _history_problem(
     if before:
         return _proof("başlatma kaydı eksik")
     linked = {resolve(record.report_path or "") for record in records}
-    if linked != {resolve(report)}:
+    if linked != {resolve(stage.report_path)} or any(
+        record.report_sha256 != stage.report_sha256 for record in records
+    ):
         return _proof("rapor uyuşmazlığı")
     return None
 
@@ -137,7 +143,7 @@ def check_paper_proof(
     started = load_start_records(path, readonly=True)
     if started.outcome is not StoreOutcome.LOADED:
         return _store_problem(started.outcome, started.message)
-    history = _history_problem(started.records, state, stage.report_path, resolve)
+    history = _history_problem(started.records, state, stage, resolve)
     if history is not None:
         return history
 

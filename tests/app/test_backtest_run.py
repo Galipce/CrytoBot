@@ -13,6 +13,7 @@ Mutlu yol (tek çift BTC, 1h, `candle_count` 4, açılış 10000, ayrım 2. saat
 Slippage: alımda 49.115 * 0.01 = 0.49115, kapanışta 49.115 * 0.015 = 0.736725.
 """
 
+import hashlib
 import json
 from dataclasses import replace
 from decimal import Decimal
@@ -22,11 +23,13 @@ from typing import Any
 import pytest
 
 from crytobot.app import BacktestOutcome
-from crytobot.backtest import PART_SUFFIX
+from crytobot.backtest import CONDITIONS, PART_SUFFIX
 from crytobot.market_data import HistoryRead
 from crytobot.persistence import StoreOutcome, load_store
+from crytobot.risk import DEFAULT_LIMITS
 from tests.app.backtest_helpers import (
     COUNT,
+    GENERATED_AT,
     Run,
     at,
     candle,
@@ -37,7 +40,7 @@ from tests.app.backtest_helpers import (
     settings,
     write_history,
 )
-from tests.app.helpers import BTC, ETH, HOUR, refuse_saves
+from tests.app.helpers import BTC, ETH, HOUR, limits, refuse_saves
 
 IN, OUT, WHOLE = "örneklem içi", "örneklem dışı — BR-10 kanıtı adayı", "tüm koşu"
 HAPPY = {BTC: candles(-COUNT, [10, 8, 9, 10, 10, 12, 15, 15])}
@@ -125,6 +128,76 @@ def test_console_and_file_reports_are_identical(tmp_path: Path) -> None:
     file_bytes = Path(chosen.report_path).read_bytes()
     assert file_bytes == exit_.report.encode("utf-8")
     assert run.console.encode("utf-8").count(file_bytes) == 1
+
+
+def test_fingerprint_line_matches_file_bytes(tmp_path: Path) -> None:
+    """Spec 0040 CB-1, G-7: dosya yazılınca önceki satır, yazılan baytların SHA-256'sı."""
+    chosen = prepared(tmp_path)
+    run = Run(tmp_path)
+    assert run(chosen).outcome is BacktestOutcome.COMPLETED
+    digest = hashlib.sha256(Path(chosen.report_path).read_bytes()).hexdigest()
+    assert run.lines[-2:] == [
+        f"rapor parmak izi: {digest}",
+        f"backtest tamam: rapor dosyası {chosen.report_path}",
+    ]
+    assert digest not in run.report(chosen)  # the fingerprint is never inside the report
+
+
+def test_no_fingerprint_line_when_the_file_is_not_written(tmp_path: Path) -> None:
+    chosen = prepared(tmp_path)
+    run = Run(tmp_path)
+    exit_ = run(chosen, write_report=lambda _path, _text: False)
+    assert exit_.outcome is BacktestOutcome.REPORT_NOT_WRITTEN
+    assert not any(row.startswith("rapor parmak izi") for row in run.lines)
+
+
+def _header(report: str) -> dict[str, str]:
+    rows = report.partition("\n\nvarsayımlar:")[0].splitlines()[1:]
+    return dict(row.split(": ", 1) for row in rows)
+
+
+def test_header_uses_effective_defaults(tmp_path: Path) -> None:
+    """Spec 0040 CB-2, CB-3, G-5: başlık botun fiilen kullandığı değerleri ve üretim anını yazar;
+    saat bir kez, yalnız rapor için okunur."""
+    chosen = prepared(tmp_path, balance=Decimal("12345.5"))
+    run = Run(tmp_path)
+    assert run(chosen).outcome is BacktestOutcome.COMPLETED
+    header = _header(run.report(chosen))
+    bot = chosen.bot
+    assert header["üretim anı"] == GENERATED_AT.isoformat()
+    limits_ = bot.turn.limits
+    running = {
+        "fee": bot.turn.fee,
+        "slippage": bot.turn.slippage,
+        "per_trade_risk": limits_.per_trade_risk,
+        "daily_loss_limit": limits_.daily_loss_limit,
+        "max_drawdown": limits_.max_drawdown,
+        "max_open_positions": limits_.max_open_positions,
+        "profit_cost_multiple": limits_.profit_cost_multiple,
+        "opening_balance": bot.opening_balance,
+    }
+    assert list(running) == list(CONDITIONS)
+    assert {name: Decimal(header[name]) for name in CONDITIONS} == running
+    assert header["per_trade_risk"] == format(DEFAULT_LIMITS.per_trade_risk, "f")
+    assert header["opening_balance"] == "12345.5"
+    assert header["max_open_positions"] == str(DEFAULT_LIMITS.max_open_positions)
+    assert run.clock_reads == 1
+
+
+def test_header_follows_changed_limits(tmp_path: Path) -> None:
+    changed = settings((BTC,), limits=limits(per_trade_risk=Decimal("0.005"), max_open_positions=3))
+    chosen = prepared(tmp_path, turn=changed)
+    run = Run(tmp_path)
+    assert run(chosen).outcome is BacktestOutcome.COMPLETED
+    header = _header(run.report(chosen))
+    assert (header["per_trade_risk"], header["max_open_positions"]) == ("0.005", "3")
+
+
+def test_refused_run_reads_no_clock(tmp_path: Path) -> None:
+    chosen = config(tmp_path)  # no data file
+    run = Run(tmp_path)
+    assert run(chosen).outcome is BacktestOutcome.REFUSED
+    assert run.clock_reads == 0
 
 
 def test_trade_spanning_split_counts_where_it_closes(tmp_path: Path) -> None:
@@ -253,7 +326,7 @@ def test_untrusted_candle_stops_without_report(tmp_path: Path) -> None:
 
 
 def test_two_runs_give_same_bytes(tmp_path: Path) -> None:
-    """AC-9, R-12: aynı dosya ve ayarla iki koşu bayt bayt aynı rapor; koşu saat okumaz."""
+    """AC-9, R-12: aynı dosya, ayar ve üretim anıyla iki koşu bayt bayt aynı rapor (spec 0040)."""
     reports = []
     for name in ("bir", "iki"):
         root = tmp_path / name

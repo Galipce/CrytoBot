@@ -5,6 +5,7 @@ reddi borsaya hiç istek göndermez, canlı depoya ve kilide dokunmaz, çıkış
 aynıdır. Geçen canlı başlatmanın satırı paper kanıtını konsolda ve kayıt dosyasında taşır.
 """
 
+import hashlib
 import io
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -110,6 +111,7 @@ def test_an_approval_before_the_paper_result_is_refused(tmp_path: Path) -> None:
     proof_store(
         paper,
         report=str(tmp_path / "report.txt"),
+        sha=hashlib.sha256((tmp_path / "report.txt").read_bytes()).hexdigest(),
         last_turn=datetime(2026, 11, 10, tzinfo=UTC),  # after live_approved_at (2026-11-09T20:00)
     )
     client = SpyClient()

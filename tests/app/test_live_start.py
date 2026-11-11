@@ -1,15 +1,19 @@
 """Spec 0033 AC-1, AC-2, AC-4: Canlı mod başlatma, çift kilit, hazırlık ve güvenlik kapıları."""
 
+import hashlib
 import io
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from crytobot.__main__ import EXIT_OK, EXIT_REFUSED, run
 from crytobot.app import (
     PrepareOutcome,
     StartOutcome,
+    StopRequest,
     create_live_exchange,
     open_for_start,
     prepare_live_store,
@@ -41,6 +45,15 @@ indirme anı: 2026-02-01T12:30:00+00:00
 ısınma mumu (candle_count): 200
 spread: 0.0005
 strateji: fast=12 slow=26 rsi=14 rsi_threshold=70 atr=14 k=2 r=2
+üretim anı: 2026-11-09T10:00:00+00:00
+fee: 0.001
+slippage: 0.001
+per_trade_risk: 0.01
+daily_loss_limit: 0.03
+max_drawdown: 0.15
+max_open_positions: 5
+profit_cost_multiple: 2
+opening_balance: 10000
 
 == örneklem dışı — BR-10 kanıtı adayı ==
 net kâr/zarar: 9.89000000 USDT (getiri %0.9891)
@@ -121,11 +134,13 @@ def write_test_config(
     store_file = (dir_path / "bot.db").as_posix()
     log_file = (dir_path / "bot.log").as_posix()
     report_file = dir_path / "report.txt"
-    report_file.write_text(SAMPLE_REPORT_TEXT, encoding="utf-8")
+    report_file.write_bytes(SAMPLE_REPORT_TEXT.encode("utf-8"))
+    sha = hashlib.sha256(report_file.read_bytes()).hexdigest()  # spec 0040 CB-1
 
     stage_lines = [
         "[stage]",
         f'report_path = "{(report_file).as_posix()}"',
+        f'report_sha256 = "{sha}"',
         'approved_by = "Galip Badem"',
         'approved_at = "2026-11-09T12:00:00Z"',
         "min_trades = 1",
@@ -141,7 +156,7 @@ def write_test_config(
         paper_file = dir_path / "paper.sqlite"
         if include_paper_store:
             if mode == "live" and not paper_file.exists():
-                proof_store(paper_file, report=str(report_file))
+                proof_store(paper_file, report=str(report_file), sha=sha)
             stage_lines.append(f'paper_store_path = "{paper_file.as_posix()}"')
 
     content = f"""
@@ -181,6 +196,9 @@ rsi_threshold = "70"
 atr_period = 14
 k = "2"
 r = "2"
+
+[backtest]
+spread = "0.0005"
 
 {chr(10).join(stage_lines)}
 
@@ -380,3 +398,70 @@ def test_live_start_fails_closed_on_credentials_or_permissions(tmp_path: Path) -
     )
     assert res_tn == EXIT_OK
     assert "Testnet" in out_tn.getvalue()
+
+
+# --- spec 0040 CB-5, CB-6: the new refusals before any exchange call ---------------------------
+
+
+class CallSpy(FakeLiveClient):
+    """Her genel çağrıyı yazar: kapı reddinde liste boş kalmalı."""
+
+    def __init__(self) -> None:
+        super().__init__(free_balance=Decimal(1000))
+        self.calls: list[str] = []
+
+    def __getattribute__(self, name: str) -> Any:
+        value = super().__getattribute__(name)
+        if callable(value) and not name.startswith("_"):
+            object.__getattribute__(self, "calls").append(name)
+        return value
+
+
+def _refused_live(root: Path, case: str, *, testnet: bool) -> str:
+    cfg = write_test_config(root, mode="live", testnet=testnet)
+    prepare_live_store(
+        (root / "bot.db").as_posix(), NOW, live_client=FakeLiveClient(free_balance=Decimal(1000))
+    )
+    report = root / "report.txt"
+    if case == "fingerprint":
+        report.write_bytes(report.read_bytes() + b"\n")
+    elif case == "condition":
+        text = cfg.read_text(encoding="utf-8").replace('slippage = "0.001"', 'slippage = "0.002"')
+        cfg.write_text(text, encoding="utf-8")
+    elif case == "spread":
+        text = cfg.read_text(encoding="utf-8").replace('spread = "0.0005"', 'spread = "yarım"')
+        cfg.write_text(text, encoding="utf-8")
+    else:  # the paper proof was run with another report of the same path
+        assert case == "proof"
+        paper = root / "paper.sqlite"
+        paper.unlink()
+        proof_store(paper, report=str(report), sha="f" * 64)
+    before = {p.name: p.read_bytes() for p in sorted(root.iterdir()) if p.is_file()}
+    client = CallSpy()
+    stop = StopRequest()
+    stop.request("test")  # should the gate wrongly pass, the loop ends at once
+    out = io.StringIO()
+    code = run(["start", "--live"], config_path=cfg, console=out, live_client=client, stop=stop)
+    assert code == EXIT_REFUSED
+    assert client.calls == []
+    assert {p.name: p.read_bytes() for p in sorted(root.iterdir()) if p.is_file()} == before
+    (refusal,) = out.getvalue().splitlines()
+    return refusal
+
+
+@pytest.mark.parametrize("testnet", [False, True])
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("fingerprint", "rapor onaylanandan farklı"),
+        ("condition", "ayar uyuşmazlığı: slippage"),
+        ("spread", "ayar geçersiz: backtest.spread"),
+        ("proof", "paper kanıtı: rapor uyuşmazlığı"),
+    ],
+)
+def test_live_and_testnet_refusal_no_exchange_call(
+    tmp_path: Path, case: str, message: str, testnet: bool
+) -> None:
+    """CB-6: canlıda ve testnet'te yeni retler depoya yazmaz, borsaya gitmez, tur atmaz; çıkış 1."""
+    refusal = _refused_live(tmp_path, case, testnet=testnet)
+    assert refusal.endswith(f"başlatma reddedildi: {message}")

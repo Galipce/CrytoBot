@@ -1,5 +1,6 @@
 """Spec 0028 AC-1, AC-2, AC-3, AC-8: BR-10 aşama kapısı CLI ve fail-closed başlatma testleri."""
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -17,7 +18,16 @@ from crytobot.backtest import (
 )
 from crytobot.persistence import StoreOutcome, StoreResult, load_start_records
 from tests.backtest.test_metrics import BTC, DAY1, DAY2
+from tests.backtest.test_report import CONDITION_FACTS
 from tests.main.test_entry import Bot, config_text, event_lines
+
+SHA = "0123456789abcdef" * 4  # a syntactically valid fingerprint for the setting-error cases
+APPROVED_AT = "2026-11-02T12:00:00Z"  # spec 0040 CB-2: after the generation, before the clock
+BACKTEST_SPREAD = '\n[backtest]\nspread = "0.0005"\n'  # spec 0040 CB-4: the running spread
+
+
+def fingerprint(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def make_valid_report_text() -> str:
@@ -41,6 +51,7 @@ def make_valid_report_text() -> str:
             "k": Decimal("2"),
             "r": Decimal("2"),
         },
+        **CONDITION_FACTS,
     )
     metrics = run_metrics(Decimal(10000), (), DAY2, (BTC, "ETH/USDT"))
     text = report_text(facts, metrics)
@@ -79,13 +90,14 @@ def test_confirmed_start_happy_path(tmp_path: Path) -> None:
     stage_toml = f"""
 [stage]
 report_path = "{report_file.as_posix()}"
+report_sha256 = "{fingerprint(report_file)}"
 approved_by = "Galip Badem"
-approved_at = "2026-11-08T12:00:00Z"
+approved_at = "{APPROVED_AT}"
 min_trades = 10
 min_profit_factor = "1.5"
 """
     bot = Bot(tmp_path)
-    base_text = config_text(tmp_path)
+    base_text = config_text(tmp_path) + BACKTEST_SPREAD
     (tmp_path / "crytobot.toml").write_text(base_text + stage_toml, encoding="utf-8")
 
     # Önce hazırlık
@@ -134,9 +146,10 @@ approved_at = "2026-11-08T12:00:00Z"
     assert "stage.report_path" in console
 
     # 3. approved_by eksik
-    stage_no_ab = """
+    stage_no_ab = f"""
 [stage]
 report_path = "rep.txt"
+report_sha256 = "{SHA}"
 approved_at = "2026-11-08T12:00:00Z"
 """
     (tmp_path / "crytobot.toml").write_text(config_text(tmp_path) + stage_no_ab, encoding="utf-8")
@@ -145,9 +158,10 @@ approved_at = "2026-11-08T12:00:00Z"
     assert "stage.approved_by" in console
 
     # 4. approved_at eksik
-    stage_no_at = """
+    stage_no_at = f"""
 [stage]
 report_path = "rep.txt"
+report_sha256 = "{SHA}"
 approved_by = "Galip"
 """
     (tmp_path / "crytobot.toml").write_text(config_text(tmp_path) + stage_no_at, encoding="utf-8")
@@ -197,11 +211,13 @@ def _proven_config(tmp_path: Path) -> Path:
     stage_toml = f"""
 [stage]
 report_path = "{report_file.as_posix()}"
+report_sha256 = "{fingerprint(report_file)}"
 approved_by = "Galip Badem"
-approved_at = "2026-11-08T12:00:00Z"
+approved_at = "{APPROVED_AT}"
 min_trades = 10
 """
-    (tmp_path / "crytobot.toml").write_text(config_text(tmp_path) + stage_toml, encoding="utf-8")
+    text = config_text(tmp_path) + BACKTEST_SPREAD + stage_toml
+    (tmp_path / "crytobot.toml").write_text(text, encoding="utf-8")
     return report_file
 
 
@@ -254,5 +270,95 @@ def test_a_start_whose_record_cannot_be_written_is_refused_before_any_turn(
 
     assert code == EXIT_REFUSED
     assert "başlatma reddedildi: başlatma kaydı yazılamadı" in console
+    assert event_lines(console, "tur") == []
+    assert bot.exchange.touched == []
+
+
+# --- spec 0040 CB-1…CB-6: the new refusals at the entry point ---------------------------------
+
+
+def test_a_proven_paper_start_records_the_report_fingerprint(tmp_path: Path) -> None:
+    """CB-5: kanıtlı paper kaydı onaylanan raporun parmak izini taşır; deneme kaydı taşımaz."""
+    bot = Bot(tmp_path)
+    report_file = _proven_config(tmp_path)
+    assert bot.run("prepare")[0] == EXIT_OK
+
+    assert bot.run("start", trial=False)[0] == EXIT_OK
+    assert bot.run("start", "--trial")[0] == EXIT_OK
+
+    records = load_start_records(bot.store).records
+    assert [r.report_sha256 for r in records] == [fingerprint(report_file), None]
+
+
+def _files(root: Path) -> dict[str, bytes]:
+    return {path.name: path.read_bytes() for path in sorted(root.iterdir()) if path.is_file()}
+
+
+def _break(case: str, config: Path, report: Path) -> str:
+    """Bir denetimi bozar; beklenen ret metnini döndürür."""
+    text = config.read_text(encoding="utf-8")
+    sha_line = f'report_sha256 = "{fingerprint(report)}"\n'
+    if case == "fingerprint":
+        report.write_bytes(report.read_bytes() + b"\n")
+        return "rapor onaylanandan farklı"
+    if case == "sha_missing":
+        config.write_text(text.replace(sha_line, ""), encoding="utf-8")
+        return "ayar eksik: stage.report_sha256"
+    if case == "sha_invalid":
+        config.write_text(text.replace(sha_line, 'report_sha256 = "xyz"\n'), encoding="utf-8")
+        return "ayar geçersiz: stage.report_sha256"
+    if case == "before":
+        early = text.replace(APPROVED_AT, "2026-11-01T11:59:59Z")  # generation: 12:00
+        config.write_text(early, encoding="utf-8")
+        return "onay rapordan önce"
+    if case == "future":
+        config.write_text(text.replace(APPROVED_AT, "2026-11-30T00:00:00Z"), encoding="utf-8")
+        return "onay gelecekte"
+    if case == "fact":
+        kept = [row for row in report.read_text(encoding="utf-8").splitlines(keepends=True)]
+        report.write_bytes("".join(r for r in kept if not r.startswith("fee:")).encode())
+        config.write_text(
+            text.replace(sha_line, f'report_sha256 = "{fingerprint(report)}"\n'),
+            encoding="utf-8",
+        )
+        return "rapor eksik: fee"
+    if case == "spread_missing":
+        config.write_text(text.replace(BACKTEST_SPREAD, "\n"), encoding="utf-8")
+        return "ayar eksik: backtest.spread"
+    assert case == "condition"
+    config.write_text(text.replace('fee = "0.001"', 'fee = "0.002"'), encoding="utf-8")
+    return "ayar uyuşmazlığı: fee"
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "fingerprint",
+        "sha_missing",
+        "sha_invalid",
+        "before",
+        "future",
+        "fact",
+        "spread_missing",
+        "condition",
+    ],
+)
+def test_new_refusals_write_nothing_exit_1(tmp_path: Path, case: str) -> None:
+    """CB-6: her yeni ret depoya yazmadan, kilit almadan, borsaya gitmeden, tur atmadan; çıkış 1
+    ve satır yalnız ilk karşılanmayan denetimi adlandırır."""
+    bot = Bot(tmp_path)
+    report_file = _proven_config(tmp_path)
+    assert bot.run("prepare")[0] == EXIT_OK
+    expected = _break(case, bot.config_path, report_file)
+    before = _files(tmp_path)  # store, lock, log, config and report: every byte
+    bot.exchange.touched.clear()
+
+    code, console = bot.run("start", trial=False)
+
+    assert code == EXIT_REFUSED
+    (refusal,) = event_lines(console, "başlatma")
+    assert refusal.endswith(f"başlatma reddedildi: {expected}")
+    assert _files(tmp_path) == before
+    assert load_start_records(bot.store).records == ()
     assert event_lines(console, "tur") == []
     assert bot.exchange.touched == []

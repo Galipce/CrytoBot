@@ -115,4 +115,5 @@ def test_notices_are_counted_never_sent(tmp_path: Path) -> None:
         "invalid_data 1, stale_data 1"
     )
     assert not any("durum başladı" in line or "durum bitti" in line for line in run.lines)
-    assert len(run.lines) == 3  # start, report, done: nothing else reached the console
+    assert run.lines[2].startswith("rapor parmak izi: ")  # spec 0040 CB-1
+    assert len(run.lines) == 4  # start, report, fingerprint, done: nothing else reached the console

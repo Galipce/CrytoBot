@@ -3,8 +3,11 @@
 Sıra: rapor dosyası var mı (R-4) → veri dosyası (R-3) → dosya ile ayar uyumu → geçici depo →
 dönemin her tur anında paper turunun aynısı (`run_turn`, simüle saat) → metrikler → rapor (konsol,
 sonra dosya). Gerçek etkiler `BacktestParts` ile gelir: `app` dosya açmaz, saat çağırmaz, ağa
-çıkmaz. Geçici depoyu (`store_path`) giriş noktası geçici bir dizinde verir; bot deposu, kilidi ve
-kayıt dosyası hiç açılmaz (R-1).
+çıkmaz. Gerçek saat (`clock`) yalnız bir kez, raporun üretim anı için okunur; turlar simüle saatle
+koşar (spec 0040 CB-2). Rapor başlığı botun etkin rapor koşullarını yazar (CB-3, G-5); dosya
+yazılınca yazılan baytların parmak izi `rapor parmak izi: <hex>` satırıyla söylenir (CB-1). Geçici
+depoyu (`store_path`) giriş noktası geçici bir dizinde verir; bot deposu, kilidi ve kayıt dosyası
+hiç açılmaz (R-1).
 
 Her turdan sonra depo yüklenir: kasa `account_state(defter, son bilinen tur fiyatları)` ile
 bulunur (turun gözlemiyle aynı tanım, Risk 7). Günlük zarar günü, sabit bir öneriyle
@@ -32,7 +35,13 @@ from crytobot.app._result import TurnOutcome, TurnResult
 from crytobot.app._session import AppError
 from crytobot.app._start import PrepareOutcome, prepare_store
 from crytobot.app._turn import run_turn
-from crytobot.backtest import ReportFacts, TurnRecord, report_text, run_metrics
+from crytobot.backtest import (
+    ReportFacts,
+    TurnRecord,
+    report_fingerprint,
+    report_text,
+    run_metrics,
+)
 from crytobot.execution import PAPER, CloseOrder, Order, OrderOutcome, OrderStatus, PaperExchange
 from crytobot.market_data import CANDLE_INTERVALS, HistoryData, HistoryRead, HistoryReadProblem
 from crytobot.persistence import StoredState, load_store
@@ -42,6 +51,7 @@ from crytobot.strategy import NoProposalReason
 
 _EVENT = "backtest"
 _NOT_WRITTEN = "rapor yazılmadı"
+FINGERPRINT_LINE = "rapor parmak izi"
 _READ_REFUSALS = {
     HistoryReadProblem.MISSING: "veri dosyası yok",
     HistoryReadProblem.UNREADABLE: "veri dosyası okunamıyor",
@@ -73,7 +83,7 @@ class BacktestExit:
 @dataclass(frozen=True)
 class BacktestParts:
     """Koşunun gerçek etkileri: veri dosyası okuması, rapor dosyası denetimi ve yazıcısı, konsol
-    satırı, durdurma isteği ve geçici deponun yolu (var olmamalı)."""
+    satırı, durdurma isteği, geçici deponun yolu (var olmamalı) ve üretim anının saati (UTC)."""
 
     read: Callable[[str], HistoryRead]
     report_exists: Callable[[str], bool]
@@ -81,6 +91,7 @@ class BacktestParts:
     write: Callable[[str], None]
     stop: StopRequest
     store_path: str
+    clock: Callable[[], datetime]
 
 
 class _Halt(AppError):
@@ -279,6 +290,15 @@ class _Run:
             bot.read.candle_count,
             config.spread,
             strategy,
+            generated_at=self.parts.clock(),
+            fee=Decimal(bot.turn.fee),
+            slippage=Decimal(bot.turn.slippage),
+            per_trade_risk=bot.turn.limits.per_trade_risk,
+            daily_loss_limit=bot.turn.limits.daily_loss_limit,
+            max_drawdown=bot.turn.limits.max_drawdown,
+            max_open_positions=bot.turn.limits.max_open_positions,
+            profit_cost_multiple=bot.turn.limits.profit_cost_multiple,
+            opening_balance=bot.opening_balance,
         )
         return report_text(facts, metrics)
 
@@ -311,6 +331,7 @@ def _run(config: BacktestConfig, parts: BacktestParts) -> BacktestExit:
         message = f"rapor dosyası yazılamadı: {config.report_path}; rapor yalnız konsolda"
         _say(parts, message)
         return BacktestExit(BacktestOutcome.REPORT_NOT_WRITTEN, message, len(moments), report)
+    parts.write(f"{FINGERPRINT_LINE}: {report_fingerprint(report)}")  # spec 0040 CB-1, G-7
     message = f"tamam: rapor dosyası {config.report_path}"
     _say(parts, message)
     return BacktestExit(BacktestOutcome.COMPLETED, message, len(moments), report)

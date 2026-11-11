@@ -10,6 +10,7 @@ from crytobot.app import load_stage_config
 def stage(**extra: object) -> dict[str, Any]:
     table: dict[str, object] = {
         "report_path": "rapor.txt",
+        "report_sha256": "0" * 64,
         "approved_by": "Galip Badem",
         "approved_at": "2026-11-08T12:00:00Z",
         "live_approved_by": "Galip Badem",
