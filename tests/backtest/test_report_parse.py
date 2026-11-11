@@ -1,19 +1,26 @@
-"""Spec 0028 AC-5 (R-3) ve rapor ayrıştırma testleri (plan Adım 1)."""
+"""Spec 0028 AC-5 (R-3) ve rapor ayrıştırma testleri (plan Adım 1); spec 0040 CB-1, CB-4."""
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from crytobot.backtest import (
     CANDIDATE_MARK,
+    CONDITIONS,
+    GENERATED_LABEL,
     ReportFacts,
     ReportReadProblem,
     parse_report,
     read_report,
+    report_fingerprint,
     report_text,
     run_metrics,
 )
 from tests.backtest.test_metrics import BTC, DAY1, DAY2, RECORDS
+from tests.backtest.test_report import CONDITION_FACTS, GENERATED
 
 FACTS = ReportFacts(
     start=DAY1,
@@ -34,6 +41,7 @@ FACTS = ReportFacts(
         "k": Decimal("2"),
         "r": Decimal("2"),
     },
+    **CONDITION_FACTS,
 )
 
 
@@ -109,3 +117,79 @@ def test_valid_report_parsing(tmp_path: Path) -> None:
     assert cand.trades == 1
     assert cand.max_drawdown == Decimal("0.000109")
     assert cand.profit_factor is None  # "tanımsız"
+
+    # spec 0040: üretim anı, rapor koşulları ve dosyanın ham baytlarının parmak izi
+    assert data.generated_at == GENERATED
+    assert dict(data.conditions) == {name: Decimal(CONDITION_FACTS[name]) for name in CONDITIONS}
+    assert res.sha256 == hashlib.sha256(report_file.read_bytes()).hexdigest()
+
+
+def _without(report: str, *labels: str) -> str:
+    return "".join(
+        row for row in report.splitlines(keepends=True) if row.split(":", 1)[0] not in labels
+    )
+
+
+def test_old_header_parses_without_facts() -> None:
+    """Spec 0040 CB-4: yeni başlık satırları, spread ve strateji yoksa bozuk değil, boş."""
+    old = _without(sample_report(), GENERATED_LABEL, "spread", "strateji", *CONDITIONS)
+    res = parse_report(old)
+    assert res.problem is None and res.data is not None
+    assert res.data.generated_at is None
+    assert res.data.spread is None
+    assert res.data.strategy is None
+    assert dict(res.data.conditions) == {}
+    partial = parse_report(_without(sample_report(), "fee", "opening_balance"))
+    assert partial.data is not None
+    assert set(partial.data.conditions) == set(CONDITIONS) - {"fee", "opening_balance"}
+
+
+@pytest.mark.parametrize(
+    ("row", "replacement"),
+    [
+        ("fee: 0.001", "fee: bir"),
+        ("fee: 0.001", "fee: NaN"),
+        ("max_open_positions: 5", "max_open_positions: sNaN"),
+        ("üretim anı: 2026-11-01T12:00:00+00:00", "üretim anı: dün"),
+        ("üretim anı: 2026-11-01T12:00:00+00:00", "üretim anı: 2026-11-01T12:00:00"),
+        ("spread: 0.0005", "spread: Infinity"),
+        ("rsi_threshold=70", "rsi_threshold=NaN"),
+    ],
+)
+def test_a_present_but_broken_fact_is_corrupt(row: str, replacement: str) -> None:
+    report = sample_report()
+    assert row in report
+    res = parse_report(report.replace(row, replacement, 1))
+    assert res.problem is ReportReadProblem.CORRUPT
+    assert res.data is None
+
+
+def test_generated_at_is_read_as_utc() -> None:
+    local = sample_report().replace(
+        "üretim anı: 2026-11-01T12:00:00+00:00", "üretim anı: 2026-11-01T15:00:00+03:00"
+    )
+    res = parse_report(local)
+    assert res.data is not None
+    assert res.data.generated_at == GENERATED
+    assert res.data.generated_at.tzinfo is UTC
+
+
+def test_fingerprint_is_of_the_raw_bytes_as_read(tmp_path: Path) -> None:
+    """Spec 0040 G-1, plan Risk 4: CRLF dosya aynı ayrışır ama parmak izi kendi baytlarınındır."""
+    report = sample_report()
+    lf, crlf = tmp_path / "lf.txt", tmp_path / "crlf.txt"
+    lf.write_bytes(report.encode("utf-8"))
+    crlf.write_bytes(report.replace("\n", "\r\n").encode("utf-8"))
+    from_lf, from_crlf = read_report(lf), read_report(crlf)
+    assert from_lf.data == from_crlf.data
+    assert from_lf.sha256 == report_fingerprint(report)
+    assert from_crlf.sha256 == hashlib.sha256(crlf.read_bytes()).hexdigest()
+    assert from_lf.sha256 != from_crlf.sha256
+
+
+def test_unreadable_text_still_carries_its_fingerprint(tmp_path: Path) -> None:
+    broken = tmp_path / "bozuk.txt"
+    broken.write_bytes(b"\xff\xfe bozuk")
+    res = read_report(broken)
+    assert res.problem is ReportReadProblem.UNREADABLE
+    assert res.sha256 == hashlib.sha256(b"\xff\xfe bozuk").hexdigest()

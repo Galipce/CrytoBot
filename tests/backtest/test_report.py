@@ -1,11 +1,14 @@
-"""Spec 0025 AC-9 (R-11, R-12) ve rapor biçimi (plan Risk 9)."""
+"""Spec 0025 AC-9 (R-11, R-12) ve rapor biçimi (plan Risk 9); spec 0040 CB-2, CB-3, PB-3."""
 
-from datetime import UTC, datetime, timedelta
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Any
 
 from crytobot.backtest import (
     ASSUMPTIONS,
     CANDIDATE_MARK,
+    CONDITIONS,
     ReportFacts,
     money,
     percent,
@@ -14,6 +17,20 @@ from crytobot.backtest import (
     run_metrics,
 )
 from tests.backtest.test_metrics import BTC, DAY1, DAY2, RECORDS
+
+GENERATED = datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
+# spec 0040: generation time and the report conditions (the test bot's settings, tests.app)
+CONDITION_FACTS: dict[str, Any] = {
+    "generated_at": GENERATED,
+    "fee": Decimal("0.001"),
+    "slippage": Decimal("0.001"),
+    "per_trade_risk": Decimal("0.01"),
+    "daily_loss_limit": Decimal("0.03"),
+    "max_drawdown": Decimal("0.15"),
+    "max_open_positions": 5,
+    "profit_cost_multiple": Decimal("2"),
+    "opening_balance": Decimal("10000"),
+}
 
 FACTS = ReportFacts(
     start=DAY1,
@@ -25,6 +42,7 @@ FACTS = ReportFacts(
     downloaded_at=datetime(2026, 2, 1, 12, 30, tzinfo=UTC),
     candle_count=200,
     spread=Decimal("0.0005"),
+    **CONDITION_FACTS,
 )
 
 
@@ -134,3 +152,60 @@ def test_number_formats_round_half_even() -> None:
     assert percent(None) == "tanımsız"
     assert ratio(Decimal("2.00005")) == "2.0000"
     assert ratio(None) == "tanımsız"
+
+
+def header(report: str) -> list[str]:
+    return report.partition("\n\nvarsayımlar:")[0].splitlines()
+
+
+def test_header_carries_generated_at() -> None:
+    """Spec 0040 CB-2, CB-3: üretim anı ve rapor koşulları başlığın sonuna, sabit sırayla."""
+    rows = header(text())
+    assert rows[-9:] == [
+        "üretim anı: 2026-11-01T12:00:00+00:00",
+        "fee: 0.001",
+        "slippage: 0.001",
+        "per_trade_risk: 0.01",
+        "daily_loss_limit: 0.03",
+        "max_drawdown: 0.15",
+        "max_open_positions: 5",
+        "profit_cost_multiple: 2",
+        "opening_balance: 10000",
+    ]
+    assert [row.split(":", 1)[0] for row in rows[-8:]] == list(CONDITIONS)
+
+
+def test_generated_at_is_written_in_utc() -> None:
+    local = GENERATED.astimezone(timezone(timedelta(hours=3)))
+    metrics = run_metrics(Decimal(1000), (), DAY2, (BTC,))
+    report = report_text(replace(FACTS, generated_at=local), metrics)
+    assert "üretim anı: 2026-11-01T12:00:00+00:00\n" in report
+
+
+def test_only_the_generation_line_differs_between_moments() -> None:
+    """Spec 0040, 0025 R-12 (plan Risk 1): farklı üretim anı → yalnız o satır farklı."""
+    metrics = run_metrics(Decimal(1000), RECORDS, DAY2, (BTC,))
+    first = report_text(FACTS, metrics).splitlines()
+    later = report_text(replace(FACTS, generated_at=GENERATED + timedelta(hours=5)), metrics)
+    differing = [
+        (old, new) for old, new in zip(first, later.splitlines(), strict=True) if old != new
+    ]
+    assert differing == [
+        ("üretim anı: 2026-11-01T12:00:00+00:00", "üretim anı: 2026-11-01T17:00:00+00:00")
+    ]
+
+
+def test_existing_header_rows_keep_their_order() -> None:
+    """PB-3: mevcut satırlar yerinde; yeni satırlar yalnız eklenir."""
+    rows = header(text())
+    assert [row.split(":", 1)[0] for row in rows[:-9]] == [
+        "CrytoBot backtest raporu",
+        "dönem",
+        "mum aralığı",
+        "tur aralığı",
+        "ayrım anı",
+        "çiftler",
+        "indirme anı",
+        "ısınma mumu (candle_count)",
+        "spread",
+    ]

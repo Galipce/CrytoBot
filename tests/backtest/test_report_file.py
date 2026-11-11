@@ -1,11 +1,12 @@
 """Spec 0025 AC-10 (dosya kısmı), R-4, R-13: rapor dosyası `.part` üzerinden, üzerine yazmadan."""
 
+import hashlib
 import os
 from pathlib import Path
 
 import pytest
 
-from crytobot.backtest import PART_SUFFIX, report_exists, write_report
+from crytobot.backtest import PART_SUFFIX, report_exists, report_fingerprint, write_report
 
 TEXT = "CrytoBot backtest raporu\nçiftler: BTC/USDT\n"
 
@@ -19,6 +20,19 @@ def test_writes_exact_bytes(tmp_path: Path) -> None:
     assert write_report(str(path), TEXT)
     assert path.read_bytes() == TEXT.encode("utf-8")
     assert names(tmp_path) == ["rapor.txt"]
+
+
+def test_written_bytes_match_fingerprint(tmp_path: Path) -> None:
+    """Spec 0040 CB-1, G-1: parmak izi diske yazılan ham baytların SHA-256'sı; çevrim yok."""
+    text = 'CrytoBot backtest raporu\nçiftler: BTC/USDT\ntırnak "ş"\n'
+    path = tmp_path / "rapor.txt"
+    assert write_report(str(path), text)
+    on_disk = path.read_bytes()
+    assert b"\r" not in on_disk
+    assert report_fingerprint(text) == hashlib.sha256(on_disk).hexdigest()
+    assert len(report_fingerprint(text)) == 64
+    assert report_fingerprint(text) == report_fingerprint(text).lower()
+    assert report_fingerprint(text + " ") != report_fingerprint(text)
 
 
 @pytest.mark.parametrize("existing", ["rapor.txt", "rapor.txt" + PART_SUFFIX])

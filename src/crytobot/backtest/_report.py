@@ -1,13 +1,16 @@
 """Rapor metni (spec 0025 R-10, R-11, R-12; plan Risk 9). Saf ve belirlenimci.
 
 Düz Türkçe metin, `\\n` satır sonu, sabit sıra: koşu bilgisi, varsayımlar, sonra örneklem içi,
-örneklem dışı ve tüm koşu. Para 8 ondalık, yüzde ve oran 4 ondalık, `ROUND_HALF_EVEN`. Gerçek
-saat, makine adı ve süre yazılmaz. Yalnız örneklem dışı parça "BR-10 kanıtı adayı" işaretini
-taşır; rapor hiçbir parça için bir hüküm (eşik, sonuç) yazmaz.
+örneklem dışı ve tüm koşu. Para 8 ondalık, yüzde ve oran 4 ondalık, `ROUND_HALF_EVEN`. Makine
+adı ve süre yazılmaz; gerçek saat yalnız başlıktaki üretim anıdır (spec 0040 CB-2, 0025 R-12'yi
+bu kadarıyla geçersiz kılar): aynı veri, ayar ve üretim anı bayt bayt aynı raporu verir. Başlık
+rapor koşullarını da (spec 0040 CB-3) `CONDITIONS` sırasıyla, botun etkin değeriyle yazar.
+Yalnız örneklem dışı parça "BR-10 kanıtı adayı" işaretini taşır; rapor hiçbir parça için bir
+hüküm (eşik, sonuç) yazmaz.
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
 
@@ -15,6 +18,18 @@ from crytobot.backtest._metrics import PartMetrics, RunMetrics
 
 CANDIDATE_MARK = "BR-10 kanıtı adayı"
 UNDEFINED = "tanımsız"
+GENERATED_LABEL = "üretim anı"
+# spec 0040 CB-3: the report conditions, in header order; names are the setting keys (plan Risk 5)
+CONDITIONS: tuple[str, ...] = (
+    "fee",
+    "slippage",
+    "per_trade_risk",
+    "daily_loss_limit",
+    "max_drawdown",
+    "max_open_positions",
+    "profit_cost_multiple",
+    "opening_balance",
+)
 _MONEY = Decimal("0.00000001")
 _RATIO = Decimal("0.0001")
 _CONTEXT = Context(prec=120, rounding=ROUND_HALF_EVEN)
@@ -33,7 +48,8 @@ ASSUMPTIONS: tuple[str, ...] = (
 @dataclass(frozen=True)
 class ReportFacts:
     """Koşunun bilgisi: dosyanın dönemi (bitiş hariç), aralıklar (Binance metni), ayrım anı,
-    çiftler, indirme anı, ısınma mumu sayısı ve ayardaki spread."""
+    çiftler, indirme anı, ısınma mumu sayısı ve ayardaki spread; spec 0040: üretim anı ve rapor
+    koşulları (etkin değerler, `CONDITIONS` adlarıyla)."""
 
     start: datetime
     end: datetime
@@ -45,6 +61,23 @@ class ReportFacts:
     candle_count: int
     spread: Decimal
     strategy: Mapping[str, int | Decimal | str] | None = None
+    generated_at: datetime = field(kw_only=True)
+    fee: Decimal = field(kw_only=True)
+    slippage: Decimal = field(kw_only=True)
+    per_trade_risk: Decimal = field(kw_only=True)
+    daily_loss_limit: Decimal = field(kw_only=True)
+    max_drawdown: Decimal = field(kw_only=True)
+    max_open_positions: int = field(kw_only=True)
+    profit_cost_multiple: Decimal = field(kw_only=True)
+    opening_balance: Decimal = field(kw_only=True)
+
+    def conditions(self) -> tuple[tuple[str, Decimal | int], ...]:
+        """`CONDITIONS` sırasıyla (ad, değer)."""
+        return tuple((name, getattr(self, name)) for name in CONDITIONS)
+
+
+def _plain(value: Decimal | int) -> str:
+    return format(value, "f") if isinstance(value, Decimal) else str(value)
 
 
 def _moment(at: datetime | None) -> str:
@@ -135,6 +168,8 @@ def report_text(facts: ReportFacts, metrics: RunMetrics) -> str:
     ]
     if facts.strategy is not None:
         header.append(f"strateji: {_strategy_text(facts.strategy)}")
+    header.append(f"{GENERATED_LABEL}: {_moment(facts.generated_at)}")
+    header.extend(f"{name}: {_plain(value)}" for name, value in facts.conditions())
     lines = [
         *header,
         "",
