@@ -4,7 +4,9 @@
 risk ve maliyet koşullarıyla değerlendirir ve tek bir son değerlendirme raporu yazar. Sıra:
 
 1. Koşullar (spec 0040 rapor koşulları ve `[backtest] spread`) bütün yapılandırmalarda eşit mi
-   (R-6, AC-7); değilse `ayar uyuşmazlığı: <ad>`, tur atılmaz, rapor yazılmaz.
+   (R-6, AC-7); değilse `ayar uyuşmazlığı: <ad>`, tur atılmaz, rapor yazılmaz. Spec 0043 R-4:
+   sonra mum sayısı her kombinasyonun `required_candles`'ına yeter mi; değilse
+   `ayar geçersiz: market.candle_count`, tur atılmaz, rapor yazılmaz.
 2. Rapor dosyası (ilk yapılandırmanın yolu) yok mu; sonra her yapılandırmanın veri dosyası ve üç
    dönemi — hiçbir tur atılmadan önce.
 3. Her aday için ızgaranın her kombinasyonu yalnız örneklem içi turlarla koşar (sonraki mumlar
@@ -15,9 +17,13 @@ risk ve maliyet koşullarıyla değerlendirir ve tek bir son değerlendirme rapo
    ilkininkiyle yeniden karşılaştırılır (fark → rapor yazmadan ret, AC-7). `paper_candidate` (R-4),
    tek rapor (R-5: sınanan kombinasyon sayısı), parmak izi satırı (spec 0040 yolu).
 
-Izgara (`grids`) bu spec'te aday başına tek kombinasyondur: yapılandırmanın kendi `[strategy]`
-ayarı (0043 doldurur). Her koşunun geçici deposu `parts.store_path`'ten türetilir (ilki kendisi,
-sonrakiler `<yol>-<n>`); hepsi giriş noktasının geçici dizinindedir.
+Spec 0043 R-3, R-5: `grids` verilmezse her yapılandırma (aralık) için S0…S3'ün sabit ızgarası
+(`CANDIDATE_GRIDS`) sınanır; aday "<ad> <aralık>"dır, yapılandırma sırasıyla, içinde S0…S3.
+Ayardaki strateji ızgarayı değiştirmez (AC-7). `grids` verilirse (testler) her yapılandırma kendi
+tek ızgarasıyla eşlenir (0042'deki gibi). Adayın adı ızgaranın ayar tipindendir. "örneklem içi
+işlem yetersiz" satırı ızgaranın en yüksek işlem sayısını yazar (R-6). Her koşunun geçici deposu
+`parts.store_path`'ten türetilir (ilki kendisi, sonrakiler `<yol>-<n>`); hepsi giriş noktasının
+geçici dizinindedir.
 """
 
 from collections.abc import Sequence
@@ -44,21 +50,22 @@ from crytobot.app._backtest import (
     strategy_setting,
 )
 from crytobot.app._backtest_config import BacktestConfig
-from crytobot.app._stage import STRATEGY_NAME, bot_conditions
+from crytobot.app._grid import CANDIDATE_GRIDS
+from crytobot.app._stage import bot_conditions
 from crytobot.backtest import (
     CONDITIONS,
-    NOT_ENOUGH_TRADES,
     Assessed,
     CandidateResult,
     RunMetrics,
     final_report_text,
+    not_enough_trades,
     paper_candidate,
     run_metrics,
     select_combination,
     verdict,
 )
 from crytobot.market_data import HistoryData
-from crytobot.strategy import StrategySettings
+from crytobot.strategy import Settings, required_candles
 
 
 @dataclass(frozen=True)
@@ -83,11 +90,21 @@ def _same_conditions(configs: Sequence[BacktestConfig]) -> None:
                 raise _refused(f"ayar uyuşmazlığı: {name}")
 
 
+def _warm_enough(
+    pairs: Sequence[tuple[int, Sequence[Settings]]], configs: Sequence[BacktestConfig]
+) -> None:
+    """R-4: her kombinasyon, koştuğu yapılandırmanın mum sayısıyla ısınır; değilse ret."""
+    for index, grid in pairs:
+        count = configs[index].bot.read.candle_count
+        if any(count < required_candles(setting) for setting in grid):
+            raise _refused("ayar geçersiz: market.candle_count")
+
+
 def _store(base: str, index: int) -> str:
     return base if index == 0 else f"{base}-{index}"  # `app` builds no path; same directory
 
 
-def _combination(config: BacktestConfig, setting: StrategySettings) -> BacktestConfig:
+def _combination(config: BacktestConfig, setting: Settings) -> BacktestConfig:
     """Izgaranın bir kombinasyonu: yalnız strateji ayarı değişir (R-6: risk ve maliyet aynı)."""
     turn = replace(config.bot.turn, strategy=setting)
     return replace(config, bot=replace(config.bot, turn=turn))
@@ -117,9 +134,10 @@ class _Evaluation:
         return run_metrics(bot.opening_balance, records, config.split_at, pairs, config.holdout_at)
 
     def candidate(
-        self, config: BacktestConfig, data: HistoryData, grid: Sequence[StrategySettings]
+        self, config: BacktestConfig, data: HistoryData, grid: Sequence[Settings]
     ) -> tuple[CandidateResult, RunMetrics | None, BacktestConfig]:
-        label = f"{STRATEGY_NAME} {_interval_text(config.bot.turn_interval)}"
+        name = grid[0].name
+        label = f"{name} {_interval_text(config.bot.turn_interval)}"
         _say(self.parts, f"aday: {label} kombinasyon={len(grid)}")
         moments = _moments(data, config.bot.turn_interval)
         inside = _in_sample(moments, config)
@@ -128,10 +146,9 @@ class _Evaluation:
         chosen = select_combination(parts)
         interval = _interval_text(config.bot.turn_interval)
         if chosen is None:
-            _say(self.parts, f"aday {label}: {NOT_ENOUGH_TRADES}")
-            result = CandidateResult(
-                STRATEGY_NAME, interval, None, None, None, None, NOT_ENOUGH_TRADES
-            )
+            decision = not_enough_trades(parts)
+            _say(self.parts, f"aday {label}: {decision}")
+            result = CandidateResult(name, interval, None, None, None, None, decision)
             return result, None, config
         selected = tried[chosen]
         metrics = self.simulate(selected, data, moments, None)
@@ -139,7 +156,7 @@ class _Evaluation:
         decision = verdict(metrics.out_of_sample, metrics.holdout)
         _say(self.parts, f"aday {label}: {decision}")
         result = CandidateResult(
-            STRATEGY_NAME,
+            name,
             interval,
             strategy_setting(selected.bot.turn.strategy),
             metrics.in_sample,
@@ -161,21 +178,24 @@ class _Evaluation:
 
 def _evaluate(
     configs: Sequence[BacktestConfig],
-    grids: Sequence[Sequence[StrategySettings]],
+    pairs: Sequence[tuple[int, Sequence[Settings]]],
     parts: BacktestParts,
 ) -> BacktestExit:
-    if not configs or len(grids) != len(configs) or any(not grid for grid in grids):
+    """`pairs`: (yapılandırmanın sırası, ızgara), değerlendirme sırasıyla."""
+    if not configs or not pairs or any(not grid for _, grid in pairs):
         raise _refused("değerlendirilecek aday yok")
     _same_conditions(configs)
+    _warm_enough(pairs, configs)
     first = configs[0]
     _report_free(first.report_path, parts)
     datas = [_history(config, parts) for config in configs]
-    combinations = sum(len(grid) for grid in grids)
-    _say(parts, f"son değerlendirme başladı: aday={len(configs)} kombinasyon={combinations}")
+    combinations = sum(len(grid) for _, grid in pairs)
+    _say(parts, f"son değerlendirme başladı: aday={len(pairs)} kombinasyon={combinations}")
     evaluation = _Evaluation(configs, parts)
     results: list[CandidateResult] = []
     full: list[tuple[RunMetrics, BacktestConfig, HistoryData] | None] = []
-    for config, data, grid in zip(configs, datas, grids, strict=True):
+    for index, grid in pairs:
+        config, data = configs[index], datas[index]
         result, metrics, selected = evaluation.candidate(config, data, grid)
         results.append(result)
         full.append(None if metrics is None else (metrics, selected, data))
@@ -204,12 +224,22 @@ def _evaluate(
     return _publish(parts, first.report_path, report, evaluation.turns)
 
 
+def _pairs(
+    configs: Sequence[BacktestConfig], grids: Sequence[Sequence[Settings]] | None
+) -> list[tuple[int, Sequence[Settings]]]:
+    """R-3: verilmezse her yapılandırmaya S0…S3'ün ızgarası; verilirse sırayla birer ızgara."""
+    if grids is None:
+        return [(index, grid) for index in range(len(configs)) for grid in CANDIDATE_GRIDS]
+    if len(grids) != len(configs):
+        return []
+    return list(enumerate(grids))
+
+
 def run_evaluation(
     configs: Sequence[BacktestConfig],
     parts: BacktestParts,
-    grids: Sequence[Sequence[StrategySettings]] | None = None,
+    grids: Sequence[Sequence[Settings]] | None = None,
 ) -> BacktestExit:
-    """Spec 0042: son değerlendirme; `grids` verilmezse her aday yalnız kendi strateji ayarıyla.
-    Ret ve durma `run_backtest`'in yoluyla adıyla döner; ikinci durdurma isteği yeniden fırlar."""
-    chosen = [[config.bot.turn.strategy] for config in configs] if grids is None else grids
-    return guarded(parts, lambda: _evaluate(configs, chosen, parts))
+    """Spec 0042, 0043: son değerlendirme; `grids` verilmezse her aralıkta R-3 ızgarası. Ret ve
+    durma `run_backtest`'in yoluyla adıyla döner; ikinci durdurma isteği yeniden fırlar."""
+    return guarded(parts, lambda: _evaluate(configs, _pairs(configs, grids), parts))

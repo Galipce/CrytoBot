@@ -11,7 +11,8 @@ değeri bozuk satır yine `CORRUPT`'tır.
 Spec 0042 R-7 (0028 R-3'ün kapı kısmını geçersiz kılar): yalnız son değerlendirme raporu okunur.
 İlk satır varsayılan raporun başlığıysa `NOT_FINAL` ("rapor son değerlendirme değil"), aday
 işaretinden önce. `paper adayı: aday yok` → `NO_CANDIDATE_MARK`. Strateji satırının ilk `=`'siz
-parçası strateji adıdır (`ParsedReport.strategy_name`); yoksa `None`.
+parçası strateji adıdır (`ParsedReport.strategy_name`); yoksa `None`. Spec 0043: S1'in
+`trend_period`'u ve S2'nin `breakout_period`'u da okunur.
 """
 
 from collections.abc import Mapping
@@ -113,6 +114,8 @@ def _parse_strategy(line: str) -> dict[str, int | Decimal]:
             params["k"] = Decimal(val)
         elif key == "r":
             params["r"] = Decimal(val)
+        elif key in ("trend_period", "breakout_period"):  # spec 0043: S1, S2
+            params[key] = int(val)
     for value in params.values():
         if isinstance(value, Decimal) and not value.is_finite():
             raise ValueError(value)  # NaN would compare unequal, sNaN would raise in the gate

@@ -24,6 +24,7 @@ from crytobot.backtest import (
     PASSED,
     Assessed,
     PartMetrics,
+    not_enough_trades,
     paper_candidate,
     select_combination,
     verdict,
@@ -103,6 +104,34 @@ def test_no_combination_with_30_trades() -> None:
     assert NOT_ENOUGH_TRADES == "geçmedi: örneklem içi işlem yetersiz"
 
 
+# --- spec 0043 AC-10 (R-6) ---
+
+
+def test_failed_lines_carry_value_and_threshold() -> None:
+    """Her "geçmedi" satırı tutmayan değeri ve eşiği yazar (spec örnekleri dahil)."""
+    assert not_enough_trades([part(trades=29), part(trades=4)]) == (
+        "geçmedi: örneklem içi işlem yetersiz (29 < 30)"
+    )
+    assert not_enough_trades([]) == "geçmedi: örneklem içi işlem yetersiz (0 < 30)"
+    assert verdict(part(profit_factor=Decimal("1.15")), GOOD) == (
+        "geçmedi: örneklem dışı kâr faktörü (1.1500 < 1.2)"
+    )
+    assert verdict(part(net=Decimal("-5")), GOOD) == (
+        "geçmedi: örneklem dışı net kâr (-5.00000000 USDT ≤ 0)"
+    )
+    assert verdict(part(trades=29), GOOD) == "geçmedi: örneklem dışı işlem sayısı (29 < 30)"
+    assert verdict(part(drawdown=Decimal("0.152")), GOOD) == (
+        "geçmedi: örneklem dışı drawdown (%15.2000 ≥ %15)"
+    )
+    assert verdict(GOOD, part(net=Decimal("-0.5"))) == (
+        "geçmedi: saklı dönem net kâr (-0.50000000 USDT ≤ 0)"
+    )
+    assert verdict(GOOD, part(drawdown=Decimal("0.3"))) == (
+        "geçmedi: saklı dönem drawdown (%30.0000 ≥ %15)"
+    )
+    assert verdict(GOOD, GOOD) == PASSED == "geçti"
+
+
 _factors = st.one_of(st.none(), st.decimals(min_value=0, max_value=20, places=2, allow_nan=False))
 _parts = st.builds(
     part,
@@ -143,13 +172,16 @@ def test_selection_ignores_later_periods(
     ("changes", "expected"),
     [
         ({"profit_factor": Decimal("1.2"), "trades": 30}, PASSED),
-        ({"profit_factor": Decimal("1.19")}, OOS_PROFIT_FACTOR),
-        ({"profit_factor": Decimal("1.19996")}, OOS_PROFIT_FACTOR),  # "1.2000" in the report
-        ({"trades": 29}, OOS_TRADES),
-        ({"drawdown": Decimal("0.15")}, OOS_DRAWDOWN),
+        ({"profit_factor": Decimal("1.19")}, f"{OOS_PROFIT_FACTOR} (1.1900 < 1.2)"),
+        # the decision is exact; a failing factor is cut toward failure, so the line never reads
+        # "1.2000 < 1.2" (0043 plan Risk 6, review round 1 L-2)
+        ({"profit_factor": Decimal("1.19996")}, f"{OOS_PROFIT_FACTOR} (1.1999 < 1.2)"),
+        ({"profit_factor": Decimal("1.199999999")}, f"{OOS_PROFIT_FACTOR} (1.1999 < 1.2)"),
+        ({"trades": 29}, f"{OOS_TRADES} (29 < 30)"),
+        ({"drawdown": Decimal("0.15")}, f"{OOS_DRAWDOWN} (%15.0000 ≥ %15)"),
         ({"drawdown": Decimal("0.1499999")}, PASSED),
-        ({"net": Decimal(0)}, OOS_NET),
-        ({"net": Decimal("-0.00000001")}, OOS_NET),
+        ({"net": Decimal(0)}, f"{OOS_NET} (0.00000000 USDT ≤ 0)"),
+        ({"net": Decimal("-0.00000001")}, f"{OOS_NET} (-0.00000001 USDT ≤ 0)"),
         ({"net": Decimal("0.00000001")}, PASSED),
     ],
 )
@@ -168,12 +200,16 @@ def test_first_failing_threshold_named() -> None:
         net=Decimal(-1), profit_factor=Decimal("0.5"), trades=3, drawdown=Decimal("0.5")
     )
     bad_holdout = part(net=Decimal(-1), drawdown=Decimal("0.5"))
-    assert verdict(everything, bad_holdout) == OOS_NET
-    assert verdict(replace(everything, net=Decimal(1)), bad_holdout) == OOS_PROFIT_FACTOR
-    assert verdict(part(trades=3, drawdown=Decimal("0.5")), bad_holdout) == OOS_TRADES
-    assert verdict(part(drawdown=Decimal("0.5")), bad_holdout) == OOS_DRAWDOWN
-    assert verdict(GOOD, bad_holdout) == HOLDOUT_NET
-    assert verdict(GOOD, part(drawdown=Decimal("0.5"))) == HOLDOUT_DRAWDOWN
+    assert verdict(everything, bad_holdout) == f"{OOS_NET} (-1.00000000 USDT ≤ 0)"
+    assert verdict(replace(everything, net=Decimal(1)), bad_holdout) == (
+        f"{OOS_PROFIT_FACTOR} (0.5000 < 1.2)"
+    )
+    assert verdict(part(trades=3, drawdown=Decimal("0.5")), bad_holdout) == f"{OOS_TRADES} (3 < 30)"
+    assert verdict(part(drawdown=Decimal("0.5")), bad_holdout) == (
+        f"{OOS_DRAWDOWN} (%50.0000 ≥ %15)"
+    )
+    assert verdict(GOOD, bad_holdout) == f"{HOLDOUT_NET} (-1.00000000 USDT ≤ 0)"
+    assert verdict(GOOD, part(drawdown=Decimal("0.5"))) == f"{HOLDOUT_DRAWDOWN} (%50.0000 ≥ %15)"
     for text in (OOS_NET, OOS_PROFIT_FACTOR, OOS_TRADES, OOS_DRAWDOWN):
         assert text.startswith("geçmedi: örneklem dışı ")
     for text in (HOLDOUT_NET, HOLDOUT_DRAWDOWN):
@@ -184,10 +220,10 @@ def test_first_failing_threshold_named() -> None:
 
 
 def test_holdout_failures() -> None:
-    assert verdict(GOOD, part(net=Decimal(0))) == HOLDOUT_NET
-    assert verdict(GOOD, part(net=Decimal(-5))) == HOLDOUT_NET
-    assert verdict(GOOD, part(drawdown=Decimal("0.15"))) == HOLDOUT_DRAWDOWN
-    assert verdict(GOOD, part(drawdown=Decimal("0.2"))) == HOLDOUT_DRAWDOWN
+    assert verdict(GOOD, part(net=Decimal(0))) == f"{HOLDOUT_NET} (0.00000000 USDT ≤ 0)"
+    assert verdict(GOOD, part(net=Decimal(-5))) == f"{HOLDOUT_NET} (-5.00000000 USDT ≤ 0)"
+    assert verdict(GOOD, part(drawdown=Decimal("0.15"))) == (f"{HOLDOUT_DRAWDOWN} (%15.0000 ≥ %15)")
+    assert verdict(GOOD, part(drawdown=Decimal("0.2"))) == (f"{HOLDOUT_DRAWDOWN} (%20.0000 ≥ %15)")
 
 
 def test_holdout_trade_count_does_not_matter() -> None:
@@ -195,7 +231,9 @@ def test_holdout_trade_count_does_not_matter() -> None:
 
 
 def test_holdout_zero_trades_zero_net_fails() -> None:
-    assert verdict(GOOD, part(trades=0, profit_factor=None, net=Decimal(0))) == HOLDOUT_NET
+    assert verdict(GOOD, part(trades=0, profit_factor=None, net=Decimal(0))) == (
+        f"{HOLDOUT_NET} (0.00000000 USDT ≤ 0)"
+    )
 
 
 # --- AC-6: paper adayı ---

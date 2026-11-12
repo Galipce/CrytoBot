@@ -7,6 +7,7 @@ Paper tarafı okumanın yolundan geçer: aynı `MarketCandle`'lar bir `MarketRea
 """
 
 from collections.abc import Callable
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +17,17 @@ from crytobot.app import PairMarket, TurnMemory, TurnResult, run_turn, to_turn_m
 from crytobot.app._backtest_inputs import TurnInputs
 from crytobot.execution import PaperExchange
 from crytobot.market_data import HistoryData, MarketRead, PairRead
+from crytobot.risk import TradeIntent
+from crytobot.strategy import (
+    BreakoutSettings,
+    Settings,
+    TrendDipSettings,
+    TrendFilterSettings,
+    propose,
+    required_candles,
+)
 from tests.app.backtest_helpers import COUNT, MARKET_RULES, at, candles, history, settings
-from tests.app.helpers import BTC, ETH, HOUR, SPREAD, TICK, limits, opened_store
+from tests.app.helpers import BTC, ETH, HOUR, SPREAD, STRATEGY, TICK, limits, opened_store
 
 SCENARIOS: dict[str, dict[str, Any]] = {
     # buy BTC at hour 0, its target (14) is reached at hour 2
@@ -43,11 +53,11 @@ SCENARIOS: dict[str, dict[str, Any]] = {
 }
 
 
-def paper_market(data: HistoryData, moment: Any) -> dict[str, PairMarket]:
+def paper_market(data: HistoryData, moment: Any, count: int = COUNT) -> dict[str, PairMarket]:
     """Okumanın vereceği `PairRead`: aynı kapanmış mumlar, fiyat tur anının açılışı."""
     reads = []
     for pair in data.pairs:
-        closed = [item for item in pair.candles if item.open_time + HOUR <= moment][-COUNT:]
+        closed = [item for item in pair.candles if item.open_time + HOUR <= moment][-count:]
         opening = [item for item in pair.candles if item.open_time == moment]
         price = opening[0].open if opening else None
         reads.append(
@@ -117,3 +127,63 @@ def test_risk_refusals_match(tmp_path: Path) -> None:
     paper = run(tmp_path / "paper.db", lambda moment: paper_market(data, moment), **narrow)
     assert backtest == paper
     assert [reason.value for _, reason in backtest[0][3]] == ["position_limit"]
+
+
+# --- spec 0043 AC-2 (R-1): her aday backtest ve paper turunda aynı öneriyi üretir ---
+
+CANDIDATE_SCENARIOS: dict[str, tuple[Settings, list[Any]]] = {
+    # every series proposes a buy at hour 0 (the last closed candle is hour -1)
+    "S0": (STRATEGY, [10, 8, 9, 10, 10, 12, 15]),
+    "S1": (
+        TrendFilterSettings(1, 2, 2, Decimal(70), 2, Decimal(2), Decimal(2), 4),
+        [12, 8, 9, 10, 10, 12, 15],
+    ),
+    "S2": (
+        BreakoutSettings(3, 2, Decimal(2), Decimal(2)),
+        [(10, 11, 9, 10), (10, 12, 9, 10), (10, 11, 9, 10), (12.5, 13, 9, 12.5), 12.5, 13, 15],
+    ),
+    "S3": (
+        TrendDipSettings(2, Decimal(51), 2, Decimal(2), Decimal(2)),
+        [100] * 196 + [120, 118, 116, 115, 115, 120, 130],
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(CANDIDATE_SCENARIOS))
+def test_each_candidate_same_proposal_backtest_and_paper(tmp_path: Path, name: str) -> None:
+    """AC-2: aynı mumlar ve ayarla aday, backtest ve paper turunda aynı öneriyi (giriş, stop,
+    hedef) ve aynı kararları verir; öneri gerçekten vardır."""
+    strategy, values = CANDIDATE_SCENARIOS[name]
+    warm = count = len(values) - 3  # every warm candle is read (R-4: enough for the candidate)
+    assert count >= required_candles(strategy)
+    data = history(
+        {BTC: candles(-warm, values), ETH: candles(-warm, [10] * len(values))},
+        hours=3,
+        count=warm,
+    )
+    source = TurnInputs(data, settings(strategy=strategy), count, SPREAD)
+    proposals = []
+    for hour in range(3):
+        sides = []
+        for market in (source.market(at(hour)), paper_market(data, at(hour), count)):
+            item = market[BTC]
+            sides.append(
+                propose(
+                    pair=BTC,
+                    candles=item.candles,  # type: ignore[arg-type]
+                    position_open=False,
+                    tick=item.tick,  # type: ignore[arg-type]
+                    settings=strategy,
+                )
+            )
+        assert sides[0] == sides[1]
+        proposals.append(sides[0])
+    assert isinstance(proposals[0], TradeIntent)  # a buy at hour 0: the comparison is not empty
+    backtest = run(tmp_path / "backtest.db", source.market, strategy=strategy)
+    paper = run(
+        tmp_path / "paper.db",
+        lambda moment: paper_market(data, moment, count),
+        strategy=strategy,
+    )
+    assert backtest == paper
+    assert backtest[0][1]  # the buy was placed

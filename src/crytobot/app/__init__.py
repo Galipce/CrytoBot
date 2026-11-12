@@ -33,12 +33,20 @@ Son değerlendirme (spec 0042): varsayılan backtest yalnız örneklem içini ko
 `run_evaluation` adayları aynı koşullarla örneklem içinde seçer, seçileni örneklem dışı ve saklı
 dönemde sabit eşiklerle değerlendirir ve tek son değerlendirme raporu yazar. Aşama kapısı yalnız bu
 raporu ve onun strateji adını kabul eder.
+
+Aday stratejiler (spec 0043): `[strategy] name` S0…S3'ten birini seçer (yoksa S0). Son
+değerlendirme `final_configs` ile `[backtest] final_data`'nın iki aralığını (1h, 4h) ve her
+aralıkta sabit R-3 ızgarasını (`CANDIDATE_GRIDS`) sınar; aşama kapısı rapordaki adayın adını,
+bütün parametrelerini ve aralığını çalışan ayarla karşılaştırır.
 """
 
 from crytobot.app._backtest import BacktestExit, BacktestOutcome, BacktestParts, run_backtest
 from crytobot.app._backtest_config import (
+    FINAL_INTERVALS,
     BacktestConfig,
     BacktestConfigResult,
+    FinalConfigsResult,
+    final_configs,
     load_backtest_config,
 )
 from crytobot.app._config import SETTING_NAMES, BotConfig, ConfigResult, load_config
@@ -60,6 +68,7 @@ from crytobot.app._download import (
 )
 from crytobot.app._evaluation import run_evaluation
 from crytobot.app._events import TRIAL_MARK, line
+from crytobot.app._grid import CANDIDATE_GRIDS
 from crytobot.app._inputs import PairMarket, TurnSettings
 from crytobot.app._loop import (
     MAX_WAIT_S,
@@ -99,6 +108,8 @@ from crytobot.app._start import (
 from crytobot.app._turn import run_turn
 
 __all__: list[str] = [
+    "CANDIDATE_GRIDS",
+    "FINAL_INTERVALS",
     "MAX_WAIT_S",
     "PREPARE_HINT",
     "SETTING_NAMES",
@@ -117,6 +128,7 @@ __all__: list[str] = [
     "DownloadExit",
     "DownloadParts",
     "ExitReason",
+    "FinalConfigsResult",
     "ForcedStop",
     "KillRequest",
     "LogWriteError",
@@ -145,6 +157,7 @@ __all__: list[str] = [
     "check_stage_gate",
     "create_live_exchange",
     "engage_kill_switch",
+    "final_configs",
     "get_dashboard_status",
     "line",
     "load_backtest_config",

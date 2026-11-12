@@ -516,3 +516,29 @@ def test_start_with_reporting_configured(bot: Bot, monkeypatch: pytest.MonkeyPat
     code_start, _console = bot.run("start", "--trial")
     assert code_start == EXIT_OK
     assert bot.log.exists()
+
+
+@pytest.mark.parametrize(
+    ("extra", "message"),
+    [
+        ('name = "S9"', "ayar geçersiz: strategy.name"),
+        ('name = "S1"', "ayar eksik: strategy.trend_period"),
+        ('name = "S1"\ntrend_period = 201', "ayar geçersiz: market.candle_count"),
+    ],
+    ids=["unknown-name", "missing-key", "warmup"],
+)
+def test_strategy_refusal_writes_nothing_exit_1(bot: Bot, extra: str, message: str) -> None:
+    """Spec 0043 AC-1, AC-8: strateji seçiminin reddi; depo ve kayıt değişmez, borsaya istek
+    gitmez, çıkış 1."""
+    assert bot.run("prepare")[0] == EXIT_OK
+    before = {path.name: path.read_bytes() for path in bot.root.iterdir() if path.is_file()}
+    text = config_text(bot.root).replace('name = "S0"\n', f"{extra}\n")
+    bot.config_path.write_text(text, encoding="utf-8")
+    before["crytobot.toml"] = bot.config_path.read_bytes()
+    for command in (["start"], ["start", "--trial"], ["prepare"]):
+        code, console = bot.run(*command, trial=False)
+        assert code == EXIT_REFUSED == 1
+        assert f"bot başlamadı: {message}" in console
+    after = {path.name: path.read_bytes() for path in bot.root.iterdir() if path.is_file()}
+    assert after == before
+    assert bot.reads == 0 and bot.exchange.touched == []

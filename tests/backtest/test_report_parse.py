@@ -4,6 +4,7 @@ Spec 0042 (plan Risk 8): örnek rapor son değerlendirme biçiminde (kapı yaln�
 aynen. Varsayılan rapor `NOT_FINAL`, "aday yok" `NO_CANDIDATE_MARK`, strateji adı okunur (AC-8)."""
 
 import hashlib
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -56,18 +57,22 @@ FACTS = ReportFacts(
 
 def sample_report() -> str:
     """Son değerlendirme, tek aday geçti (paper adayı)."""
+    return sample_report_with(FACTS)
+
+
+def sample_report_with(facts: ReportFacts) -> str:
     metrics = run_metrics(Decimal(1000), RECORDS, DAY2, (BTC,), HOLDOUT)
-    assert FACTS.strategy is not None
+    assert facts.strategy is not None and facts.strategy_name is not None
     result = CandidateResult(
-        "S0",
+        facts.strategy_name,
         "1h",
-        FACTS.strategy,
+        facts.strategy,
         metrics.in_sample,
         metrics.out_of_sample,
         metrics.holdout,
         PASSED,
     )
-    return final_report_text(FACTS, 1, [result], 0, metrics)
+    return final_report_text(facts, 1, [result], 0, metrics)
 
 
 def test_report_candidate_mark_and_existence(tmp_path: Path) -> None:
@@ -243,3 +248,49 @@ def test_strategy_name_is_read() -> None:
     assert res.data.strategy is not None and res.data.strategy["fast_period"] == 12
     unnamed = parse_report(sample_report().replace("strateji: S0 fast=", "strateji: fast="))
     assert unnamed.data is not None and unnamed.data.strategy_name is None
+
+
+# --- spec 0043 (plan Risk 8): adayların parametre satırı yazılır ve okunur ---
+
+CANDIDATE_LINES: dict[str, tuple[dict[str, int | Decimal | str], str]] = {
+    "S1": (
+        {
+            "fast_period": 12,
+            "slow_period": 26,
+            "rsi_period": 14,
+            "rsi_threshold": Decimal("70"),
+            "atr_period": 14,
+            "k": Decimal("1.5"),
+            "r": Decimal("2"),
+            "trend_period": 150,
+        },
+        "strateji: S1 fast=12 slow=26 rsi=14 rsi_threshold=70 atr=14 k=1.5 r=2 trend_period=150",
+    ),
+    "S2": (
+        {"breakout_period": 55, "atr_period": 14, "k": Decimal("3"), "r": Decimal("2")},
+        "strateji: S2 breakout_period=55 atr=14 k=3 r=2",
+    ),
+    "S3": (
+        {
+            "rsi_period": 14,
+            "rsi_threshold": Decimal("35"),
+            "atr_period": 14,
+            "k": Decimal("2"),
+            "r": Decimal("2"),
+        },
+        "strateji: S3 rsi=14 rsi_threshold=35 atr=14 k=2 r=2",
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(CANDIDATE_LINES))
+def test_candidate_parameters_round_trip(name: str) -> None:
+    """Yeni adaylar yalnız kendi parametrelerini yazar; okuyucu hepsini aynı değerle geri verir.
+    S0'ın satırı bugünküyle aynıdır (`test_report.py`)."""
+    strategy, line = CANDIDATE_LINES[name]
+    facts = replace(FACTS, strategy=strategy, strategy_name=name)
+    report = sample_report_with(facts)
+    assert line in report.splitlines()
+    res = parse_report(report)
+    assert res.data is not None and res.data.strategy_name == name
+    assert res.data.strategy == strategy

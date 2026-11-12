@@ -12,8 +12,14 @@ eksikliği yüzünden atlanmaz. Sayılar değerle karşılaştırılır (`"0.001
 Spec 0042 R-7 (0028 R-3'ün kapı kısmını geçersiz kılar): okunabilirlik adımında son değerlendirme
 olmayan rapor `rapor son değerlendirme değil` ile reddedilir (okuyucunun `NOT_FINAL`'ı); uyuşmazlık
 adımında, strateji parametrelerinden önce, rapordaki strateji adı çalışan stratejininkinden
-(`STRATEGY_NAME`) farklıysa `ayar uyuşmazlığı: strateji`; parametre farkı yine parametrenin adıyla
-(plan Risk 7). Eşikler ve diğer sıra değişmez.
+farklıysa `ayar uyuşmazlığı: strateji`; parametre farkı yine parametrenin adıyla (plan Risk 7).
+Eşikler ve diğer sıra değişmez.
+
+Spec 0043 R-1, R-5 (plan Risk 7, A-1): çalışan strateji ayardaki adaydır (S0…S3). Eksik bilgi
+adımında strateji satırı yoksa ya da rapor çalışan adayın adını taşıyıp onun bir parametresini
+eksik bırakıyorsa `rapor eksik: strateji`. Uyuşmazlık adımında başka ya da bilinmeyen ad
+`ayar uyuşmazlığı: strateji`, sonra adayın her parametresi tanım sırasıyla `ayar uyuşmazlığı:
+<parametre>`. Adayın aralığı rapordaki mum aralığıdır (`ayar uyuşmazlığı: candle_interval`).
 """
 
 from collections.abc import Mapping
@@ -24,8 +30,8 @@ from decimal import Decimal, DecimalException
 from crytobot.app._config import BotConfig, _Bad, _number
 from crytobot.backtest import CONDITIONS, ReportRead
 from crytobot.market_data import CANDLE_INTERVALS
+from crytobot.strategy import candidate_parameters
 
-STRATEGY_NAME = "S0"  # spec 0042 plan Risk 4: the running strategy until 0043 makes it a setting
 _STAGE_SECTION = "stage"
 _STAGE_KEYS = (
     "report_path",
@@ -44,15 +50,6 @@ _STAGE_KEYS = (
 PAPER_MIN_DAYS, PAPER_DAYS_FLOOR = 14, 7
 PAPER_MIN_TRADES, PAPER_TRADES_FLOOR = 10, 5
 _HEX = frozenset("0123456789abcdef")
-_STRATEGY = (
-    "fast_period",
-    "slow_period",
-    "rsi_period",
-    "rsi_threshold",
-    "atr_period",
-    "k",
-    "r",
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -341,8 +338,12 @@ def check_stage_gate(
     # 4. Eksik bilgi (CB-4): hiçbir denetim atlanmaz
     if rep.spread is None:
         return _refused("rapor eksik: spread")
+    selected = bot.turn.strategy
+    parameters = candidate_parameters(selected.name)
+    assert parameters is not None  # the running strategy is always a candidate
     strategy = rep.strategy
-    if strategy is None or any(name not in strategy for name in _STRATEGY):
+    named_running = rep.strategy_name == selected.name  # plan A-1: another name is a mismatch
+    if strategy is None or (named_running and any(name not in strategy for name in parameters)):
         return _refused("rapor eksik: strateji")
     for name in CONDITIONS:
         if name not in rep.conditions:
@@ -383,11 +384,10 @@ def check_stage_gate(
         return _refused("ayar uyuşmazlığı: turn_interval")
     if rep.spread != expected_spread:
         return _refused("ayar uyuşmazlığı: spread")
-    if rep.strategy_name != STRATEGY_NAME:  # spec 0042 R-7, plan Risk 7
+    if not named_running:  # spec 0042 R-7; spec 0043 plan Risk 7
         return _refused("ayar uyuşmazlığı: strateji")
-    strat = bot.turn.strategy
-    for name in _STRATEGY:
-        if Decimal(str(strategy[name])) != Decimal(str(getattr(strat, name))):
+    for name in parameters:  # spec 0043 AC-9: every parameter of the candidate, in order
+        if Decimal(str(strategy[name])) != Decimal(str(getattr(selected, name))):
             return _refused(f"ayar uyuşmazlığı: {name}")
     running = bot_conditions(bot)
     for name in CONDITIONS:

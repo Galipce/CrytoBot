@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from crytobot.app import load_backtest_config
+from crytobot.app import FINAL_INTERVALS, final_configs, load_backtest_config
 from tests.app.test_config import document
 
 SPLIT = datetime(2026, 1, 15, tzinfo=UTC)
@@ -191,3 +191,75 @@ def test_holdout_one_turn_after_split_is_valid() -> None:
         backtest_document(**{"backtest.holdout_at": SPLIT + timedelta(hours=1)})
     )
     assert result.config is not None, result.message
+
+
+# --- spec 0043 R-5 (plan Risk 1): `final_data` ve `final_configs` ---
+
+FINAL_DATA = {"1h": "history-1h.jsonl", "4h": "history-4h.jsonl"}
+
+
+def test_final_data_gives_one_config_per_interval() -> None:
+    """Her aralık: o veri yolu, mum aralığı = tur aralığı = o aralık; geri kalan aynen."""
+    config = load_backtest_config(backtest_document(**{"backtest.final_data": FINAL_DATA})).config
+    assert config is not None
+    assert config.final_data == (("1h", "history-1h.jsonl"), ("4h", "history-4h.jsonl"))
+    result = final_configs(config)
+    assert result.configs is not None, result.message
+    assert FINAL_INTERVALS == ("1h", "4h")
+    for each, (hours, path) in zip(
+        result.configs, ((1, FINAL_DATA["1h"]), (4, FINAL_DATA["4h"])), strict=True
+    ):
+        interval = timedelta(hours=hours)
+        assert each.data_path == path
+        assert each.bot.turn_interval == each.bot.read.candle_interval == interval
+        assert each.bot.turn.candle_interval == interval
+        assert (each.report_path, each.split_at, each.holdout_at, each.spread) == (
+            config.report_path,
+            config.split_at,
+            config.holdout_at,
+            config.spread,
+        )
+        assert each.bot.turn.strategy == config.bot.turn.strategy
+        assert each.bot.turn.limits == config.bot.turn.limits
+
+
+def test_final_data_missing_is_named_only_for_final() -> None:
+    config = load_backtest_config(backtest_document()).config
+    assert config is not None and config.final_data is None  # the default backtest needs none
+    result = final_configs(config)
+    assert (result.configs, result.setting) == (None, "backtest.final_data")
+    assert result.message == "ayar eksik: backtest.final_data"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"1h": "a.jsonl"},
+        {"1h": "a.jsonl", "4h": "b.jsonl", "2h": "c.jsonl"},
+        {"1h": "a.jsonl", "2h": "b.jsonl"},
+        {"1h": "a.jsonl", "4h": ""},
+        {"1h": "a.jsonl", "4h": 4},
+        {"1h": "rapor.txt", "4h": "b.jsonl"},
+        {"1h": "bot.db", "4h": "b.jsonl"},
+        {"1h": "a.jsonl", "4h": "bot.log"},
+        ["a.jsonl", "b.jsonl"],
+        "a.jsonl",
+    ],
+)
+def test_final_data_refusals(value: object) -> None:
+    assert refused(**{"backtest.final_data": value}) == (
+        "backtest.final_data",
+        "ayar geçersiz: backtest.final_data",
+    )
+
+
+@pytest.mark.parametrize("key", ["split_at", "holdout_at"])
+def test_final_split_must_sit_on_every_interval(key: str) -> None:
+    """1h sınırında olup 4h sınırında olmayan an, son değerlendirmede adıyla reddedilir."""
+    moment = {"split_at": SPLIT, "holdout_at": HOLDOUT}[key] + timedelta(hours=1)
+    changes = {"backtest.final_data": FINAL_DATA, f"backtest.{key}": moment}
+    config = load_backtest_config(backtest_document(**changes)).config
+    assert config is not None
+    result = final_configs(config)
+    assert (result.configs, result.setting) == (None, f"backtest.{key}")
+    assert result.message == f"ayar geçersiz: backtest.{key}"

@@ -10,6 +10,7 @@ import io
 import json
 import tomllib
 from collections.abc import Iterator
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +26,9 @@ from crytobot.__main__ import (
     run,
 )
 from crytobot.app import StopRequest, _backtest, load_backtest_config, run_turn
-from tests.app.backtest_helpers import at, candles, history, write_history
+from crytobot.strategy import StrategySettings
+from tests.app.backtest_helpers import at, candles, final_history, history, write_history
+from tests.app.helpers import HOUR
 from tests.main.test_entry import EXAMPLE, Bot, config_text
 from tests.market_data.helpers import BTC, ETH, NOW
 
@@ -36,6 +39,7 @@ SECRETS = {
     "CRYTOBOT_MODE": "live",
 }
 FLAT = [10] * 8
+SHORT_S0 = StrategySettings(1, 2, 3, Decimal(70), 3, Decimal(2), Decimal(2))  # the config's own
 
 
 class Backtester:
@@ -66,7 +70,9 @@ class Backtester:
             **section,
         }
         rows = "".join(f"{key} = {value}\n" for key, value in values.items())
-        text = config_text(self.root, candle_count="4") + "\n[backtest]\n" + rows
+        # spec 0043 R-4 (plan Risk 4): four candles warm a strategy needing four
+        short = {"fast_period": "1", "slow_period": "2", "rsi_period": "3", "atr_period": "3"}
+        text = config_text(self.root, candle_count="4", **short) + "\n[backtest]\n" + rows
         self.bot.config_path.write_text(text, encoding="utf-8")
 
     def run(self, argv: list[str] | None = None) -> tuple[int, str]:
@@ -306,23 +312,73 @@ def test_example_without_backtest_names_the_missing_section() -> None:
     assert result.config is None and result.message == "ayar eksik: backtest"
 
 
-def test_final_writes_a_final_report_with_the_same_exit_codes(tester: Backtester) -> None:
+def write_final(tester: Backtester, **section: str) -> None:
+    """Spec 0043 R-5 (plan Risk 1, 5): `final_data` iki aralığın dosyasını verir; ayrım anları 1h
+    ve 4h sınırında. Dosyalar 200 mumluk ısınma taşır (`final_history`)."""
+    paths = {text: tester.root / f"history-{text}.jsonl" for text in ("1h", "4h")}
+    for text, hours in (("1h", 1), ("4h", 4)):
+        write_history(paths[text], final_history(hours * HOUR, lambda _index: 10, (BTC, ETH)))
+    table = ", ".join(f'"{text}" = "{path.as_posix()}"' for text, path in paths.items())
+    values = {
+        "split_at": "2026-01-01T08:00:00Z",
+        "holdout_at": "2026-01-01T12:00:00Z",
+        "final_data": f"{{ {table} }}",
+    }
+    tester.write_config(**{**values, **section})
+
+
+@pytest.fixture
+def small_grid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """R-3 ızgarası 72 kombinasyonla ~15 s sürer (plan Risk 9, `tests/app/test_evaluation_grid.py`);
+    giriş noktası testleri yolu sınar: aralık başına fixture'ın tek kısa stratejisi."""
+    from crytobot.app import _evaluation
+
+    monkeypatch.setattr(_evaluation, "CANDIDATE_GRIDS", ((SHORT_S0,),))
+
+
+def test_final_writes_a_final_report_with_the_same_exit_codes(
+    tester: Backtester, small_grid: None
+) -> None:
     """Spec 0042 AC-1, AC-6: `backtest --final` son değerlendirme raporu yazar (burada 30 işlem
-    yok: "aday yok"); parmak izi satırı ve çıkış kodu varsayılanla aynı yoldan."""
+    yok: "aday yok"); parmak izi satırı ve çıkış kodu varsayılanla aynı yoldan. Spec 0043 R-5:
+    tek değerlendirme 1h ve 4h'yi birlikte sınar."""
+    write_final(tester)
     code, console = tester.run(["backtest", "--final"])
     assert code == EXIT_OK, console
     report = tester.report.read_text(encoding="utf-8")
     assert report.splitlines()[0] == "CrytoBot backtest raporu — son değerlendirme"
-    assert "sınanan kombinasyon: 1\n" in report
+    assert "sınanan kombinasyon: 2\n" in report
     assert "paper adayı: aday yok\n" in report
-    assert "sonuç: geçmedi: örneklem içi işlem yetersiz\n" in report
+    assert "== aday: S0 1h ==\n" in report and "== aday: S0 4h ==\n" in report
+    assert report.count("sonuç: geçmedi: örneklem içi işlem yetersiz (0 < 30)\n") == 2
     rows = console.splitlines()
-    assert rows[0] == "backtest son değerlendirme başladı: aday=1 kombinasyon=1"
+    assert rows[0] == "backtest son değerlendirme başladı: aday=2 kombinasyon=2"
     assert rows[-2] == (
         f"rapor parmak izi: {hashlib.sha256(tester.report.read_bytes()).hexdigest()}"
     )
     code, console = tester.run(["backtest", "--final"])
     assert code == EXIT_REFUSED and "rapor dosyası var" in console
+
+
+def test_final_without_final_data_refused(tester: Backtester) -> None:
+    """Spec 0043 R-5: `--final` iki aralığın dosyasını ister; varsayılan koşu istemez."""
+    code, console = tester.run(["backtest", "--final"])
+    assert code == EXIT_REFUSED
+    assert console == "backtest reddedildi: ayar eksik: backtest.final_data\n"
+    assert not tester.report.exists()
+    assert tester.run()[0] == EXIT_OK
+
+
+def test_final_data_naming_the_store_refused(tester: Backtester) -> None:
+    """Veri yolu bot deposunu başka yazımla da adlandıramaz (`_same_file`)."""
+    write_final(tester)
+    text = tester.bot.config_path.read_text(encoding="utf-8")
+    other = (tester.root / "history-4h.jsonl").as_posix()
+    store = (tester.root / "." / "bot.db").as_posix()
+    tester.bot.config_path.write_text(text.replace(other, store), encoding="utf-8")
+    code, console = tester.run(["backtest", "--final"])
+    assert code == EXIT_REFUSED
+    assert "ayar geçersiz: backtest.final_data" in console
 
 
 def test_default_backtest_console_shows_in_sample_only(tester: Backtester) -> None:
@@ -337,11 +393,17 @@ def test_default_backtest_console_shows_in_sample_only(tester: Backtester) -> No
     assert "saklı dönem" not in console and "tüm koşu" not in console
 
 
-def test_holdout_outside_the_data_is_refused_before_any_turn(tester: Backtester) -> None:
+def test_holdout_outside_the_data_is_refused_before_any_turn(
+    tester: Backtester, small_grid: None
+) -> None:
     """Spec 0042 AC-2: saklı dönem başı veri dönemini aşarsa ret, rapor yok, çıkış 1."""
     tester.write_config(holdout_at="2026-01-01T04:00:00Z")
-    for argv in (["backtest"], ["backtest", "--final"]):
-        code, console = tester.run(argv)
-        assert code == EXIT_REFUSED
-        assert "ayar geçersiz: backtest.holdout_at" in console
-        assert not tester.report.exists()
+    code, console = tester.run(["backtest"])
+    assert code == EXIT_REFUSED
+    assert "ayar geçersiz: backtest.holdout_at" in console
+    assert not tester.report.exists()
+    write_final(tester, holdout_at="2026-01-01T16:00:00Z")  # spec 0043: the final data's end
+    code, console = tester.run(["backtest", "--final"])
+    assert code == EXIT_REFUSED
+    assert "ayar geçersiz: backtest.holdout_at" in console
+    assert not tester.report.exists()

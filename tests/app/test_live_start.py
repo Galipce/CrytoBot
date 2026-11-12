@@ -444,6 +444,14 @@ def _refused_live(root: Path, case: str, *, testnet: bool) -> str:
         report.write_bytes(body.encode("utf-8"))
         new_sha = hashlib.sha256(report.read_bytes()).hexdigest()
         cfg.write_text(cfg.read_text(encoding="utf-8").replace(old_sha, new_sha), encoding="utf-8")
+    elif case in ("candidate_k", "candidate_interval"):  # spec 0043 AC-9: the running config
+        text = cfg.read_text(encoding="utf-8")
+        if case == "candidate_k":
+            text = text.replace('k = "2"', 'k = "3"', 1)
+        else:
+            text = text.replace('candle_interval = "1h"', 'candle_interval = "4h"', 1)
+            text = text.replace('turn_interval = "1h"', 'turn_interval = "4h"', 1)
+        cfg.write_text(text, encoding="utf-8")
     else:  # the paper proof was run with another report of the same path
         assert case == "proof"
         paper = root / "paper.sqlite"
@@ -493,5 +501,22 @@ def test_live_non_final_report_no_exchange_call(
 ) -> None:
     """Spec 0042 AC-8: `start --live` (ve testnet) son değerlendirme olmayan ya da başka stratejili
     raporla reddeder; depo yazılmaz, borsaya istek yok, çıkış 1."""
+    refusal = _refused_live(tmp_path, case, testnet=testnet)
+    assert refusal.endswith(f"başlatma reddedildi: {message}")
+
+
+@pytest.mark.parametrize("testnet", [False, True])
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("candidate_k", "ayar uyuşmazlığı: k"),
+        ("candidate_interval", "ayar uyuşmazlığı: candle_interval"),
+    ],
+)
+def test_live_candidate_mismatch_no_exchange_call(
+    tmp_path: Path, case: str, message: str, testnet: bool
+) -> None:
+    """Spec 0043 AC-9: `start --live` (ve testnet) adayın parametresi ya da aralığı çalışan ayardan
+    farklıysa reddeder; depo yazılmaz, borsaya istek yok, çıkış 1."""
     refusal = _refused_live(tmp_path, case, testnet=testnet)
     assert refusal.endswith(f"başlatma reddedildi: {message}")

@@ -13,7 +13,7 @@ saat sonrası; `Run.final` son değerlendirmeyi (`run_evaluation`) aynı parçal
 """
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -27,6 +27,7 @@ from crytobot.app import (
     BotConfig,
     StopRequest,
     TurnSettings,
+    final_configs,
     run_backtest,
     run_evaluation,
 )
@@ -178,6 +179,9 @@ def config(
     )
 
 
+OWN: Any = object()  # `Run.final`: each configuration with its own strategy
+
+
 @dataclass
 class Run:
     """Bir koşu: gerçek okuyucu ve rapor yazıcısı, satırlar listede, geçici depo `work`'te; saat
@@ -219,9 +223,13 @@ class Run:
         return run_backtest(config, self.parts(**changes))
 
     def final(
-        self, configs: BacktestConfig | Sequence[BacktestConfig], grids: Any = None, **changes: Any
+        self, configs: BacktestConfig | Sequence[BacktestConfig], grids: Any = OWN, **changes: Any
     ) -> BacktestExit:
+        """`grids`: verilmezse (`OWN`) her yapılandırma kendi stratejisiyle (0042'nin küçük
+        fixture'ları; spec 0043 plan Risk 5); `None` R-3 ızgarasıdır."""
         chosen = [configs] if isinstance(configs, BacktestConfig) else list(configs)
+        if grids is OWN:
+            grids = [[config.bot.turn.strategy] for config in chosen]
         return run_evaluation(chosen, self.parts(**changes), grids)
 
     @property
@@ -251,3 +259,55 @@ def report_lines(text: str, section: str) -> dict[str, str]:
         label, _, value = row.partition(": ")
         found[label] = value
     return found
+
+
+# --- spec 0043 R-3…R-5: iki aralıklı son değerlendirme fixture'ı ---
+
+FINAL_WARM = 200  # the R-3 grid's longest indicator (R-4)
+FINAL_SPLIT, FINAL_HOLDOUT, FINAL_END = at(8), at(12), at(16)  # on 1h and 4h boundaries
+
+
+def spaced(
+    interval: timedelta, count: int, values: Callable[[int], Row]
+) -> tuple[MarketCandle, ...]:
+    """Isınma dahil `count` mum, `START - FINAL_WARM * interval`'dan aralıkla; `values(i)`."""
+    first = START - FINAL_WARM * interval
+    return tuple(candle(first + index * interval, values(index)) for index in range(count))
+
+
+def final_history(
+    interval: timedelta, values: Callable[[int], Row], pairs: Sequence[str] = (BTC,)
+) -> HistoryData:
+    """Dönem `START`..`FINAL_END`, ısınma 200 mum; her çift aynı seri."""
+    periods = (FINAL_END - START) // interval
+    rows = spaced(interval, FINAL_WARM + periods, values)
+    return HistoryData(
+        "binance",
+        interval,
+        START,
+        FINAL_END,
+        START - FINAL_WARM * interval,
+        DOWNLOADED_AT,
+        tuple(HistoryPair(pair, TICK, MARKET_RULES, rows) for pair in pairs),
+    )
+
+
+def final_setup(
+    root: Path, values: Callable[[int], Row] = lambda _index: 10, **turn: Any
+) -> tuple[BacktestConfig, tuple[BacktestConfig, ...]]:
+    """`[backtest] final_data` ile yapılandırma ve `final_configs`'in iki kopyası (1h, 4h); veri
+    dosyaları yazılır."""
+    paths = {text: root / f"history-{text}.jsonl" for text in ("1h", "4h")}
+    for text, hours in (("1h", 1), ("4h", 4)):
+        write_history(paths[text], final_history(hours * HOUR, values))
+    base = config(
+        root,
+        turn=settings((BTC,), **turn),
+        count=FINAL_WARM,
+        split_at=FINAL_SPLIT,
+        holdout_at=FINAL_HOLDOUT,
+    )
+    base = replace(base, final_data=tuple((text, str(path)) for text, path in paths.items()))
+    result = final_configs(base)
+    assert result.configs is not None, result.message
+    return base, result.configs

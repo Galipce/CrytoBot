@@ -14,7 +14,8 @@ alınmaz, depo ve kayıt dosyası açılmaz: çıktı yalnız konsoladır, çal�
 dahil; süreç öldürülürse işletim sisteminin geçici dizininde kalır, bir daha okunmaz). Konsol
 satırları zaman damgası taşımaz. Spec 0042: `backtest` yalnız örneklem içini koşar ve yazar;
 `backtest --final` son değerlendirmedir (`run_evaluation`): örneklem dışı ve saklı dönem yalnız
-orada hesaplanır; aynı çıkış kodları. Birden fazla yapılandırma CLI'den 0043'te (plan Risk 10).
+orada hesaplanır; aynı çıkış kodları. Spec 0043 R-5 (plan Risk 1): `--final` `[backtest]
+final_data`'nın iki aralığını (1h, 4h) ve her aralıkta R-3 ızgarasını tek raporda sınar.
 
 Çıkış kodları: 0 temiz durma, hazırlık, indirme ya da backtest tamam, 1 başlatma, hazırlık, indirme
 ya da backtest reddi (ayarlar, veri dosyası, rapor dosyası var), 2 okuma reddiyle durma, 3 kayıt
@@ -55,6 +56,7 @@ from crytobot.app import (
     check_stage_gate,
     create_live_exchange,
     engage_kill_switch,
+    final_configs,
     get_dashboard_status,
     line,
     load_backtest_config,
@@ -395,6 +397,21 @@ def _backtest_config(path: Path, output: Output) -> BacktestConfig | None:
     return config
 
 
+def _final_configs(config: BacktestConfig, output: Output) -> tuple[BacktestConfig, ...] | None:
+    """Spec 0043 R-5: aralık başına yapılandırmalar; her veri yolu bot deposunu, kayıt dosyasını
+    ve rapor yolunu başka yazımla da adlandıramaz (`_backtest_config`'in kuralı)."""
+    result = final_configs(config)
+    if result.configs is None:
+        output.say(f"backtest reddedildi: {result.message}")
+        return None
+    others = (config.bot.store_path, config.bot.log_path, config.report_path)
+    for each in result.configs:
+        if any(_same_file(each.data_path, other) for other in others):
+            output.say("backtest reddedildi: ayar geçersiz: backtest.final_data")
+            return None
+    return result.configs
+
+
 def _backtest(
     config_path: Path, output: Output, stop: StopRequest, clock: Clock, *, final: bool = False
 ) -> int:
@@ -404,6 +421,9 @@ def _backtest(
     dizinde."""
     config = _backtest_config(config_path, output)
     if config is None:
+        return EXIT_REFUSED
+    finals = _final_configs(config, output) if final else ()
+    if finals is None:
         return EXIT_REFUSED
     with tempfile.TemporaryDirectory(
         prefix="crytobot-backtest-", ignore_cleanup_errors=True
@@ -418,7 +438,7 @@ def _backtest(
             clock,
         )
         try:
-            exit_ = run_evaluation([config], parts) if final else run_backtest(config, parts)
+            exit_ = run_evaluation(finals, parts) if final else run_backtest(config, parts)
         except ForcedStop:  # the second request: the line is written, the report is not
             return EXIT_FORCED
     return _BACKTEST_EXIT_CODES[exit_.outcome]

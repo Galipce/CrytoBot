@@ -358,9 +358,33 @@ def _break(case: str, config: Path, report: Path) -> str:
         return (
             "ayar uyuşmazlığı: strateji" if case == "strategy" else "rapor son değerlendirme değil"
         )
+    if case in ("trend_period", "candidate_interval", "candidate_k"):  # spec 0043 AC-9
+        return _break_candidate(case, config, report, text, sha_line)
     assert case == "condition"
     config.write_text(text.replace('fee = "0.001"', 'fee = "0.002"'), encoding="utf-8")
     return "ayar uyuşmazlığı: fee"
+
+
+def _break_candidate(case: str, config: Path, report: Path, text: str, sha_line: str) -> str:
+    """Spec 0043 AC-9: çalışan aday S1 (L=150) ya da S0 (k=3); rapor S1 L=100 ya da 4h."""
+    body = report.read_text(encoding="utf-8")
+    if case == "trend_period":
+        text = text.replace('name = "S0"\n', 'name = "S1"\ntrend_period = 150\n', 1)
+        body = body.replace(" k=2 r=2\n", " k=2 r=2 trend_period=100\n").replace(
+            "strateji: S0 ", "strateji: S1 ", 1
+        )
+        expected = "ayar uyuşmazlığı: trend_period"
+    elif case == "candidate_interval":
+        body = body.replace("mum aralığı: 1h", "mum aralığı: 4h", 1)
+        expected = "ayar uyuşmazlığı: candle_interval"
+    else:
+        text = text.replace('k = "2"', 'k = "3"', 1)
+        expected = "ayar uyuşmazlığı: k"
+    report.write_bytes(body.encode("utf-8"))
+    config.write_text(
+        text.replace(sha_line, f'report_sha256 = "{fingerprint(report)}"\n'), encoding="utf-8"
+    )
+    return expected
 
 
 @pytest.mark.parametrize(
@@ -386,6 +410,13 @@ def test_new_refusals_write_nothing_exit_1(tmp_path: Path, case: str) -> None:
 def test_strategy_mismatch_writes_nothing_exit_1(tmp_path: Path, case: str) -> None:
     """Spec 0042 AC-8: strateji adı farklı ya da rapor son değerlendirme değilse `start` reddeder;
     depo yazılmaz, istemci çağrısı yok, tur yok, çıkış 1."""
+    _refused_start(tmp_path, case)
+
+
+@pytest.mark.parametrize("case", ["trend_period", "candidate_interval", "candidate_k"])
+def test_candidate_mismatch_writes_nothing_exit_1(tmp_path: Path, case: str) -> None:
+    """Spec 0043 AC-9: adayın parametresi ya da aralığı çalışan ayardan farklıysa `start`
+    reddeder; depo yazılmaz, istemci çağrısı yok, tur yok, çıkış 1."""
     _refused_start(tmp_path, case)
 
 

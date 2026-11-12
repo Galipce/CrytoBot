@@ -155,15 +155,15 @@ def _part(title: str, part: PartMetrics) -> list[str]:
     ]
 
 
+# spec 0043 plan Risk 8: the report's short names; every other parameter keeps its own name
+_SHORT = {"fast_period": "fast", "slow_period": "slow", "rsi_period": "rsi", "atr_period": "atr"}
+
+
 def _strategy_text(strategy: Mapping[str, int | Decimal | str]) -> str:
-    fast = strategy.get("fast", strategy.get("fast_period"))
-    slow = strategy.get("slow", strategy.get("slow_period"))
-    rsi = strategy.get("rsi", strategy.get("rsi_period"))
-    rsi_threshold = strategy.get("rsi_threshold")
-    atr = strategy.get("atr", strategy.get("atr_period"))
-    k = strategy.get("k")
-    r = strategy.get("r")
-    return f"fast={fast} slow={slow} rsi={rsi} rsi_threshold={rsi_threshold} atr={atr} k={k} r={r}"
+    """Parametre eşlemi sırasıyla `ad=değer`; S0'ın satırı bugünküyle bayt bayt aynıdır
+    (`fast=12 slow=26 rsi=14 rsi_threshold=70 atr=14 k=2 r=2`), yeni adaylar yalnız kendi
+    parametrelerini yazar (spec 0043, plan Risk 8)."""
+    return " ".join(f"{_SHORT.get(name, name)}={value}" for name, value in strategy.items())
 
 
 def _common(facts: ReportFacts) -> list[str]:

@@ -8,17 +8,21 @@ asgarisi yok). Karşılaştırma kesin `Decimal` değerlerledir, rapordaki yuvar
 - `select_combination` (R-2) yalnız örneklem içi metrikleri alır: imzası örneklem dışını ve saklı
   dönemi göremez (AC-3). En az 30 işlemli kombinasyonlar arasında en yüksek kâr faktörü; eşitlikte
   örneklem içi net kâr, sonra ızgara sırası (ilk gelen).
-- `verdict` (R-3) ilk tutmayan eşiği yazım sırasıyla adlandırır (Risk 5).
+- `verdict` (R-3) ilk tutmayan eşiği yazım sırasıyla adlandırır (Risk 5). Spec 0043 R-6 (plan Risk
+  6; 0042 R-3/AC-4'ün satır biçimini geçersiz kılar): satır tutmayan değeri ve eşiği de yazar,
+  `geçmedi: <eşik> (<değer> <işaret> <eşik değeri>)`; değer rapor biçimiyle (para, oran, yüzde).
+  `not_enough_trades` örneklem içi satırıdır; değeri ızgaradaki en yüksek işlem sayısıdır.
 - `paper_candidate` (R-4) geçen adaylar arasında min(örneklem içi, örneklem dışı) kâr faktörü en
   yüksek olanı seçer; eşitlikte örneklem dışı net kâr, sonra değerlendirme sırası.
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Final
 
 from crytobot.backtest._metrics import PartMetrics
+from crytobot.backtest._report import money, percent, ratio
 
 MIN_TRADES: Final = 30
 MIN_PROFIT_FACTOR: Final = Decimal("1.2")
@@ -33,6 +37,19 @@ OOS_TRADES: Final = f"{_FAILED}örneklem dışı işlem sayısı"
 OOS_DRAWDOWN: Final = f"{_FAILED}örneklem dışı drawdown"
 HOLDOUT_NET: Final = f"{_FAILED}saklı dönem net kâr"
 HOLDOUT_DRAWDOWN: Final = f"{_FAILED}saklı dönem drawdown"
+_DRAWDOWN_TEXT = f"%{(MAX_DRAWDOWN * 100).normalize():f}"  # "%15"
+_FACTOR_PLACES = Decimal("0.0001")  # the report's ratio places (`ratio`)
+
+
+def _failed(line: str, value: str, sign: str, threshold: object) -> str:
+    """R-6: `<satır> (<değer> <işaret> <eşik>)`."""
+    return f"{line} ({value} {sign} {threshold})"
+
+
+def not_enough_trades(in_sample: Sequence[PartMetrics]) -> str:
+    """R-6: örneklem içinde 30 işlemli kombinasyon yok; değer ızgaranın en yüksek işlem sayısı."""
+    most = max((part.trades for part in in_sample), default=0)
+    return _failed(NOT_ENOUGH_TRADES, str(most), "<", MIN_TRADES)
 
 
 @dataclass(frozen=True)
@@ -66,24 +83,28 @@ def select_combination(in_sample: Sequence[PartMetrics]) -> int | None:
     return best
 
 
-def _below_factor(value: Decimal | None) -> bool:
-    return value is not None and value < MIN_PROFIT_FACTOR
+def _failing_factor(value: Decimal) -> str:
+    """Tutmayan kâr faktörü aşağı kesilir: 1.19996 `1.2000 < 1.2` değil `1.1999 < 1.2` yazılır."""
+    return ratio(value.quantize(_FACTOR_PLACES, rounding=ROUND_DOWN))
 
 
 def verdict(out_of_sample: PartMetrics, holdout: PartMetrics) -> str:
-    """R-3: `PASSED` ya da ilk tutmayan eşik (örneklem dışı, sonra saklı dönem)."""
+    """R-3: `PASSED` ya da ilk tutmayan eşik (örneklem dışı, sonra saklı dönem); spec 0043 R-6:
+    satır değeri ve eşiği taşır. Karar kesin değerledir, yazılan değer rapor biçimindedir."""
     if out_of_sample.net <= 0:
-        return OOS_NET
-    if _below_factor(out_of_sample.profit_factor):
-        return OOS_PROFIT_FACTOR
+        return _failed(OOS_NET, money(out_of_sample.net), "≤", 0)
+    factor = out_of_sample.profit_factor
+    if factor is not None and factor < MIN_PROFIT_FACTOR:
+        return _failed(OOS_PROFIT_FACTOR, _failing_factor(factor), "<", MIN_PROFIT_FACTOR)
     if out_of_sample.trades < MIN_TRADES:
-        return OOS_TRADES
+        return _failed(OOS_TRADES, str(out_of_sample.trades), "<", MIN_TRADES)
     if out_of_sample.max_drawdown >= MAX_DRAWDOWN:
-        return OOS_DRAWDOWN
+        drawdown = percent(out_of_sample.max_drawdown)
+        return _failed(OOS_DRAWDOWN, drawdown, "≥", _DRAWDOWN_TEXT)
     if holdout.net <= 0:
-        return HOLDOUT_NET
+        return _failed(HOLDOUT_NET, money(holdout.net), "≤", 0)
     if holdout.max_drawdown >= MAX_DRAWDOWN:
-        return HOLDOUT_DRAWDOWN
+        return _failed(HOLDOUT_DRAWDOWN, percent(holdout.max_drawdown), "≥", _DRAWDOWN_TEXT)
     return PASSED
 
 

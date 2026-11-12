@@ -13,14 +13,16 @@ from typing import Any
 
 import pytest
 
-from crytobot.app import BacktestOutcome, _evaluation
-from crytobot.backtest import PASSED, PartMetrics, paper_candidate
+from crytobot.app import CANDIDATE_GRIDS, BacktestOutcome, _evaluation
+from crytobot.backtest import PASSED, CandidateResult, PartMetrics, paper_candidate
+from crytobot.strategy import BreakoutSettings
 from tests.app.backtest_helpers import (
     COUNT,
     Run,
     at,
     candles,
     config,
+    final_setup,
     history,
     settings,
     write_history,
@@ -57,7 +59,7 @@ def test_real_rule_end_to_end_gives_no_candidate(tmp_path: Path) -> None:
     rows = report.splitlines()
     assert "sınanan kombinasyon: 3" in rows
     assert "paper adayı: aday yok" in rows
-    assert rows.count("sonuç: geçmedi: örneklem içi işlem yetersiz") == 2
+    assert rows.count("sonuç: geçmedi: örneklem içi işlem yetersiz (1 < 30)") == 2  # spec 0043 R-6
     assert "== aday: S0 1h ==" in rows and "== aday: S0 2h ==" in rows
     assert "örneklem dışı:" not in report and "saklı dönem:" not in report
     assert "BR-10 kanıtı adayı" not in report
@@ -225,3 +227,61 @@ def test_stop_during_evaluation_writes_no_report(tmp_path: Path) -> None:
     assert exit_.outcome is BacktestOutcome.STOPPED
     assert not Path(configs[0].report_path).exists()
     assert run.lines[-1] == "backtest durdu: durdurma isteği; rapor yazılmadı"
+
+
+# --- spec 0043 AC-7, AC-8, AC-10 (R-3…R-6; plan Risk 5, 9) ---
+
+
+def test_config_strategy_does_not_change_grid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-7: ayardaki strateji (burada S2) ızgarayı değiştirmez; her aralık S0…S3'ün R-3
+    ızgarasıyla, bu sırayla. Koşu casusla kısaltılır: ızgarayı alan `candidate` kayıt tutar."""
+    s2 = BreakoutSettings(7, 3, Decimal(1), Decimal(1))
+    _, configs = final_setup(tmp_path, strategy=s2)
+    assert all(config.bot.turn.strategy == s2 for config in configs)
+    seen: list[tuple[str, tuple[Any, ...]]] = []
+
+    def spy(self: Any, config: Any, data: Any, grid: Any) -> Any:
+        interval = "1h" if config.bot.turn_interval == HOUR else "4h"
+        seen.append((interval, tuple(grid)))
+        verdict_line = "geçmedi: örneklem içi işlem yetersiz (0 < 30)"
+        result = CandidateResult(grid[0].name, interval, None, None, None, None, verdict_line)
+        return result, None, config
+
+    monkeypatch.setattr(_evaluation._Evaluation, "candidate", spy)
+    run = Run(tmp_path)
+    exit_ = run.final(list(configs), None)
+    assert exit_.outcome is BacktestOutcome.COMPLETED, exit_.message
+    expected = [(interval, grid) for interval in ("1h", "4h") for grid in CANDIDATE_GRIDS]
+    assert seen == expected
+    assert "sınanan kombinasyon: 72" in run.report(configs[0]).splitlines()
+
+
+def test_final_candle_count_below_grid_refused(tmp_path: Path) -> None:
+    """AC-8, R-4: mum sayısı en uzun ızgara göstergesine (200) yetmezse ret; veri okunmaz, tur
+    atılmaz, rapor yazılmaz."""
+    _, configs = final_setup(tmp_path)
+    short = [
+        replace(each, bot=replace(each.bot, read=replace(each.bot.read, candle_count=199)))
+        for each in configs
+    ]
+    run = Run(tmp_path)
+    exit_ = run.final(short, None)
+    assert exit_.outcome is BacktestOutcome.REFUSED
+    assert exit_.message == "ayar geçersiz: market.candle_count"
+    assert (run.reads, exit_.turns, started(run)) == ([], 0, [])
+    assert not Path(configs[0].report_path).exists()
+
+
+def test_not_enough_trades_line_has_count(tmp_path: Path) -> None:
+    """AC-10, R-6: "örneklem içi işlem yetersiz" satırı ızgaranın en yüksek işlem sayısını yazar;
+    rapor ve konsol aynı satırı taşır."""
+    configs = candidates(tmp_path)
+    strategy = configs[0].bot.turn.strategy
+    run = Run(tmp_path)
+    exit_ = run.final([configs[0]], [[strategy, replace(strategy, k=Decimal(3))]])
+    assert exit_.outcome is BacktestOutcome.COMPLETED, exit_.message
+    line = "geçmedi: örneklem içi işlem yetersiz (1 < 30)"
+    assert f"sonuç: {line}" in run.report(configs[0]).splitlines()
+    assert f"backtest aday S0 1h: {line}" in run.lines

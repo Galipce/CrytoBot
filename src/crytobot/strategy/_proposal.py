@@ -1,7 +1,13 @@
 """Teknik işlem önerisi (spec 0015): kesişim kararı, adı konmuş nedenler, fiyat kuralları.
 
-Sıra: girdi denetimi, dört indikatörün tümü, nedenler. Bu yüzden hata "öneri yok"un önündedir:
-`POSITION_OPEN` geçersiz mumu ya da sonlu olmayan sonucu gizlemez (plan 0015, Risk 2).
+Spec 0043 R-2: `propose` ayarın tipine göre adayın giriş koşulunu uygular — S0 bugünkü kesişim,
+S1 kesişim ve trend ortalaması, S2 kırılma, S3 trend ortalaması ve aşırı satım. Öneri bütün
+adaylarda aynı `_intent` ile kurulur (k*ATR stop, r*risk hedef, tick kuralları; AC-6).
+Karşılaştırmalar en kısa ondalık gösterimle yapılır; eşitlik koşulu karşılamaz.
+
+Sıra: girdi denetimi, adayın indikatörlerinin tümü (S0'da bugünkü sırayla), nedenler. Bu yüzden
+hata "öneri yok"un önündedir: `POSITION_OPEN` geçersiz mumu ya da sonlu olmayan sonucu gizlemez
+(plan 0015, Risk 2).
 
 Hesap kendi bağlamında tam yapılır, sonuç yuvarlanmaz ve çağıranın decimal ayarı kararı
 değiştirmez. Sonlu `BOUNDED` bağlamı burada yanlış olur: Wilder ATR düz seride `3e-323`'e kadar
@@ -32,13 +38,19 @@ from crytobot.analysis import (
     atr,
     ema,
     rsi,
+    sma,
 )
 from crytobot.risk import TradeIntent
 from crytobot.strategy._inputs import (
+    S3_TREND_PERIOD,
+    BreakoutSettings,
     CheckedNumbers,
     InvalidCandlesError,
     NonFiniteIndicatorError,
+    Settings,
     StrategySettings,
+    TrendDipSettings,
+    TrendFilterSettings,
     check_inputs,
 )
 
@@ -58,8 +70,10 @@ class NoProposalReason(Enum):
     POSITION_OPEN = "position_open"
     INSUFFICIENT_HISTORY = "insufficient_history"
     NO_CROSSOVER = "no_crossover"
+    NO_BREAKOUT = "no_breakout"
     RSI_MISSING = "rsi_missing"
     RSI_TOO_HIGH = "rsi_too_high"
+    NOT_ABOVE_TREND = "not_above_trend"
     ATR_MISSING = "atr_missing"
     INVALID_PRICES = "invalid_prices"
 
@@ -73,25 +87,43 @@ class NoProposal:
 
 @dataclass(frozen=True, slots=True)
 class _Indicators:
-    fast: Series
-    slow: Series
-    rsi: Series
+    """Adayın kullandığı seriler; kullanmadığı `None`'dır."""
+
+    fast: Series | None
+    slow: Series | None
+    rsi: Series | None
     atr: Series
+    trend: Series | None
 
 
-def _indicators(candles: Sequence[Candle], settings: StrategySettings) -> _Indicators:
-    """`analysis` hataları adı konmuş `strategy` hatasına çevrilir; mum denetimi burada yapılır."""
+def _trend_period(settings: Settings) -> int | None:
+    if isinstance(settings, TrendFilterSettings):
+        return settings.trend_period
+    return S3_TREND_PERIOD if isinstance(settings, TrendDipSettings) else None
+
+
+def _indicators(candles: Sequence[Candle], settings: Settings) -> _Indicators:
+    """`analysis` hataları adı konmuş `strategy` hatasına çevrilir; mum denetimi burada yapılır.
+    Sıra S0'da bugünküdür (hızlı, yavaş, RSI, ATR), trend ortalaması en sonda."""
+    trend_period = _trend_period(settings)
+    fast: Series | None = None
+    slow: Series | None = None
     try:
-        return _Indicators(
-            fast=ema(candles, period=settings.fast_period),
-            slow=ema(candles, period=settings.slow_period),
-            rsi=rsi(candles, period=settings.rsi_period),
-            atr=atr(candles, period=settings.atr_period),
+        if isinstance(settings, StrategySettings | TrendFilterSettings):
+            fast = ema(candles, period=settings.fast_period)
+            slow = ema(candles, period=settings.slow_period)
+        strength = (
+            None
+            if isinstance(settings, BreakoutSettings)
+            else rsi(candles, period=settings.rsi_period)
         )
+        volatility = atr(candles, period=settings.atr_period)
+        trend = None if trend_period is None else sma(candles, period=trend_period)
     except InvalidCandleError as error:
         raise InvalidCandlesError(error.problem, error.position) from error
     except NonFiniteResultError as error:
         raise NonFiniteIndicatorError(error.indicator, error.position) from error
+    return _Indicators(fast, slow, strength, volatility, trend)
 
 
 def _shortest(value: float) -> Decimal:
@@ -142,18 +174,63 @@ def _crossed_up(fast: Series, slow: Series) -> bool | None:
     return previous_fast <= previous_slow and last_fast > last_slow
 
 
+def _above(close: float, value: float) -> bool:
+    """Kesin üstünde; eşitlik aşmaz (R-2)."""
+    return _shortest(close) > _shortest(value)
+
+
+def _breakout_reason(candles: Sequence[Candle], window: int) -> NoProposalReason | None:
+    """S2: pencere son kapanmış mumdan önceki `window` mumdur, son mumu içermez (AC-4)."""
+    if len(candles) < window + 1:
+        return NoProposalReason.INSUFFICIENT_HISTORY
+    highest = max(float(candle.high) for candle in candles[-window - 1 : -1])
+    return None if _above(candles[-1].close, highest) else NoProposalReason.NO_BREAKOUT
+
+
+def _rsi_reason(strength: Series, threshold: Decimal | None) -> NoProposalReason | None:
+    value = strength[-1] if strength else None
+    if value is None:
+        return NoProposalReason.RSI_MISSING
+    assert threshold is not None  # every RSI candidate has a checked threshold
+    return NoProposalReason.RSI_TOO_HIGH if _shortest(value) >= threshold else None
+
+
+def _entry_reason(
+    candles: Sequence[Candle], settings: Settings, series: _Indicators, numbers: CheckedNumbers
+) -> NoProposalReason | None:
+    """Adayın giriş koşulu; tutmayan ilk neden `NoProposalReason` sırasıyla."""
+    if isinstance(settings, BreakoutSettings):
+        return _breakout_reason(candles, settings.breakout_period)
+    trend = series.trend
+    average = trend[-1] if trend else None
+    if trend is not None and average is None:
+        return NoProposalReason.INSUFFICIENT_HISTORY
+    if series.fast is not None and series.slow is not None:
+        crossed = _crossed_up(series.fast, series.slow)
+        if crossed is None:
+            return NoProposalReason.INSUFFICIENT_HISTORY
+        if not crossed:
+            return NoProposalReason.NO_CROSSOVER
+    assert series.rsi is not None  # every candidate but S2 reads RSI
+    reason = _rsi_reason(series.rsi, numbers.rsi_threshold)
+    if reason is None and average is not None and not _above(candles[-1].close, average):
+        return NoProposalReason.NOT_ABOVE_TREND
+    return reason
+
+
 def propose(
     *,
     pair: str,
     candles: Sequence[Candle],
     position_open: bool,
     tick: Decimal | int,
-    settings: StrategySettings,
+    settings: Settings,
 ) -> TradeIntent | NoProposal:
     """Son mum için tek sonuç: alım önerisi ya da adı konmuş "öneri yok" nedeni.
 
-    Seri yalnız kapanmış mumlardan oluşmalıdır; bunu ve bayat veriyi denetlemek çağıranın işidir.
-    Saat, ağ, depo ve global durum kullanmaz; kâr hedefi ve kâr-zarar girdi değildir (BR-1).
+    `settings`'in tipi adayı seçer (spec 0043 R-2). Seri yalnız kapanmış mumlardan oluşmalıdır;
+    bunu ve bayat veriyi denetlemek çağıranın işidir. Saat, ağ, depo ve global durum kullanmaz;
+    kâr hedefi ve kâr-zarar girdi değildir (BR-1).
     """
     checked_settings, numbers = check_inputs(
         pair=pair, position_open=position_open, tick=tick, settings=settings
@@ -161,16 +238,10 @@ def propose(
     series = _indicators(candles, checked_settings)
     if position_open:
         return NoProposal(NoProposalReason.POSITION_OPEN)
-    crossed = _crossed_up(series.fast, series.slow)
-    if crossed is None:
-        return NoProposal(NoProposalReason.INSUFFICIENT_HISTORY)
-    if not crossed:
-        return NoProposal(NoProposalReason.NO_CROSSOVER)
-    rsi_value, atr_value = series.rsi[-1], series.atr[-1]
-    if rsi_value is None:
-        return NoProposal(NoProposalReason.RSI_MISSING)
-    if _shortest(rsi_value) >= numbers.rsi_threshold:
-        return NoProposal(NoProposalReason.RSI_TOO_HIGH)
+    reason = _entry_reason(candles, checked_settings, series, numbers)
+    if reason is not None:
+        return NoProposal(reason)
+    atr_value = series.atr[-1]
     if atr_value is None:
         return NoProposal(NoProposalReason.ATR_MISSING)
     intent = _intent(pair, candles[-1].close, atr_value, numbers)
