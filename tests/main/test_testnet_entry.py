@@ -93,3 +93,41 @@ def test_paper_control_commands_do_not_read_the_network(tmp_path: Path, argv: li
     run(argv, config_path=cfg, console=out)
 
     assert "exchange.testnet" not in out.getvalue()
+
+
+@pytest.mark.parametrize(("testnet", "label"), [(True, "[TESTNET]"), (False, None)])
+def test_entry_labels_the_reporter_only_on_testnet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, testnet: bool, label: str | None
+) -> None:
+    """Review round 1 F-2 (CB-5, G-3): reporter verilmeyen canlı başlatmada giriş noktası
+    Telegram servisini testnet'te `[TESTNET]` etiketiyle, mainnet'te etiketsiz kurar."""
+    from crytobot.reporting import ReportingService, TelegramConfig
+
+    cfg = write_test_config(tmp_path, mode="live", testnet=testnet)
+    prepare_live_store(
+        (tmp_path / "bot.db").as_posix(),
+        NOW,
+        testnet=testnet,
+        live_client=FakeLiveClient(free_balance=Decimal(1000)),
+    )
+    active = TelegramConfig(enabled=True, bot_token="t", chat_id="c")
+    monkeypatch.setattr(entry, "load_reporting_config", lambda *a, **k: active)
+    labels: list[str | None] = []
+
+    def spy(config: TelegramConfig, *args: Any, label: str | None = None, **kwargs: Any) -> Any:
+        labels.append(label)
+        return ReportingService(config, *args, transport=lambda u, p: (200, "{}"), label=label)
+
+    monkeypatch.setattr(entry, "ReportingService", spy)
+    stop = StopRequest()
+    stop.request("test")
+
+    run(
+        ["start", "--live"],
+        config_path=cfg,
+        console=io.StringIO(),
+        live_client=FakeLiveClient(free_balance=Decimal(1000)),
+        stop=stop,
+    )
+
+    assert labels == [label]
