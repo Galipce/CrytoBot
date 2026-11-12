@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from crytobot.app import SETTING_NAMES, load_config
+from crytobot.strategy import StrategySettings
 
 NOW = datetime(2026, 11, 6, 12, 0, tzinfo=UTC)
 BASE: dict[str, dict[str, Any]] = {
@@ -82,6 +83,7 @@ def test_valid_settings_give_the_whole_config() -> None:
     assert config.read.read_budget == timedelta(seconds=60)
     assert config.turn.whitelist == ("BTC/USDT", "ETH/USDT")
     assert config.turn.limits.max_open_positions == 5
+    assert isinstance(config.turn.strategy, StrategySettings)
     assert config.turn.strategy.slow_period == 26
     assert config.turn.max_price_age == timedelta(seconds=120)
 
@@ -467,3 +469,117 @@ def test_bot_mode_defaults_to_paper_and_accepts_live() -> None:
     res_bad = load_config(document(**{"bot.mode": "invalid"}), NOW)
     assert res_bad.config is None and res_bad.setting == "bot.mode"
     assert res_bad.message == "ayar geçersiz: bot.mode"
+
+
+# --- spec 0043 R-1, R-4 (AC-1, AC-8; plan Risk 3, 4) ---
+
+S1_KEYS = {**BASE["strategy"], "trend_period": 150}
+S2_KEYS = {"breakout_period": 55, "atr_period": 14, "k": "2", "r": "2"}
+S3_KEYS = {"rsi_period": 14, "rsi_threshold": "35", "atr_period": 14, "k": "1.5", "r": "2"}
+CANDIDATE_KEYS: dict[str, dict[str, Any]] = {
+    "S0": dict(BASE["strategy"]),
+    "S1": S1_KEYS,
+    "S2": S2_KEYS,
+    "S3": S3_KEYS,
+}
+
+
+def chosen(
+    name: str, keys: dict[str, Any] | None = None, *, candle_count: int = 200
+) -> dict[str, dict[str, Any]]:
+    """Seçilen adayın tam anahtar kümesiyle belge; `keys`'te `None` anahtarı siler."""
+    values = document(**{"market.candle_count": candle_count})
+    strategy: dict[str, Any] = {"name": name, **CANDIDATE_KEYS[name], **(keys or {})}
+    values["strategy"] = {key: value for key, value in strategy.items() if value is not None}
+    return values
+
+
+@pytest.mark.parametrize("name", list(CANDIDATE_KEYS))
+def test_each_candidate_is_selected_with_its_keys(name: str) -> None:
+    config = load_config(chosen(name), NOW).config
+    assert config is not None
+    strategy = config.turn.strategy
+    assert strategy.name == name
+    expected = {
+        key: Decimal(value) if isinstance(value, str) else value
+        for key, value in CANDIDATE_KEYS[name].items()
+    }
+    assert dict(strategy.parameters()) == expected
+
+
+def test_no_name_is_s0() -> None:
+    """R-1: ad yoksa S0 (bugünkü davranış); açık `name = "S0"` aynı ayarı verir."""
+    implicit = load_config(document(), NOW).config
+    explicit = load_config(chosen("S0"), NOW).config
+    assert implicit is not None and explicit is not None
+    assert isinstance(implicit.turn.strategy, StrategySettings)
+    assert implicit == explicit
+
+
+@pytest.mark.parametrize("value", ["S4", "s0", "", 0, None, ["S1"], True])
+def test_unknown_strategy_name_refused(value: object) -> None:
+    """AC-1: bilinmeyen ad `ayar geçersiz: strategy.name`, anahtarlardan önce."""
+    values = document()
+    values["strategy"]["name"] = value
+    result = load_config(values, NOW)
+    assert (result.config, result.setting) == (None, "strategy.name")
+    assert result.message == "ayar geçersiz: strategy.name"
+    del values["strategy"]["fast_period"]  # the name is judged before the keys
+    assert load_config(values, NOW).message == "ayar geçersiz: strategy.name"
+
+
+@pytest.mark.parametrize(
+    ("name", "key"),
+    [(name, key) for name, keys in CANDIDATE_KEYS.items() for key in keys],
+)
+def test_selected_strategy_missing_key_refused(name: str, key: str) -> None:
+    """AC-1: seçilen adayın eksik anahtarı `ayar eksik: strategy.<alan>`."""
+    result = load_config(chosen(name, {key: None}), NOW)
+    assert (result.config, result.setting) == (None, f"strategy.{key}")
+    assert result.message == f"ayar eksik: strategy.{key}"
+
+
+@pytest.mark.parametrize(
+    ("name", "key"),
+    [("S0", "trend_period"), ("S2", "fast_period"), ("S2", "rsi_threshold"), ("S3", "slow_period")],
+)
+def test_key_of_another_candidate_refused(name: str, key: str) -> None:
+    """Plan Risk 3: seçilen adayın kullanmadığı anahtar etkisiz kalmaz, reddedilir."""
+    result = load_config(chosen(name, {key: 20}), NOW)
+    assert (result.config, result.setting) == (None, f"strategy.{key}")
+    assert result.message == f"bilinmeyen ayar: strategy.{key}"
+
+
+@pytest.mark.parametrize(
+    ("name", "key", "value"),
+    [
+        ("S1", "trend_period", 0),
+        ("S1", "trend_period", "100"),
+        ("S2", "breakout_period", -1),
+        ("S2", "k", 2.5),
+        ("S3", "rsi_threshold", "101"),
+        ("S3", "atr_period", "14"),
+    ],
+)
+def test_selected_strategy_invalid_key_refused(name: str, key: str, value: object) -> None:
+    result = load_config(chosen(name, {key: value}), NOW)
+    assert (result.config, result.setting) == (None, f"strategy.{key}")
+    assert result.message == f"ayar geçersiz: strategy.{key}"
+
+
+@pytest.mark.parametrize(
+    ("name", "keys", "needed"),
+    [
+        ("S0", {}, 27),
+        ("S1", {"trend_period": 150}, 150),
+        ("S2", {"breakout_period": 100}, 101),
+        ("S3", {}, 200),
+    ],
+)
+def test_candle_count_warmup_boundary(name: str, keys: dict[str, Any], needed: int) -> None:
+    """AC-8: en uzun göstergeye tam yeten mum sayısı kabul, bir eksiği
+    `ayar geçersiz: market.candle_count`."""
+    assert load_config(chosen(name, keys, candle_count=needed), NOW).config is not None
+    result = load_config(chosen(name, keys, candle_count=needed - 1), NOW)
+    assert (result.config, result.setting) == (None, "market.candle_count")
+    assert result.message == "ayar geçersiz: market.candle_count"

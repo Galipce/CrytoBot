@@ -21,7 +21,7 @@ from crytobot.risk import (
     approve_trade,
     observe,
 )
-from crytobot.strategy import StrategyError, StrategySettings, propose
+from crytobot.strategy import CANDIDATES, Settings, StrategyError, propose
 
 _PROBE_PAIR = "PROBE/USDT"
 _PROBE_EQUITY = Decimal(10000)
@@ -38,11 +38,12 @@ _MIN_PRICE_PLACE = -28
 
 @dataclass(frozen=True)
 class TurnSettings:
-    """Turun ayarları; hiçbirinin varsayılanı yoktur (R-12). Mod alanı yoktur (R-13)."""
+    """Turun ayarları; hiçbirinin varsayılanı yoktur (R-12). Mod alanı yoktur (R-13). `strategy`
+    seçilen adayın ayarıdır (spec 0043 R-1: S0…S3'ün tipi)."""
 
     whitelist: Sequence[str]
     limits: RiskLimits
-    strategy: StrategySettings
+    strategy: Settings
     fee: Decimal | int
     slippage: Decimal | int
     candle_interval: timedelta
@@ -94,7 +95,7 @@ def _costs_valid(
 
 
 def _strategy_problem(strategy: object) -> str | None:
-    if not isinstance(strategy, StrategySettings):
+    if not isinstance(strategy, CANDIDATES):
         return "strategy"
     try:
         propose(pair=_PROBE_PAIR, candles=(), position_open=True, tick=1, settings=strategy)

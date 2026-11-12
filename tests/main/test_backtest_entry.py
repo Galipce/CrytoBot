@@ -66,7 +66,9 @@ class Backtester:
             **section,
         }
         rows = "".join(f"{key} = {value}\n" for key, value in values.items())
-        text = config_text(self.root, candle_count="4") + "\n[backtest]\n" + rows
+        # spec 0043 R-4 (plan Risk 4): four candles warm a strategy whose longest indicator needs four
+        short = {"fast_period": "1", "slow_period": "2", "rsi_period": "3", "atr_period": "3"}
+        text = config_text(self.root, candle_count="4", **short) + "\n[backtest]\n" + rows
         self.bot.config_path.write_text(text, encoding="utf-8")
 
     def run(self, argv: list[str] | None = None) -> tuple[int, str]:
