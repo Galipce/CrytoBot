@@ -173,8 +173,10 @@ def test_selection_ignores_later_periods(
     [
         ({"profit_factor": Decimal("1.2"), "trades": 30}, PASSED),
         ({"profit_factor": Decimal("1.19")}, f"{OOS_PROFIT_FACTOR} (1.1900 < 1.2)"),
-        # the decision is exact; the line shows the report's rounded value (0043 plan Risk 6)
-        ({"profit_factor": Decimal("1.19996")}, f"{OOS_PROFIT_FACTOR} (1.2000 < 1.2)"),
+        # the decision is exact; a failing factor is cut toward failure, so the line never reads
+        # "1.2000 < 1.2" (0043 plan Risk 6, review round 1 L-2)
+        ({"profit_factor": Decimal("1.19996")}, f"{OOS_PROFIT_FACTOR} (1.1999 < 1.2)"),
+        ({"profit_factor": Decimal("1.199999999")}, f"{OOS_PROFIT_FACTOR} (1.1999 < 1.2)"),
         ({"trades": 29}, f"{OOS_TRADES} (29 < 30)"),
         ({"drawdown": Decimal("0.15")}, f"{OOS_DRAWDOWN} (%15.0000 ≥ %15)"),
         ({"drawdown": Decimal("0.1499999")}, PASSED),

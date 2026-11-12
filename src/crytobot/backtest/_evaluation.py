@@ -18,7 +18,7 @@ asgarisi yok). Karşılaştırma kesin `Decimal` değerlerledir, rapordaki yuvar
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Final
 
 from crytobot.backtest._metrics import PartMetrics
@@ -38,6 +38,7 @@ OOS_DRAWDOWN: Final = f"{_FAILED}örneklem dışı drawdown"
 HOLDOUT_NET: Final = f"{_FAILED}saklı dönem net kâr"
 HOLDOUT_DRAWDOWN: Final = f"{_FAILED}saklı dönem drawdown"
 _DRAWDOWN_TEXT = f"%{(MAX_DRAWDOWN * 100).normalize():f}"  # "%15"
+_FACTOR_PLACES = Decimal("0.0001")  # the report's ratio places (`ratio`)
 
 
 def _failed(line: str, value: str, sign: str, threshold: object) -> str:
@@ -82,8 +83,9 @@ def select_combination(in_sample: Sequence[PartMetrics]) -> int | None:
     return best
 
 
-def _below_factor(value: Decimal | None) -> bool:
-    return value is not None and value < MIN_PROFIT_FACTOR
+def _failing_factor(value: Decimal) -> str:
+    """Tutmayan kâr faktörü aşağı kesilir: 1.19996 `1.2000 < 1.2` değil `1.1999 < 1.2` yazılır."""
+    return ratio(value.quantize(_FACTOR_PLACES, rounding=ROUND_DOWN))
 
 
 def verdict(out_of_sample: PartMetrics, holdout: PartMetrics) -> str:
@@ -91,9 +93,9 @@ def verdict(out_of_sample: PartMetrics, holdout: PartMetrics) -> str:
     satır değeri ve eşiği taşır. Karar kesin değerledir, yazılan değer rapor biçimindedir."""
     if out_of_sample.net <= 0:
         return _failed(OOS_NET, money(out_of_sample.net), "≤", 0)
-    if _below_factor(out_of_sample.profit_factor):
-        factor = ratio(out_of_sample.profit_factor)
-        return _failed(OOS_PROFIT_FACTOR, factor, "<", MIN_PROFIT_FACTOR)
+    factor = out_of_sample.profit_factor
+    if factor is not None and factor < MIN_PROFIT_FACTOR:
+        return _failed(OOS_PROFIT_FACTOR, _failing_factor(factor), "<", MIN_PROFIT_FACTOR)
     if out_of_sample.trades < MIN_TRADES:
         return _failed(OOS_TRADES, str(out_of_sample.trades), "<", MIN_TRADES)
     if out_of_sample.max_drawdown >= MAX_DRAWDOWN:
