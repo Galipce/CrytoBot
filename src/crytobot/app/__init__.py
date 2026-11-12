@@ -28,6 +28,11 @@ rapor dosyası yolu, ayrım anı, spread) denetler; `run_backtest` veri dosyası
 anında paper turunun aynısını simüle saatle atar ve raporu yazar. Okuma, rapor dosyası, konsol,
 durdurma isteği ve geçici depo yolu `BacktestParts` ile gelir; bot deposuna, kilide ve kayıt
 dosyasına dokunulmaz, ağa çıkılmaz.
+
+Son değerlendirme (spec 0042): varsayılan backtest yalnız örneklem içini koşar ve yazar;
+`run_evaluation` adayları aynı koşullarla örneklem içinde seçer, seçileni örneklem dışı ve saklı
+dönemde sabit eşiklerle değerlendirir ve tek son değerlendirme raporu yazar. Aşama kapısı yalnız bu
+raporu ve onun strateji adını kabul eder.
 """
 
 from crytobot.app._backtest import BacktestExit, BacktestOutcome, BacktestParts, run_backtest
@@ -53,6 +58,7 @@ from crytobot.app._download import (
     load_download_config,
     run_download,
 )
+from crytobot.app._evaluation import run_evaluation
 from crytobot.app._events import TRIAL_MARK, line
 from crytobot.app._inputs import PairMarket, TurnSettings
 from crytobot.app._loop import (
@@ -155,6 +161,7 @@ __all__: list[str] = [
     "resume_operations",
     "run_backtest",
     "run_download",
+    "run_evaluation",
     "run_loop",
     "run_turn",
     "to_turn_market",

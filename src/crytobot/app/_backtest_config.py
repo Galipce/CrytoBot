@@ -2,19 +2,23 @@
 
 `load_backtest_config` aynı ayar dosyasından botun ayarlarını (`load_config`) ve `[backtest]`
 bölümünü denetler. Sıra: bot ayarları (tur aralığı mum aralığının katı olmalı) → bölüm →
-`data_path`, `report_path`, `split_at`, `spread` anahtarlarının varlığı → aynı sırayla değerleri →
+`data_path`, `report_path`, `split_at`, `holdout_at`, `spread` anahtarlarının varlığı → aynı sırayla
+değerleri →
 bölümdeki bilinmeyen anahtar. İlk sorun adıyla söylenir, ham değer yazılmaz. Hiçbir ayarın
 varsayılanı yoktur.
 
 Denetimin anı gerçek saat değildir: sabit `CHECK_MOMENT` (defter ve risk denetimi bir an ister,
 koşu kararlarına girmez). Ayrım anı UTC'dir (ofset 0) ve tur aralığı sınırındadır; dönemin içinde
-olup olmadığı veri dosyası okununca denetlenir. Spread turun birimindedir (oran): `0 ≤ s < 1` ve
-turun kendi maliyet denetiminden geçer. Rapor yolu veri dosyasının, deponun ya da kayıt
-dosyasının yolu olamaz; burada metinle, giriş noktasında çözülmüş yolla denetlenir.
+olup olmadığı veri dosyası okununca denetlenir. Spec 0042 R-1 (plan Risk 1, 2): `split_at` örneklem
+dışının, zorunlu `holdout_at` saklı dönemin başıdır; aynı kurallar ve `split_at < holdout_at`
+(değilse `ayar geçersiz: backtest.holdout_at`); eksik anahtar proje kuralıyla `ayar eksik`.
+Spread turun birimindedir (oran): `0 ≤ s < 1` ve turun kendi maliyet denetiminden geçer. Rapor
+yolu veri dosyasının, deponun ya da kayıt dosyasının yolu olamaz; burada metinle, giriş noktasında
+çözülmüş yolla denetlenir.
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -22,7 +26,7 @@ from crytobot.app._config import BotConfig, _Bad, _number, load_config
 from crytobot.app._inputs import _PROBE_RULES, _costs_valid
 
 SECTION = "backtest"
-_KEYS = ("data_path", "report_path", "split_at", "spread")
+_KEYS = ("data_path", "report_path", "split_at", "holdout_at", "spread")
 CHECK_MOMENT = datetime(2000, 1, 1, tzinfo=UTC)
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
@@ -36,6 +40,7 @@ class BacktestConfig:
     split_at: datetime
     spread: Decimal
     bot: BotConfig
+    holdout_at: datetime = field(kw_only=True)  # spec 0042 R-1: the start of the holdout period
 
 
 @dataclass(frozen=True)
@@ -73,8 +78,8 @@ def _path(value: object, name: str, taken: tuple[str, ...]) -> str:
     return value
 
 
-def _split_at(value: object, bot: BotConfig) -> datetime:
-    name = f"{SECTION}.split_at"
+def _moment(value: object, bot: BotConfig, key: str) -> datetime:
+    name = f"{SECTION}.{key}"
     if type(value) is not datetime or value.utcoffset() != timedelta(0):
         raise _invalid(name)
     moment = value.astimezone(UTC)
@@ -110,12 +115,15 @@ def _backtest(document: Mapping[object, object], bot: BotConfig) -> BacktestConf
     bot_paths = (bot.store_path, bot.log_path)
     data_path = _path(table["data_path"], f"{SECTION}.data_path", bot_paths)
     report_path = _path(table["report_path"], f"{SECTION}.report_path", (data_path, *bot_paths))
-    split_at = _split_at(table["split_at"], bot)
+    split_at = _moment(table["split_at"], bot, "split_at")
+    holdout_at = _moment(table["holdout_at"], bot, "holdout_at")
+    if not split_at < holdout_at:
+        raise _invalid(f"{SECTION}.holdout_at")
     spread = _spread(table["spread"], bot)
     for key in table:
         if key not in _KEYS:
             raise _Problem(f"{SECTION}.{key}", f"bilinmeyen ayar: {SECTION}.{key}")
-    return BacktestConfig(data_path, report_path, split_at, spread, bot)
+    return BacktestConfig(data_path, report_path, split_at, spread, bot, holdout_at=holdout_at)
 
 
 def load_backtest_config(document: object) -> BacktestConfigResult:

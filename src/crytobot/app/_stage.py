@@ -8,6 +8,12 @@ canlıda ayrıca `live_approved_*` ve spec 0038'in `paper_store_path`, `paper_mi
 anı (CB-2) → rapor ve ayar eksikleri (CB-4) → metrik eşikleri → ayar uyuşmazlıkları (mevcutlar,
 sonra rapor koşulları, CB-3); ilk karşılanmayan denetimin adıyla döner. Hiçbir denetim bilgi
 eksikliği yüzünden atlanmaz. Sayılar değerle karşılaştırılır (`"0.001"` = `"0.0010"`, G-3).
+
+Spec 0042 R-7 (0028 R-3'ün kapı kısmını geçersiz kılar): okunabilirlik adımında son değerlendirme
+olmayan rapor `rapor son değerlendirme değil` ile reddedilir (okuyucunun `NOT_FINAL`'ı); uyuşmazlık
+adımında, strateji parametrelerinden önce, rapordaki strateji adı çalışan stratejininkinden
+(`STRATEGY_NAME`) farklıysa `ayar uyuşmazlığı: strateji`; parametre farkı yine parametrenin adıyla
+(plan Risk 7). Eşikler ve diğer sıra değişmez.
 """
 
 from collections.abc import Mapping
@@ -19,6 +25,7 @@ from crytobot.app._config import BotConfig, _Bad, _number
 from crytobot.backtest import CONDITIONS, ReportRead
 from crytobot.market_data import CANDLE_INTERVALS
 
+STRATEGY_NAME = "S0"  # spec 0042 plan Risk 4: the running strategy until 0043 makes it a setting
 _STAGE_SECTION = "stage"
 _STAGE_KEYS = (
     "report_path",
@@ -376,6 +383,8 @@ def check_stage_gate(
         return _refused("ayar uyuşmazlığı: turn_interval")
     if rep.spread != expected_spread:
         return _refused("ayar uyuşmazlığı: spread")
+    if rep.strategy_name != STRATEGY_NAME:  # spec 0042 R-7, plan Risk 7
+        return _refused("ayar uyuşmazlığı: strateji")
     strat = bot.turn.strategy
     for name in _STRATEGY:
         if Decimal(str(strategy[name])) != Decimal(str(getattr(strat, name))):

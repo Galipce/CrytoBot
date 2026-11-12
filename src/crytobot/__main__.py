@@ -12,7 +12,9 @@ alınmaz, depo ve kayıt dosyası açılmaz: çıktı yalnız konsoladır, çal�
 çıkılmaz, saat verilmez, kilit alınmaz; bot deposu ve kayıt dosyası açılmaz. Turların durumu
 `tempfile` ile açılan geçici bir dizindeki depodadır ve dizin her çıkışta silinir (zorla durdurma
 dahil; süreç öldürülürse işletim sisteminin geçici dizininde kalır, bir daha okunmaz). Konsol
-satırları zaman damgası taşımaz.
+satırları zaman damgası taşımaz. Spec 0042: `backtest` yalnız örneklem içini koşar ve yazar;
+`backtest --final` son değerlendirmedir (`run_evaluation`): örneklem dışı ve saklı dönem yalnız
+orada hesaplanır; aynı çıkış kodları. Birden fazla yapılandırma CLI'den 0043'te (plan Risk 10).
 
 Çıkış kodları: 0 temiz durma, hazırlık, indirme ya da backtest tamam, 1 başlatma, hazırlık, indirme
 ya da backtest reddi (ayarlar, veri dosyası, rapor dosyası var), 2 okuma reddiyle durma, 3 kayıt
@@ -68,6 +70,7 @@ from crytobot.app import (
     resume_operations,
     run_backtest,
     run_download,
+    run_evaluation,
     run_loop,
 )
 from crytobot.backtest import read_report, report_exists, write_report
@@ -99,7 +102,8 @@ from crytobot.reporting import ReportingService, load_reporting_config
 CONFIG_FILE = "crytobot.toml"
 USAGE = (
     "kullanım: python -m crytobot "
-    "prepare|start|download|backtest|status|kill-switch|resume|stop|dashboard [--live] [--trial]"
+    "prepare|start|download|backtest|status|kill-switch|resume|stop|dashboard"
+    " [--live] [--trial] [--final]"
 )
 COMMANDS = (
     ["prepare"],
@@ -109,6 +113,7 @@ COMMANDS = (
     ["start", "--trial"],
     ["download"],
     ["backtest"],
+    ["backtest", "--final"],
     ["status"],
     ["kill-switch"],
     ["kill-switch", "on"],
@@ -390,10 +395,13 @@ def _backtest_config(path: Path, output: Output) -> BacktestConfig | None:
     return config
 
 
-def _backtest(config_path: Path, output: Output, stop: StopRequest, clock: Clock) -> int:
+def _backtest(
+    config_path: Path, output: Output, stop: StopRequest, clock: Clock, *, final: bool = False
+) -> int:
     """Ağ yok, kilit yok; bot deposu ve kayıt dosyası açılmaz (spec 0025 R-1). Saat yalnız raporun
     üretim anı içindir (spec 0040 CB-2). Geçici dizin her çıkışta silinir; `.part`'ı rapor
-    yazıcısı siler (R-13)."""
+    yazıcısı siler (R-13). `final`: son değerlendirme (spec 0042), koşuların depoları aynı geçici
+    dizinde."""
     config = _backtest_config(config_path, output)
     if config is None:
         return EXIT_REFUSED
@@ -410,7 +418,7 @@ def _backtest(config_path: Path, output: Output, stop: StopRequest, clock: Clock
             clock,
         )
         try:
-            exit_ = run_backtest(config, parts)
+            exit_ = run_evaluation([config], parts) if final else run_backtest(config, parts)
         except ForcedStop:  # the second request: the line is written, the report is not
             return EXIT_FORCED
     return _BACKTEST_EXIT_CODES[exit_.outcome]
@@ -619,7 +627,7 @@ def run(
     if argv[0] == "download":
         return _download(config_path, output, clock, stop, download)
     if argv[0] == "backtest":
-        return _backtest(config_path, output, stop, clock)
+        return _backtest(config_path, output, stop, clock, final="--final" in argv)
     config = _config(config_path, output, clock)
     if config is None:
         return EXIT_REFUSED

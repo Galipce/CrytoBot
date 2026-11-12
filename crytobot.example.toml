@@ -55,11 +55,15 @@ r = "2"
 # dönemin her tur anında paper turunun aynısı simüle saatle atılır; rapor konsola ve rapor
 # dosyasına yazılır. Strateji, risk, çiftler, aralıklar ve açılış kasası yukarıdaki ayarlardır;
 # tur aralığı mum aralığının katı olmalıdır. Var olan rapor dosyasının üzerine yazılmaz.
+# Spec 0042: veri üç döneme bölünür (örneklem içi < split_at ≤ örneklem dışı < holdout_at ≤ saklı
+# dönem). `backtest` yalnız örneklem içini koşar ve yazar; örneklem dışı ve saklı dönem yalnız
+# `backtest --final` (son değerlendirme: sabit eşikler, paper adayı ya da "aday yok") ile açılır.
 # Ayarların varsayılanı yoktur: koşmadan önce aşağıdaki satırların başındaki "# " kaldırılır.
 # [backtest]
 # data_path = "crytobot-history.jsonl"   # `download`'un yazdığı veri dosyası
 # report_path = "crytobot-backtest.txt"  # rapor dosyası; veri, depo ve kayıt yolu olamaz
-# split_at = 2025-11-22T00:00:00Z         # örneklem içi / dışı ayrımı, UTC, dönemin içinde
+# split_at = 2025-11-22T00:00:00Z         # örneklem dışının başı, UTC, dönemin içinde
+# holdout_at = 2025-11-26T00:00:00Z       # saklı dönemin başı, UTC, split_at'ten sonra, dönemin içinde
 # spread = "0.0005"                      # sabit spread (oran); yalnız maliyet kapısında
 
 # Aşama onayı (spec 0028, BR-10): paper botunun kanıtlı modda başlatılması için geçerli bir
@@ -67,7 +71,7 @@ r = "2"
 # (deneme modu için `crytobot start --trial` kullanılır).
 # Ayarların varsayılanı yoktur: kanıtlı başlatmadan önce aşağıdaki satırların başındaki "# " kaldırılır.
 # [stage]
-# report_path = "crytobot-backtest.txt"  # geçerli ve aday işareti taşıyan backtest rapor dosyası
+# report_path = "crytobot-backtest.txt"  # `backtest --final` raporu: son değerlendirme, paper adayı var
 # report_sha256 = "<64 onaltılık>"       # backtest konsolundaki `rapor parmak izi:` değeri (spec 0040)
 # approved_by = "Ad Soyad"              # onayı veren kişinin adı / kimliği
 # approved_at = 2026-11-08T12:00:00Z    # onay anı, UTC ISO formatında

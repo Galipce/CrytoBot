@@ -7,6 +7,9 @@ yazılır. Koşular küçüktür (≤ 50 tur, `candle_count` ≤ 5).
 Mumlar: `high = low = open = close = değer`, ya da açıkça dört değer. `tests/app/helpers` stratejisi
 (EMA 1/2, RSI 2, ATR 2, `k=r=2`, tick 0.01): 10, 8, 9, 10 kapanmış serisinde öneri giriş 10, stop 8,
 hedef 14'tür.
+
+Spec 0042 (plan Risk 8): `config` saklı dönem başı (`holdout_at`) alır, verilmezse ayrım anından bir
+saat sonrası; `Run.final` son değerlendirmeyi (`run_evaluation`) aynı parçalarla koşar.
 """
 
 import json
@@ -25,6 +28,7 @@ from crytobot.app import (
     StopRequest,
     TurnSettings,
     run_backtest,
+    run_evaluation,
 )
 from crytobot.backtest import report_exists, write_report
 from crytobot.market_data import (
@@ -159,15 +163,18 @@ def config(
     root: Path,
     *,
     split_at: datetime | None = None,
+    holdout_at: datetime | None = None,
     spread: Decimal = SPREAD,
     **bot: Any,
 ) -> BacktestConfig:
+    split = at(2) if split_at is None else split_at
     return BacktestConfig(
         str(root / "history.jsonl"),
         str(root / "rapor.txt"),
-        at(2) if split_at is None else split_at,
+        split,
         spread,
         bot_config(root, **bot),
+        holdout_at=split + HOUR if holdout_at is None else holdout_at,
     )
 
 
@@ -211,12 +218,29 @@ class Run:
     def __call__(self, config: BacktestConfig, **changes: Any) -> BacktestExit:
         return run_backtest(config, self.parts(**changes))
 
+    def final(
+        self, configs: BacktestConfig | Sequence[BacktestConfig], grids: Any = None, **changes: Any
+    ) -> BacktestExit:
+        chosen = [configs] if isinstance(configs, BacktestConfig) else list(configs)
+        return run_evaluation(chosen, self.parts(**changes), grids)
+
     @property
     def console(self) -> str:
         return "".join(line + "\n" for line in self.lines)
 
     def report(self, config: BacktestConfig) -> str:
         return Path(config.report_path).read_text(encoding="utf-8")
+
+
+def force_pass(monkeypatch: Any) -> None:
+    """Spec 0042 (plan Risk 3): küçük fixture'larda örneklem içinde 30 işlem olmaz; tam koşunun
+    hesabını sınayan testler seçimi (ilk kombinasyon) ve hükmü ("geçti") sabitler. Kuralın kendisi
+    `tests/backtest/test_evaluation.py` ve `tests/app/test_evaluation_run.py`'dedir."""
+    from crytobot.app import _evaluation
+    from crytobot.backtest import PASSED
+
+    monkeypatch.setattr(_evaluation, "select_combination", lambda parts: 0 if parts else None)
+    monkeypatch.setattr(_evaluation, "verdict", lambda _outside, _held: PASSED)
 
 
 def report_lines(text: str, section: str) -> dict[str, str]:

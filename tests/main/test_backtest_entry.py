@@ -2,6 +2,7 @@
 
 `run` gerçek kodu koşar: gerçek ayar yükleyicisi, okuyucu (`read_history`), koşu ve rapor yazıcısı.
 Borsa yoktur; saat yalnız raporun üretim anı içindir (spec 0040) ve burada sabittir.
+Spec 0042 (plan Risk 8): ayar `holdout_at` taşır; `backtest --final` son değerlendirmedir.
 """
 
 import hashlib
@@ -60,6 +61,7 @@ class Backtester:
             "data_path": f'"{self.data.as_posix()}"',
             "report_path": f'"{self.report.as_posix()}"',
             "split_at": "2026-01-01T02:00:00Z",
+            "holdout_at": "2026-01-01T03:00:00Z",
             "spread": '"0.0005"',
             **section,
         }
@@ -295,9 +297,51 @@ def test_example_backtest_section_is_valid() -> None:
     assert result.config is not None, result.message
     assert result.config.report_path == "crytobot-backtest.txt"
     assert result.config.split_at == at(0).replace(year=2025, month=11, day=22)
+    assert result.config.holdout_at == at(0).replace(year=2025, month=11, day=26)
 
 
 def test_example_without_backtest_names_the_missing_section() -> None:
     with EXAMPLE.open("rb") as file:
         result = load_backtest_config(tomllib.load(file))
     assert result.config is None and result.message == "ayar eksik: backtest"
+
+
+def test_final_writes_a_final_report_with_the_same_exit_codes(tester: Backtester) -> None:
+    """Spec 0042 AC-1, AC-6: `backtest --final` son değerlendirme raporu yazar (burada 30 işlem
+    yok: "aday yok"); parmak izi satırı ve çıkış kodu varsayılanla aynı yoldan."""
+    code, console = tester.run(["backtest", "--final"])
+    assert code == EXIT_OK, console
+    report = tester.report.read_text(encoding="utf-8")
+    assert report.splitlines()[0] == "CrytoBot backtest raporu — son değerlendirme"
+    assert "sınanan kombinasyon: 1\n" in report
+    assert "paper adayı: aday yok\n" in report
+    assert "sonuç: geçmedi: örneklem içi işlem yetersiz\n" in report
+    rows = console.splitlines()
+    assert rows[0] == "backtest son değerlendirme başladı: aday=1 kombinasyon=1"
+    assert rows[-2] == (
+        f"rapor parmak izi: {hashlib.sha256(tester.report.read_bytes()).hexdigest()}"
+    )
+    code, console = tester.run(["backtest", "--final"])
+    assert code == EXIT_REFUSED and "rapor dosyası var" in console
+
+
+def test_default_backtest_console_shows_in_sample_only(tester: Backtester) -> None:
+    """Spec 0042 AC-1: varsayılan koşu örneklem içi dönemi söyler; sonrası yazılmaz."""
+    code, console = tester.run()
+    assert code == EXIT_OK
+    assert console.splitlines()[0] == (
+        "backtest başladı: dönem=2026-01-01T00:00:00+00:00..2026-01-01T02:00:00+00:00"
+        " (örneklem içi) çift=2 tur=2"
+    )
+    assert "örneklem dışı" not in console
+    assert "saklı dönem" not in console and "tüm koşu" not in console
+
+
+def test_holdout_outside_the_data_is_refused_before_any_turn(tester: Backtester) -> None:
+    """Spec 0042 AC-2: saklı dönem başı veri dönemini aşarsa ret, rapor yok, çıkış 1."""
+    tester.write_config(holdout_at="2026-01-01T04:00:00Z")
+    for argv in (["backtest"], ["backtest", "--final"]):
+        code, console = tester.run(argv)
+        assert code == EXIT_REFUSED
+        assert "ayar geçersiz: backtest.holdout_at" in console
+        assert not tester.report.exists()

@@ -1,4 +1,8 @@
-"""Spec 0025 AC-9 (R-11, R-12) ve rapor biçimi (plan Risk 9); spec 0040 CB-2, CB-3, PB-3."""
+"""Spec 0025 AC-9 (R-11, R-12) ve rapor biçimi (plan Risk 9); spec 0040 CB-2, CB-3, PB-3.
+
+Spec 0042 R-1 (plan Risk 3): örneklem dışı ve tüm koşu bölümlerini denetleyen testler son
+değerlendirme raporuna (`final_text`) taşındı, assert'leri aynen; varsayılan rapor yalnız örneklem
+içini yazar (AC-1)."""
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
@@ -9,7 +13,14 @@ from crytobot.backtest import (
     ASSUMPTIONS,
     CANDIDATE_MARK,
     CONDITIONS,
+    FINAL_TITLE,
+    NOT_ENOUGH_TRADES,
+    OOS_NET,
+    PASSED,
+    TITLE,
+    CandidateResult,
     ReportFacts,
+    final_report_text,
     money,
     percent,
     ratio,
@@ -46,8 +57,41 @@ FACTS = ReportFacts(
 )
 
 
+STRATEGY: dict[str, int | Decimal | str] = {
+    "fast_period": 12,
+    "slow_period": 26,
+    "rsi_period": 14,
+    "rsi_threshold": Decimal("70"),
+    "atr_period": 14,
+    "k": Decimal("2"),
+    "r": Decimal("2"),
+}
+HOLDOUT = DAY2 + timedelta(hours=2)  # after the last record: the earlier parts are as before
+FINAL_FACTS = replace(FACTS, strategy=STRATEGY, strategy_name="S0", holdout_at=HOLDOUT)
+
+
 def text() -> str:
     return report_text(FACTS, run_metrics(Decimal(1000), RECORDS, DAY2, (BTC,)))
+
+
+def final_metrics() -> Any:
+    return run_metrics(Decimal(1000), RECORDS, DAY2, (BTC,), HOLDOUT)
+
+
+def passed(name: str = "S0", interval: str = "1h", verdict: str = PASSED) -> CandidateResult:
+    metrics = final_metrics()
+    return CandidateResult(
+        name, interval, STRATEGY, metrics.in_sample, metrics.out_of_sample, metrics.holdout, verdict
+    )
+
+
+def final_text() -> str:
+    """Tek aday, geçti: paper adayı odur."""
+    return final_report_text(FINAL_FACTS, 1, [passed()], 0, final_metrics())
+
+
+def period_sections(report: str) -> dict[str, str]:
+    return {title: body for title, body in sections(report).items() if not title.startswith("aday")}
 
 
 def sections(report: str) -> dict[str, str]:
@@ -59,8 +103,9 @@ def sections(report: str) -> dict[str, str]:
 
 
 def test_report_states_every_assumption_and_marks_only_out_of_sample() -> None:
-    """R-11: her varsayım (boşluklu düşüş dahil, F-11), koşu bilgisi; işaret örneklem dışında."""
-    report = text()
+    """R-11: her varsayım (boşluklu düşüş dahil, F-11), koşu bilgisi; işaret örneklem dışında.
+    Spec 0042: son değerlendirmede; saklı dönem bölümü örneklem dışından sonra gelir."""
+    report = final_text()
     for assumption in ASSUMPTIONS:
         assert f"- {assumption}\n" in report
     assert any("boşluklu düşüş hesaba katılmaz" in assumption for assumption in ASSUMPTIONS)
@@ -75,9 +120,10 @@ def test_report_states_every_assumption_and_marks_only_out_of_sample() -> None:
     ):
         assert fact in report
     assert report.count(CANDIDATE_MARK) == 1
-    assert list(sections(report)) == [
+    assert list(period_sections(report)) == [
         "örneklem içi",
         f"örneklem dışı — {CANDIDATE_MARK}",
+        "saklı dönem",
         "tüm koşu",
     ]
 
@@ -89,12 +135,12 @@ def test_report_never_says_pass_or_fail() -> None:
 
 
 def test_each_part_carries_every_metric() -> None:
-    """R-10: her parça aynı satırları, aynı sırayla taşır."""
-    parts = sections(text())
+    """R-10: her parça aynı satırları, aynı sırayla taşır (spec 0042: saklı dönem dahil)."""
+    parts = period_sections(final_text())
     labels = [
         [row.split(":", 1)[0] for row in body.strip().splitlines()] for body in parts.values()
     ]
-    assert labels[0] == labels[1] == labels[2]
+    assert labels[0] == labels[1] == labels[2] == labels[3]
     assert labels[0] == [
         "turlar",
         "başlangıç kasası",
@@ -119,7 +165,7 @@ def test_each_part_carries_every_metric() -> None:
 
 
 def test_out_of_sample_values() -> None:
-    body = sections(text())[f"örneklem dışı — {CANDIDATE_MARK}"]
+    body = sections(final_text())[f"örneklem dışı — {CANDIDATE_MARK}"]
     assert "başlangıç kasası: 999.90000000 USDT\n" in body
     assert "net kâr/zarar: 9.89000000 USDT (getiri %0.9891)\n" in body  # 9.89 / 999.9 = 0.98910 %
     assert "kazanma oranı: %100.0000\n" in body
@@ -209,3 +255,121 @@ def test_existing_header_rows_keep_their_order() -> None:
         "ısınma mumu (candle_count)",
         "spread",
     ]
+
+
+# --- spec 0042 AC-1, AC-6: iki biçim ---
+
+
+def test_default_report_shows_in_sample_only() -> None:
+    """AC-1: varsayılan rapor yalnız örneklem içi; örneklem dışı ya da saklı dönemden rakam yok."""
+    report = text()
+    assert report.splitlines()[0] == TITLE
+    assert list(sections(report)) == ["örneklem içi"]
+    assert CANDIDATE_MARK not in report
+    assert "saklı dönem" not in report and "tüm koşu" not in report
+    assert "örneklem dışı" not in report
+    assert "geçti" not in report and "geçmedi" not in report
+    assert "9.89000000" not in report  # the out-of-sample net
+    assert "1009.79000000" not in report  # the run's end
+
+
+def test_final_report_has_three_sections() -> None:
+    """AC-1: son değerlendirme başlığında belirtilir; üç dönem ayrı bölümlerde."""
+    report = final_text()
+    rows = report.splitlines()
+    assert rows[0] == FINAL_TITLE
+    assert "saklı dönem başı: 2026-01-02T02:00:00+00:00 (bu an ve sonrası)" in rows
+    assert "strateji: S0 fast=12 slow=26 rsi=14 rsi_threshold=70 atr=14 k=2 r=2" in rows
+    assert "sınanan kombinasyon: 1" in rows
+    assert "paper adayı: S0 1h" in rows
+    titles = list(sections(report))
+    assert titles == [
+        "aday: S0 1h",
+        "örneklem içi",
+        f"örneklem dışı — {CANDIDATE_MARK}",
+        "saklı dönem",
+        "tüm koşu",
+    ]
+    held = sections(report)["saklı dönem"]
+    assert "turlar: 0 (ilk -, son -)\n" in held
+    assert "başlangıç kasası: 1009.79000000 USDT\n" in held
+
+
+def test_final_header_keeps_the_shared_rows_in_order() -> None:
+    rows = header(final_text())
+    assert [row.split(":", 1)[0] for row in rows] == [
+        FINAL_TITLE,
+        "dönem",
+        "mum aralığı",
+        "tur aralığı",
+        "ayrım anı",
+        "saklı dönem başı",
+        "çiftler",
+        "indirme anı",
+        "ısınma mumu (candle_count)",
+        "spread",
+        "strateji",
+        "üretim anı",
+        *CONDITIONS,
+        "sınanan kombinasyon",
+        "paper adayı",
+    ]
+
+
+def test_candidate_section_writes_setting_periods_and_verdict() -> None:
+    """R-3, Risk 6: hüküm, dayandığı değerlerin yanında."""
+    body = sections(final_text())["aday: S0 1h"]
+    assert body.splitlines() == [
+        "seçilen ayar: fast=12 slow=26 rsi=14 rsi_threshold=70 atr=14 k=2 r=2",
+        "örneklem içi: işlem 0, kâr faktörü tanımsız, net kâr/zarar -0.10000000 USDT,"
+        " en büyük drawdown %0.0100",
+        "örneklem dışı: işlem 1, kâr faktörü tanımsız, net kâr/zarar 9.89000000 USDT,"
+        " en büyük drawdown %0.0109",
+        "saklı dönem: işlem 0, kâr faktörü tanımsız, net kâr/zarar 0.00000000 USDT,"
+        " en büyük drawdown %0.0000",
+        "sonuç: geçti",
+    ]
+
+
+def test_no_candidate_report_has_only_the_shared_header() -> None:
+    """AC-6: hiçbiri geçmezse "aday yok"; başlık yalnız ortak bilgiler; dönem bölümü yok."""
+    metrics = final_metrics()
+    unselected = CandidateResult("S0", "1h", None, None, None, None, NOT_ENOUGH_TRADES)
+    failed = CandidateResult(
+        "S0", "4h", STRATEGY, metrics.in_sample, metrics.out_of_sample, metrics.holdout, OOS_NET
+    )
+    report = final_report_text(FINAL_FACTS, 2, [unselected, failed], None, None)
+    assert header(report) == [
+        FINAL_TITLE,
+        "spread: 0.0005",
+        "üretim anı: 2026-11-01T12:00:00+00:00",
+        "fee: 0.001",
+        "slippage: 0.001",
+        "per_trade_risk: 0.01",
+        "daily_loss_limit: 0.03",
+        "max_drawdown: 0.15",
+        "max_open_positions: 5",
+        "profit_cost_multiple: 2",
+        "opening_balance: 10000",
+        "sınanan kombinasyon: 2",
+        "paper adayı: aday yok",
+    ]
+    assert list(sections(report)) == ["aday: S0 1h", "aday: S0 4h"]
+    assert sections(report)["aday: S0 1h"].splitlines() == [
+        "seçilen ayar: yok",
+        "sonuç: geçmedi: örneklem içi işlem yetersiz",
+    ]
+    last = sections(report)["aday: S0 4h"].splitlines()[-1]
+    assert last == "sonuç: geçmedi: örneklem dışı net kâr"
+    assert CANDIDATE_MARK not in report
+
+
+def test_mark_only_on_the_paper_candidate() -> None:
+    """Plan Risk 3: işaret yalnız paper adayının örneklem dışı bölümünde, bir kez."""
+    metrics = final_metrics()
+    report = final_report_text(FINAL_FACTS, 2, [passed("S0", "1h"), passed("S0", "4h")], 1, metrics)
+    assert report.count(CANDIDATE_MARK) == 1
+    assert "paper adayı: S0 4h" in report.splitlines()
+    assert report == final_report_text(
+        FINAL_FACTS, 2, [passed("S0", "1h"), passed("S0", "4h")], 1, metrics
+    )

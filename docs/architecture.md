@@ -24,7 +24,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | `risk` | Her işlem önerisini BR-3…BR-11'e göre onaylamak/reddetmek, pozisyon boyutlamak | Risk limitleri, sabit üst sınırlar, kill switch durumu |
 | `execution` | Onaylı emirleri borsaya (live) / simülatöre (paper, backtest) iletmek, emir durumunu izlemek | Emir kayıtları, clientOrderId'ler |
 | `portfolio` | Pozisyonlar, bakiye mutabakatı, kâr/zarar defteri | Defter (append-only), pozisyonlar, kasa geçmişi |
-| `backtest` | Geçmiş veri üzerinde strateji+risk+simüle execution koşturmak | Backtest sonuçları: metrikler, rapor metni ve rapor dosyası (spec 0025) |
+| `backtest` | Geçmiş veri üzerinde strateji+risk+simüle execution koşturmak | Backtest sonuçları: metrikler, rapor metni ve rapor dosyası (spec 0025); değerlendirme kuralı — örneklem içi seçim, sabit eşikli hüküm, paper adayı — ve son değerlendirme raporu (spec 0042) |
 | `control` | CLI ve Telegram komutları, yetkilendirme (chat ID, TOTP, teyit), audit log | Audit log, mod/aşama durumu |
 | `reporting` | Günlük rapor, metrikler (günlük hedef dahil), bildirim gönderimi | Rapor kayıtları |
 | `persistence` | Defter, emirler ve risk durumunu tek SQLite deposunda korumak; okunamayan depoda durumu reddetmek | Depo dosyası, biçim sürümü, depo modu |
@@ -44,7 +44,10 @@ dosyası okumasını (`market_data`), rapor dosyası yazıcısını (`backtest`)
 isteğini, geçici bir dizindeki depo yolunu ve gerçek saati `app`'e verir; saat yalnız rapor
 başlığındaki üretim anı için okunur (spec 0040), turlar simüle saatle; ağa çıkılmaz, kilit
 alınmaz, bot deposu ve kayıt dosyası açılmaz. Turları `app` atar (paper turunun aynısı, simüle
-saatle); `backtest` tur kayıtlarından metrikleri ve raporu üretir.
+saatle); `backtest` tur kayıtlarından metrikleri ve raporu üretir. Spec 0042: varsayılan koşu
+yalnız örneklem içi turları atar; `backtest --final` `app`'te `run_evaluation` ile adayları aynı
+koşullarla örneklem içinde koşar, seçileni tam döneme açar ve `backtest`'in saf kuralıyla
+(`select_combination`, `verdict`, `paper_candidate`) tek son değerlendirme raporu yazar.
 
 ## Communication rules
 - Modüller birbirini yalnızca **public arayüz** (`<module>/__init__.py` ile dışa açılanlar) üzerinden çağırır.

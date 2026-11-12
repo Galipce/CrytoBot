@@ -215,3 +215,37 @@ def test_empty_part_keeps_its_start() -> None:
     assert (part.turns, part.end_equity, part.net) == (0, Decimal(1000), Decimal(0))
     assert part.average_daily_return is None
     assert part.missing == ((BTC, 0),)
+
+
+def test_holdout_starts_where_out_of_sample_ends() -> None:
+    """Spec 0042 R-1: saklı dönem, son örneklem dışı turun kasası ve açık pozisyonuyla başlar;
+    örneklem dışı saklı dönem başında biter; tüm koşu değişmez."""
+    holdout_at = DAY2 + HOUR
+    metrics = run_metrics(Decimal(1000), RECORDS, DAY1 + HOUR, (BTC,), holdout_at)
+    assert metrics.holdout is not None
+    inside, outside, held = metrics.in_sample, metrics.out_of_sample, metrics.holdout
+    assert (inside.turns, outside.turns, held.turns) == (1, 2, 1)
+    assert outside.start_equity == Decimal(1000)
+    assert outside.end_equity == held.start_equity == Decimal("1009.9")
+    assert held.end_equity == Decimal("1009.79")
+    assert held.realized == Decimal("9.79")
+    assert held.unrealized == Decimal("-9.9")  # 0 at the end, 9.9 at the holdout start
+    assert held.realized + held.unrealized == held.net
+    assert (outside.trades, held.trades) == (0, 1)
+    assert metrics.whole == run_metrics(Decimal(1000), RECORDS, DAY2, (BTC,)).whole
+
+
+def test_without_holdout_the_split_is_unchanged() -> None:
+    metrics = run_metrics(Decimal(1000), RECORDS, DAY2, (BTC,))
+    assert metrics.holdout is None
+    assert metrics.out_of_sample.turns == 2
+
+
+def test_holdout_halt_and_empty_out_of_sample() -> None:
+    """Saklı dönem başında sürüyor durdurması; boş örneklem dışı önceki parçanın sonunu devreder."""
+    halted = [record(DAY1, "1000", halted=True), record(DAY1 + HOUR, "990", halted=True)]
+    metrics = run_metrics(Decimal(1000), halted, DAY1 + HOUR, (BTC,), DAY1 + HOUR)
+    assert metrics.out_of_sample.turns == 0
+    assert metrics.holdout is not None
+    assert metrics.holdout.start_equity == Decimal(1000)
+    assert metrics.holdout.halted_at_start

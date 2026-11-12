@@ -1,4 +1,7 @@
-"""Spec 0028 AC-5 (R-3) ve rapor ayrıştırma testleri (plan Adım 1); spec 0040 CB-1, CB-4."""
+"""Spec 0028 AC-5 (R-3) ve rapor ayrıştırma testleri (plan Adım 1); spec 0040 CB-1, CB-4.
+
+Spec 0042 (plan Risk 8): örnek rapor son değerlendirme biçiminde (kapı yalnız onu okur); assert'ler
+aynen. Varsayılan rapor `NOT_FINAL`, "aday yok" `NO_CANDIDATE_MARK`, strateji adı okunur (AC-8)."""
 
 import hashlib
 from datetime import UTC, datetime, timedelta
@@ -11,8 +14,12 @@ from crytobot.backtest import (
     CANDIDATE_MARK,
     CONDITIONS,
     GENERATED_LABEL,
+    NOT_ENOUGH_TRADES,
+    PASSED,
+    CandidateResult,
     ReportFacts,
     ReportReadProblem,
+    final_report_text,
     parse_report,
     read_report,
     report_fingerprint,
@@ -20,7 +27,7 @@ from crytobot.backtest import (
     run_metrics,
 )
 from tests.backtest.test_metrics import BTC, DAY1, DAY2, RECORDS
-from tests.backtest.test_report import CONDITION_FACTS, GENERATED
+from tests.backtest.test_report import CONDITION_FACTS, GENERATED, HOLDOUT
 
 FACTS = ReportFacts(
     start=DAY1,
@@ -42,11 +49,25 @@ FACTS = ReportFacts(
         "r": Decimal("2"),
     },
     **CONDITION_FACTS,
+    strategy_name="S0",
+    holdout_at=HOLDOUT,
 )
 
 
 def sample_report() -> str:
-    return report_text(FACTS, run_metrics(Decimal(1000), RECORDS, DAY2, (BTC,)))
+    """Son değerlendirme, tek aday geçti (paper adayı)."""
+    metrics = run_metrics(Decimal(1000), RECORDS, DAY2, (BTC,), HOLDOUT)
+    assert FACTS.strategy is not None
+    result = CandidateResult(
+        "S0",
+        "1h",
+        FACTS.strategy,
+        metrics.in_sample,
+        metrics.out_of_sample,
+        metrics.holdout,
+        PASSED,
+    )
+    return final_report_text(FACTS, 1, [result], 0, metrics)
 
 
 def test_report_candidate_mark_and_existence(tmp_path: Path) -> None:
@@ -193,3 +214,32 @@ def test_unreadable_text_still_carries_its_fingerprint(tmp_path: Path) -> None:
     res = read_report(broken)
     assert res.problem is ReportReadProblem.UNREADABLE
     assert res.sha256 == hashlib.sha256(b"\xff\xfe bozuk").hexdigest()
+
+
+def test_non_final_report_is_named_before_the_mark() -> None:
+    """AC-8: varsayılan rapor kapıya giremez; aday işaretinden önce denetlenir."""
+    default = report_text(FACTS, run_metrics(Decimal(1000), RECORDS, DAY2, (BTC,)))
+    res = parse_report(default)
+    assert res.problem is ReportReadProblem.NOT_FINAL
+    assert res.detail == "rapor son değerlendirme değil"
+    assert res.data is None
+    # a default report that somehow carried the mark is still not a final one
+    marked = default + f"\n== örneklem dışı — {CANDIDATE_MARK} ==\n== tüm koşu ==\n"
+    assert parse_report(marked).problem is ReportReadProblem.NOT_FINAL
+
+
+def test_no_candidate_final_report_has_no_mark() -> None:
+    unselected = CandidateResult("S0", "4h", None, None, None, None, NOT_ENOUGH_TRADES)
+    report = final_report_text(FACTS, 1, [unselected], None, None)
+    res = parse_report(report)
+    assert res.problem is ReportReadProblem.NO_CANDIDATE_MARK
+    assert res.detail == "rapor aday işareti taşımıyor"
+
+
+def test_strategy_name_is_read() -> None:
+    res = parse_report(sample_report())
+    assert res.data is not None
+    assert res.data.strategy_name == "S0"
+    assert res.data.strategy is not None and res.data.strategy["fast_period"] == 12
+    unnamed = parse_report(sample_report().replace("strateji: S0 fast=", "strateji: fast="))
+    assert unnamed.data is not None and unnamed.data.strategy_name is None

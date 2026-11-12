@@ -3,6 +3,7 @@
 Eşlem `tomllib`'in verdiği biçimdir; dosyanın okunması ve "dosya yok / okunamıyor" giriş
 noktasındadır (`tests/main/test_backtest_entry.py`). Burada dosyaya ve depoya dokunulmaz.
 Bu dosya `tests/tooling` kopyasına girer: yalnız `tests/app`'ten import eder.
+Spec 0042 AC-2 (plan Risk 1, 2, 8): fixture `holdout_at` taşır (ekleme, assert'ler aynen).
 """
 
 from datetime import UTC, date, datetime, timedelta, timezone
@@ -16,10 +17,12 @@ from crytobot.app import load_backtest_config
 from tests.app.test_config import document
 
 SPLIT = datetime(2026, 1, 15, tzinfo=UTC)
+HOLDOUT = datetime(2026, 1, 25, tzinfo=UTC)
 BACKTEST: dict[str, Any] = {
     "data_path": "history.jsonl",
     "report_path": "rapor.txt",
     "split_at": SPLIT,
+    "holdout_at": HOLDOUT,
     "spread": "0.0005",
 }
 
@@ -56,6 +59,7 @@ def test_valid_settings() -> None:
     assert config is not None, result.message
     assert (config.data_path, config.report_path) == ("history.jsonl", "rapor.txt")
     assert config.split_at == SPLIT
+    assert config.holdout_at == HOLDOUT
     assert config.spread == Decimal("0.0005")
     assert config.bot.turn.whitelist == ("BTC/USDT", "ETH/USDT")
     assert config.bot.opening_balance == 10000
@@ -151,3 +155,39 @@ def test_writes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 def test_not_a_mapping(value: Any) -> None:
     result = load_backtest_config(value)
     assert result.config is None and result.setting is not None
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"backtest.holdout_at": None}, "ayar eksik: backtest.holdout_at"),  # plan Risk 1
+        ({"backtest.holdout_at": SPLIT}, "ayar geçersiz: backtest.holdout_at"),  # empty OOS
+        ({"backtest.holdout_at": SPLIT - timedelta(hours=1)}, "ayar geçersiz: backtest.holdout_at"),
+        ({"backtest.holdout_at": "2026-01-25T00:00:00Z"}, "ayar geçersiz: backtest.holdout_at"),
+        ({"backtest.holdout_at": datetime(2026, 1, 25)}, "ayar geçersiz: backtest.holdout_at"),
+        (
+            {"backtest.holdout_at": HOLDOUT + timedelta(minutes=30)},
+            "ayar geçersiz: backtest.holdout_at",
+        ),
+        # the split's own refusal comes first: the order follows the keys
+        (
+            {"backtest.split_at": "x", "backtest.holdout_at": SPLIT},
+            "ayar geçersiz: backtest.split_at",
+        ),
+        (
+            {"backtest.holdout_at": None, "backtest.split_at": None},
+            "ayar eksik: backtest.split_at",
+        ),
+    ],
+)
+def test_holdout_at_refusals(changes: dict[str, Any], message: str) -> None:
+    """AC-2: eksik (proje kuralıyla `ayar eksik`), sırasız ya da tur sınırı dışında saklı dönem
+    başı reddedilir; veri aralığına göre denetim koşudadır (`test_backtest_periods.py`)."""
+    assert refused(**changes)[1] == message
+
+
+def test_holdout_one_turn_after_split_is_valid() -> None:
+    result = load_backtest_config(
+        backtest_document(**{"backtest.holdout_at": SPLIT + timedelta(hours=1)})
+    )
+    assert result.config is not None, result.message

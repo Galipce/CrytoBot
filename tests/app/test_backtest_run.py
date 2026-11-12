@@ -11,6 +11,11 @@ Mutlu yol (tek çift BTC, 1h, `candle_count` 4, açılış 10000, ayrım 2. saat
   10, 12: kesişme yok (`no_crossover`).
 - Tur 3: fiyat 15; seri 10, 10, 12, 15: kesişme yok; kasa aynı.
 Slippage: alımda 49.115 * 0.01 = 0.49115, kapanışta 49.115 * 0.015 = 0.736725.
+
+Spec 0042 R-1 (plan Risk 3): varsayılan koşu yalnız örneklem içidir (turlar 0, 1); örneklem dışı ve
+tüm koşu assert'leri aynen son değerlendirmeye (`Run.final`, `force_pass`) taşındı. Son
+değerlendirmede saklı dönem 4. saatte başlar: mutlu yolun verisi bir mum (15) uzar ki örneklem dışı
+(turlar 2, 3) ve tüm koşu el hesabı değişmesin; 4. turda seri 10, 12, 15, 15: kesişme yok.
 """
 
 import hashlib
@@ -35,6 +40,7 @@ from tests.app.backtest_helpers import (
     candle,
     candles,
     config,
+    force_pass,
     history,
     report_lines,
     settings,
@@ -44,6 +50,7 @@ from tests.app.helpers import BTC, ETH, HOUR, limits, refuse_saves
 
 IN, OUT, WHOLE = "örneklem içi", "örneklem dışı — BR-10 kanıtı adayı", "tüm koşu"
 HAPPY = {BTC: candles(-COUNT, [10, 8, 9, 10, 10, 12, 15, 15])}
+HAPPY_FINAL = {BTC: candles(-COUNT, [10, 8, 9, 10, 10, 12, 15, 15, 15])}  # one turn of holdout
 
 
 def btc_only(root: Path, **changes: Any) -> Any:
@@ -61,23 +68,27 @@ def leftovers(run: Run) -> list[str]:
 
 
 def test_happy_path_matches_hand_computation(tmp_path: Path) -> None:
-    """AC-1: alım, hedef kapanışı aynı turda ve fiyatta; her parçanın her metriği el hesabıyla."""
+    """AC-1: örneklem içi her metrik el hesabıyla. Spec 0042 R-1: varsayılan koşu yalnız örneklem
+    içi turları (0, 1) koşar; konsol örneklem içi dönemi ve tur sayısını yazar."""
     chosen = prepared(tmp_path)
     run = Run(tmp_path)
     exit_ = run(chosen)
     assert exit_.outcome is BacktestOutcome.COMPLETED, exit_.message
-    assert exit_.turns == 4
+    assert exit_.turns == 2
     assert run.lines[0] == (
-        "backtest başladı: dönem=2026-01-01T00:00:00+00:00..2026-01-01T04:00:00+00:00 çift=1 tur=4"
+        "backtest başladı: dönem=2026-01-01T00:00:00+00:00..2026-01-01T02:00:00+00:00"
+        " (örneklem içi) çift=1 tur=2"
     )
     stored = load_store(run.work / "backtest.db", "paper").state
     assert stored is not None
-    (closure,) = stored.ledger.closures.values()
-    assert (closure.position.opened_at, closure.position.cost_price) == (at(0), Decimal("10.01"))
-    assert (closure.closed_at, closure.price) == (at(2), Decimal("14.985"))
-
+    assert stored.ledger.closures == {}  # the target close is at hour 2: not in this run
     report = run.report(chosen)
-    inside = report_lines(report, IN)
+    assert_in_sample_by_hand(report_lines(report, IN))
+    assert report_lines(report, IN)["fiyatı ya da verisi eksik tur (çift başına)"] == "BTC/USDT 0"
+    assert run.lines[-1] == f"backtest tamam: rapor dosyası {chosen.report_path}"
+
+
+def assert_in_sample_by_hand(inside: dict[str, str]) -> None:
     assert inside["turlar"] == "2 (ilk 2026-01-01T00:00:00+00:00, son 2026-01-01T01:00:00+00:00)"
     assert inside["başlangıç kasası"] == "10000.00000000 USDT"
     assert inside["bitiş kasası"] == "10097.24720885 USDT"
@@ -93,6 +104,31 @@ def test_happy_path_matches_hand_computation(tmp_path: Path) -> None:
     assert inside["ödenen slippage"] == "0.49115000 USDT"
     assert inside["öneri yok (nedene göre)"] == "position_open 1"
     assert inside["ret (nedene göre)"] == "yok"
+
+
+def test_final_happy_path_matches_hand_computation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-1: alım, hedef kapanışı aynı turda ve fiyatta; her parçanın her metriği el hesabıyla
+    (son değerlendirme, spec 0042; assert'ler 0025'teki gibi)."""
+    force_pass(monkeypatch)
+    chosen = prepared(tmp_path, HAPPY_FINAL, hours=5, holdout_at=at(4))
+    run = Run(tmp_path)
+    exit_ = run.final(chosen)
+    assert exit_.outcome is BacktestOutcome.COMPLETED, exit_.message
+    assert exit_.turns == 2 + 5  # the in-sample run, then the selected one's whole run
+    assert (
+        "backtest başladı: dönem=2026-01-01T00:00:00+00:00..2026-01-01T05:00:00+00:00 çift=1 tur=5"
+    ) in run.lines
+    stored = load_store(run.work / "backtest.db-1", "paper").state  # the whole run's store
+    assert stored is not None
+    (closure,) = stored.ledger.closures.values()
+    assert (closure.position.opened_at, closure.position.cost_price) == (at(0), Decimal("10.01"))
+    assert (closure.closed_at, closure.price) == (at(2), Decimal("14.985"))
+
+    report = run.report(chosen)
+    inside = report_lines(report, IN)
+    assert_in_sample_by_hand(inside)
 
     outside = report_lines(report, OUT)
     assert outside["başlangıç kasası"] == "10097.24720885 USDT"
@@ -200,24 +236,28 @@ def test_refused_run_reads_no_clock(tmp_path: Path) -> None:
     assert run.clock_reads == 0
 
 
-def test_trade_spanning_split_counts_where_it_closes(tmp_path: Path) -> None:
+def test_trade_spanning_split_counts_where_it_closes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """AC-8: ayrım anının iki yanına uzanan işlem kapandığı parçadadır; örneklem dışı ayrım anındaki
-    kasa ve pozisyonla başlar."""
-    chosen = prepared(tmp_path)
+    kasa ve pozisyonla başlar (spec 0042: son değerlendirmede, saklı dönem 3. saatte)."""
+    force_pass(monkeypatch)
+    chosen = prepared(tmp_path, holdout_at=at(3))
     run = Run(tmp_path)
-    run(chosen)
+    run.final(chosen)
     report = run.report(chosen)
     assert report_lines(report, IN)["işlem"].startswith("0 ")
     assert report_lines(report, OUT)["işlem"].startswith("1 ")
     assert report_lines(report, IN)["bitiş kasası"] == report_lines(report, OUT)["başlangıç kasası"]
 
 
-def test_end_equity_uses_last_known_price(tmp_path: Path) -> None:
+def test_end_equity_uses_last_known_price(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """AC-8, R-10: açık pozisyon, son turda mumu olmayan çift son bilinen fiyatla değerlenir."""
+    force_pass(monkeypatch)
     series = {BTC: candles(-COUNT, [10, 8, 9, 10, 10, 12, None])}
-    chosen = prepared(tmp_path, series, hours=3, split_at=at(1))
+    chosen = prepared(tmp_path, series, hours=3, split_at=at(1), holdout_at=at(2))
     run = Run(tmp_path)
-    exit_ = run(chosen)
+    exit_ = run.final(chosen)
     assert exit_.outcome is BacktestOutcome.COMPLETED, exit_.message
     report = run.report(chosen)
     whole = report_lines(report, WHOLE)
@@ -226,15 +266,18 @@ def test_end_equity_uses_last_known_price(tmp_path: Path) -> None:
     assert whole["fiyatı ya da verisi eksik tur (çift başına)"] == "BTC/USDT 1"
 
 
-def test_late_listed_pair_counts_missing_turns(tmp_path: Path) -> None:
+def test_late_listed_pair_counts_missing_turns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """AC-6: geç listelenen çiftin önceki turları eksik sayılır, çift başına; koşu sürer."""
+    force_pass(monkeypatch)
     series = {
         BTC: candles(-COUNT, [10, 10, 10, 10, 10, 10, 10, 10]),
         ETH: candles(2, [10, 10]),
     }
-    chosen = prepared(tmp_path, series, turn=settings((BTC, ETH)))
+    chosen = prepared(tmp_path, series, turn=settings((BTC, ETH)), holdout_at=at(3))
     run = Run(tmp_path)
-    assert run(chosen).outcome is BacktestOutcome.COMPLETED
+    assert run.final(chosen).outcome is BacktestOutcome.COMPLETED
     report = run.report(chosen)
     # ETH: no candle before hour 2, at hour 2 a price but no closed candle; at 3 its first closed
     assert report_lines(report, IN)["fiyatı ya da verisi eksik tur (çift başına)"] == (

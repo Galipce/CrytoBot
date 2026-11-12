@@ -6,10 +6,29 @@ metrikleri hesaplar (saf hesap). `report_text` raporu belirlenimci düz metin ol
 varsayımları, parçaların metrikleri; yalnız örneklem dışı "BR-10 kanıtı adayı"dır, hüküm yoktur.
 `write_report` raporu `.part` üzerinden, var olan dosyanın üzerine yazmadan diske koyar;
 `report_exists` yolda ya da `.part` yolunda bir şey olup olmadığını söyler. `report_fingerprint`
-yazılan baytların SHA-256 özetidir (spec 0040). `app` ve
-`market_data` import edilmez.
+yazılan baytların SHA-256 özetidir (spec 0040). Spec 0042: değerlendirme kuralı
+(`select_combination`, `verdict`, `paper_candidate`; eşikler kodda sabit), saklı dönem metriği ve
+son değerlendirme raporu (`final_report_text`); aşama kapısı yalnız son değerlendirme raporunu okur
+(`NOT_FINAL`). `app` ve `market_data` import edilmez.
 """
 
+from crytobot.backtest._evaluation import (
+    HOLDOUT_DRAWDOWN,
+    HOLDOUT_NET,
+    MAX_DRAWDOWN,
+    MIN_PROFIT_FACTOR,
+    MIN_TRADES,
+    NOT_ENOUGH_TRADES,
+    OOS_DRAWDOWN,
+    OOS_NET,
+    OOS_PROFIT_FACTOR,
+    OOS_TRADES,
+    PASSED,
+    Assessed,
+    paper_candidate,
+    select_combination,
+    verdict,
+)
 from crytobot.backtest._metrics import (
     PartMetrics,
     RunMetrics,
@@ -22,8 +41,13 @@ from crytobot.backtest._report import (
     ASSUMPTIONS,
     CANDIDATE_MARK,
     CONDITIONS,
+    FINAL_TITLE,
     GENERATED_LABEL,
+    NO_CANDIDATE,
+    TITLE,
+    CandidateResult,
     ReportFacts,
+    final_report_text,
     money,
     percent,
     ratio,
@@ -48,9 +72,25 @@ __all__: list[str] = [
     "ASSUMPTIONS",
     "CANDIDATE_MARK",
     "CONDITIONS",
+    "FINAL_TITLE",
     "GENERATED_LABEL",
+    "HOLDOUT_DRAWDOWN",
+    "HOLDOUT_NET",
+    "MAX_DRAWDOWN",
+    "MIN_PROFIT_FACTOR",
+    "MIN_TRADES",
+    "NOT_ENOUGH_TRADES",
+    "NO_CANDIDATE",
+    "OOS_DRAWDOWN",
+    "OOS_NET",
+    "OOS_PROFIT_FACTOR",
+    "OOS_TRADES",
     "PART_SUFFIX",
+    "PASSED",
+    "TITLE",
+    "Assessed",
     "CandidateMetrics",
+    "CandidateResult",
     "ParsedReport",
     "PartMetrics",
     "ReportFacts",
@@ -58,7 +98,9 @@ __all__: list[str] = [
     "ReportReadProblem",
     "RunMetrics",
     "TurnRecord",
+    "final_report_text",
     "money",
+    "paper_candidate",
     "parse_report",
     "part_metrics",
     "percent",
@@ -68,6 +110,8 @@ __all__: list[str] = [
     "report_fingerprint",
     "report_text",
     "run_metrics",
+    "select_combination",
     "unrealized",
+    "verdict",
     "write_report",
 ]
