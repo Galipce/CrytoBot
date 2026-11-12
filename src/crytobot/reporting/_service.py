@@ -8,6 +8,9 @@ her turu `begin_turn` / `end_turn` ile çevreler; turda Telegram isteklerinde ha
 sınırı beklemesi (CB-6), turda geçici hata (CB-5), bütçe bitti (CB-4), terk edilmiş istek
 sürüyor (plan Risk 4). Kapı kapalıysa mesaj sırayla kuyruğa girer; kuyruk döngüyü durdurmaz.
 Açık tur yokken gelen `dispatch` kendi tek çağrılık turunu açıp kapatır (plan Risk 2).
+
+Spec 0041 CB-5 (G-4): `label` verilirse (testnet koşusu: `[TESTNET]`) her mesajın metni gönderimde
+değil oluşturulurken öneklenir; kuyruktaki ve 400 sonrası düz metin yedeği de öneki taşır.
 """
 
 import time
@@ -55,8 +58,10 @@ class ReportingService:
         *,
         monotonic: Callable[[], float] = time.monotonic,
         turn_budget_s: float = 5.0,
+        label: str | None = None,
     ) -> None:
         self._config = config
+        self._label = label
         self._client = client or TelegramClient(config, transport=transport)
         self._queue = queue or NotificationQueue(maxlen=10)
         self._monotonic = monotonic
@@ -202,6 +207,8 @@ class ReportingService:
         """
         if not self._config.enabled:
             return None
+        if self._label:  # CB-5: on creation, so the queue and the plain-text fallback carry it
+            text = f"{self._label} {text}"
         own_turn = not self._turn_open
         if own_turn:
             self._open_turn()  # kuyruğu `_dispatch` iletir; atılanlar çağırana kalır (F-1)

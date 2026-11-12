@@ -194,3 +194,61 @@ def test_partial_close_notice_shows_part_rate_and_rest() -> None:
     assert "KISMEN" not in full
     assert "Kalan Miktar" not in full
     assert "+9.96%" in full
+
+
+# --- spec 0041 CB-5 (G-4): a testnet run labels every Telegram message --------------------------
+
+_PARSE_ERROR = (
+    400,
+    '{"ok":false,"error_code":400,"description":"Bad Request: can\'t parse entities"}',
+)
+
+
+def test_testnet_label_prefixes_every_message_including_fallback() -> None:
+    """Ret, hata, güvenli mod, kill-switch bildirimi; kuyruktan çıkan mesaj ve 400 sonrası düz
+    metin yedeği: hepsi `[TESTNET]` ile başlar, önek bir kez yazılır."""
+    replies: list[tuple[int, str]] = [(0, "Network unreachable")]
+    sent: list[dict[str, Any]] = []
+
+    def transport(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        sent.append(dict(payload))
+        return replies.pop(0) if replies else (200, '{"ok":true}')
+
+    service = ReportingService(CONFIG, transport=transport, label="[TESTNET]")
+
+    # queued while the network is down, delivered with the next message
+    assert service.send_turn_notice("kill_switch", "", True, "kill-switch devrede") is not None
+    queued = service.queue.peek()
+    assert queued is not None and queued.text.startswith("[TESTNET] ")
+    assert service.send_turn_notice("safe_mode", "BTC/USDT", True, "güvenli mod") is None
+    # the HTML attempt fails to parse; the plain-text fallback carries the prefix too
+    replies.append(_PARSE_ERROR)
+    assert service.send_turn_notice("refusal", "ETH/USDT", True, "<b>ret") is None
+    service.send_fill_notice("BTC/USDT", "buy", Decimal(1), Decimal(100), Decimal(90))
+    service.send_close_notice(pair="BTC/USDT", reason="stop", realized_pnl=Decimal(-1))
+    service.send_daily_summary(date(2026, 11, 12), Decimal(100), Decimal(99))
+    service.dispatch("döngü hatası: okuma OSError", parse_mode=None)
+
+    delivered = [m["text"] for m in sent]
+    assert len(delivered) >= 8
+    assert all(text.startswith("[TESTNET] ") for text in delivered)
+    assert not any(text.startswith("[TESTNET] [TESTNET]") for text in delivered)
+    fallback = [m for m in sent if "parse_mode" not in m and "ETH/USDT" in m["text"]]
+    assert fallback and fallback[0]["text"].startswith("[TESTNET] ")
+
+
+def test_no_label_no_prefix() -> None:
+    """PB-1: mainnet'te (etiket yok) mesaj metni bugünküyle aynıdır."""
+    sent: list[str] = []
+
+    def transport(url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        sent.append(payload["text"])
+        return 200, '{"ok":true}'
+
+    service = ReportingService(CONFIG, transport=transport)
+
+    service.dispatch("düz metin", parse_mode=None)
+    service.send_turn_notice("kill_switch", "", True, "kill-switch devrede")
+
+    assert sent[0] == "düz metin"
+    assert "TESTNET" not in "".join(sent)
