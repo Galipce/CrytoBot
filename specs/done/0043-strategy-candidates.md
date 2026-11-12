@@ -1,6 +1,6 @@
 # Spec 0043 — Aday stratejiler
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0043-plan.md`
 - Self-critique: done
@@ -43,29 +43,29 @@ none — no user interface. Etkileşim CLI çıktısı, ayar dosyası ve backtes
 - Split: önerilen 0043 (aday stratejiler) → 0044 (2022 verisi ve son değerlendirme); kabul edildi — Galip Badem, 2026-11-12 (K-1). Gerekçe: adaylar sentetik mumlarla tek başına doğrulanır; veri ve süre riski ayrı işte kalır.
 
 ## Acceptance criteria
-- [ ] AC-1 — Ayarda strateji seçimi yoksa backtest ve paper bugünkü S0 ile aynı işlemleri ve aynı metrikleri üretir (K-4). Bilinmeyen strateji adı `ayar geçersiz: strategy.<alan>`, seçilen stratejinin eksik anahtarı `ayar eksik: strategy.<alan>` ile reddedilir; depo yazılmaz, borsaya istek gitmez, çıkış 1.
-- [ ] AC-2 — Aynı mumlar ve aynı ayarla seçilen strateji backtest ve paper turunda aynı öneriyi (giriş, stop, hedef) üretir; S0…S3'ün her biri için.
-- [ ] AC-3 — S1: S0 alım üreten mumlarda son kapanış trend ortalamasının üzerindeyse alım önerir; eşit ya da altındaysa önermez.
-- [ ] AC-4 — S2: son kapanış kırılma penceresinin en yükseğini aşarsa alım önerir; tam eşitse ya da altındaysa önermez; pencere son kapanmış mumu içermez.
-- [ ] AC-5 — S3: son kapanış 200 mumluk ortalamanın üzerinde ve RSI eşiğin altındaysa alım önerir; RSI tam eşikteyse ya da kapanış ortalamaya eşit ya da altındaysa önermez.
-- [ ] AC-6 — S0…S3'ün her önerisi alımdır, stop k×ATR, hedef r×risk ile hesaplanır ve `risk` onayından geçer; hiçbir aday stop'suz ya da satış önerisi üretmez.
-- [ ] AC-7 — Son değerlendirme her aday ve aralıkta R-3 ızgarasını tam olarak sınar (eksik ya da fazla kombinasyon yok); 1h + 4h ile rapor `sınanan kombinasyon: 72` yazar ve tek paper adayını (ya da "aday yok") bütün aday ve aralıklar arasından adlandırır. Ayardaki strateji parametreleri ızgarayı değiştirmez.
-- [ ] AC-8 — Mum sayısı seçilen adayın en uzun göstergesine yetmiyorsa `ayar geçersiz: market.candle_count` ile reddedilir; tam yeten değer kabul edilir.
-- [ ] AC-9 — Aşama kapısı: onaylı rapordaki seçilen adayın herhangi bir parametresi (L, N, aşırı satım eşiği, k dahil) çalışan ayardan farklıysa `ayar uyuşmazlığı: <parametre>`, adayın aralığı çalışan mum aralığından farklıysa `ayar uyuşmazlığı: candle_interval`, çift listesi beyaz listeden farklıysa bugünkü `ayar uyuşmazlığı: whitelist` ile `start` ve `start --live` reddeder (depo yazılmaz, borsaya istek gitmez, çıkış 1). Hepsi aynıysa geçer.
-- [ ] AC-10 — Her "geçmedi" satırı tutmayan değeri ve eşiği yazar, ör. `geçmedi: örneklem içi işlem yetersiz (29 < 30)`, `geçmedi: örneklem dışı kâr faktörü (1.1500 < 1.2)`.
+- [x] AC-1 — Ayarda strateji seçimi yoksa backtest ve paper bugünkü S0 ile aynı işlemleri ve aynı metrikleri üretir (K-4). Bilinmeyen strateji adı `ayar geçersiz: strategy.<alan>`, seçilen stratejinin eksik anahtarı `ayar eksik: strategy.<alan>` ile reddedilir; depo yazılmaz, borsaya istek gitmez, çıkış 1.
+- [x] AC-2 — Aynı mumlar ve aynı ayarla seçilen strateji backtest ve paper turunda aynı öneriyi (giriş, stop, hedef) üretir; S0…S3'ün her biri için.
+- [x] AC-3 — S1: S0 alım üreten mumlarda son kapanış trend ortalamasının üzerindeyse alım önerir; eşit ya da altındaysa önermez.
+- [x] AC-4 — S2: son kapanış kırılma penceresinin en yükseğini aşarsa alım önerir; tam eşitse ya da altındaysa önermez; pencere son kapanmış mumu içermez.
+- [x] AC-5 — S3: son kapanış 200 mumluk ortalamanın üzerinde ve RSI eşiğin altındaysa alım önerir; RSI tam eşikteyse ya da kapanış ortalamaya eşit ya da altındaysa önermez.
+- [x] AC-6 — S0…S3'ün her önerisi alımdır, stop k×ATR, hedef r×risk ile hesaplanır ve `risk` onayından geçer; hiçbir aday stop'suz ya da satış önerisi üretmez.
+- [x] AC-7 — Son değerlendirme her aday ve aralıkta R-3 ızgarasını tam olarak sınar (eksik ya da fazla kombinasyon yok); 1h + 4h ile rapor `sınanan kombinasyon: 72` yazar ve tek paper adayını (ya da "aday yok") bütün aday ve aralıklar arasından adlandırır. Ayardaki strateji parametreleri ızgarayı değiştirmez.
+- [x] AC-8 — Mum sayısı seçilen adayın en uzun göstergesine yetmiyorsa `ayar geçersiz: market.candle_count` ile reddedilir; tam yeten değer kabul edilir.
+- [x] AC-9 — Aşama kapısı: onaylı rapordaki seçilen adayın herhangi bir parametresi (L, N, aşırı satım eşiği, k dahil) çalışan ayardan farklıysa `ayar uyuşmazlığı: <parametre>`, adayın aralığı çalışan mum aralığından farklıysa `ayar uyuşmazlığı: candle_interval`, çift listesi beyaz listeden farklıysa bugünkü `ayar uyuşmazlığı: whitelist` ile `start` ve `start --live` reddeder (depo yazılmaz, borsaya istek gitmez, çıkış 1). Hepsi aynıysa geçer.
+- [x] AC-10 — Her "geçmedi" satırı tutmayan değeri ve eşiği yazar, ör. `geçmedi: örneklem içi işlem yetersiz (29 < 30)`, `geçmedi: örneklem dışı kâr faktörü (1.1500 < 1.2)`.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed (`docs/architecture.md`, `docs/domain.md` BR-10, `docs/commands.md`, `crytobot.example.toml`)
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 1 (Approved; plan Risk 2 Terimler satırı) |
+| Fix rounds | 1 (fix-1: L-2, L-3, I-3) |
+| Review findings: real / noise / deferred | 4 / 0 / 1 (B-85), 1 investigate (I-2, ship PR CI); VERIFY Info: 0 / 3 / 0 |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
