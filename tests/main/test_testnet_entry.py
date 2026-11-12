@@ -114,9 +114,9 @@ def test_entry_labels_the_reporter_only_on_testnet(
     monkeypatch.setattr(entry, "load_reporting_config", lambda *a, **k: active)
     labels: list[str | None] = []
 
-    def spy(config: TelegramConfig, *args: Any, label: str | None = None, **kwargs: Any) -> Any:
+    def spy(config: TelegramConfig, label: str | None = None) -> ReportingService:
         labels.append(label)
-        return ReportingService(config, *args, transport=lambda u, p: (200, "{}"), label=label)
+        return ReportingService(config, transport=lambda u, p: (200, "{}"), label=label)
 
     monkeypatch.setattr(entry, "ReportingService", spy)
     stop = StopRequest()
