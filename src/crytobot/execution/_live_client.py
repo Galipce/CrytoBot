@@ -142,11 +142,30 @@ def check_api_restrictions(data: Any) -> None:
         )
 
 
+def _verify_testnet_account(exchange: Any, credentials: ExchangeCredentials) -> None:
+    """Spec 0041 CB-2 (S-2; plan Risk 5): testnet anahtar kısıtı ucunu sunmaz; yerine testnet
+    anahtarıyla imzalı bakiye sorgusu başarılı olmalıdır. Her hata — ağ, kimlik, ban ve hız sınırı
+    dahil — sır temizlenmiş metinle `PERMISSION_CHECK_FAILED`'dır; geçersiz yanıt da öyle."""
+    try:
+        data = exchange.fetch_balance()
+    except Exception as err:
+        safe_msg = redact_secrets(str(err), credentials)
+        raise PermissionCheckFailedError(f"Testnet hesap sorgusu başarısız: {safe_msg}") from None
+    if not isinstance(data, dict):
+        raise PermissionCheckFailedError("Testnet hesap yanıtı geçersiz formatta")
+
+
 def verify_permissions(
     exchange: Any,
     credentials: ExchangeCredentials | None = None,
 ) -> None:
-    """API yetkilerini borsadan sorgular ve doğrular (R-2, R-3)."""
+    """API yetkilerini borsadan sorgular ve doğrular (R-2, R-3).
+
+    Spec 0041 CB-2: yalnız testnet kimliğinde (`credentials.testnet`) kısıt sorgusunun yerine
+    imzalı hesap sorgusu yapılır; başka hiçbir girdi denetimi değiştirmez."""
+    if credentials is not None and credentials.testnet is True:
+        _verify_testnet_account(exchange, credentials)
+        return
     try:
         if hasattr(exchange, "sapiGetAccountApiRestrictions"):
             data = exchange.sapiGetAccountApiRestrictions()
@@ -187,6 +206,8 @@ class BinanceLiveClient:
                     "enableRateLimit": True,
                     "options": {
                         "defaultType": "spot",
+                        # plan 0041 Risk 2: spot only; no futures endpoint on either network
+                        "fetchMarkets": {"types": ["spot"]},
                         "fetchCurrencies": False,
                     },
                 }

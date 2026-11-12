@@ -146,3 +146,111 @@ def test_verify_permissions_redacts_secrets_in_error() -> None:
     assert "leaked_sec_888" not in msg
     assert REDACTED in msg
     assert exc_info.value.__cause__ is None
+
+
+# --- spec 0041 CB-2: testnet's permission check is a signed account query ----------------------
+
+
+class FakeAccountExchange(FakeExchange):
+    """Kısıt sorgusu ve imzalı bakiye sorgusu; hangisinin çağrıldığını yazar."""
+
+    def __init__(
+        self,
+        restrictions: object = None,
+        balance: object = None,
+        balance_error: Exception | None = None,
+    ) -> None:
+        super().__init__(restrictions=restrictions)
+        self.balance = {"free": {"USDT": "100"}} if balance is None else balance
+        self.balance_error = balance_error
+        self.calls: list[str] = []
+
+    def sapiGetAccountApiRestrictions(self) -> object:
+        self.calls.append("restrictions")
+        return super().sapiGetAccountApiRestrictions()
+
+    def fetch_balance(self) -> object:
+        self.calls.append("balance")
+        if self.balance_error is not None:
+            raise self.balance_error
+        return self.balance
+
+
+TESTNET = ExchangeCredentials(api_key="tn_key_123", api_secret="tn_secret_456", testnet=True)
+MAINNET = ExchangeCredentials(api_key="k", api_secret="s", testnet=False)
+
+
+def test_testnet_checks_signed_balance_instead_of_restrictions() -> None:
+    """S-2: testnet'te kısıt ucu çağrılmaz; imzalı bakiye sorgusu başarılıysa denetim geçer."""
+    exchange = FakeAccountExchange(restrictions={"enableWithdrawals": True})
+
+    BinanceLiveClient(credentials=TESTNET, exchange=exchange).verify_permissions()
+
+    assert exchange.calls == ["balance"]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        RuntimeError("Invalid API-key tn_key_123 / tn_secret_456 (-2015)"),
+        TimeoutError("testnet unreachable"),
+        ConnectionError("418 banned"),
+    ],
+)
+def test_testnet_balance_failure_refuses(failure: Exception) -> None:
+    """CB-2: sorgu başarısızsa `PERMISSION_CHECK_FAILED`; sır metne girmez, zincir yok."""
+    exchange = FakeAccountExchange(balance_error=failure)
+    client = BinanceLiveClient(credentials=TESTNET, exchange=exchange)
+
+    with pytest.raises(PermissionCheckFailedError) as refused:
+        client.verify_permissions()
+
+    assert refused.value.code == PERMISSION_CHECK_FAILED
+    assert "tn_key_123" not in str(refused.value)
+    assert "tn_secret_456" not in str(refused.value)
+    assert refused.value.__cause__ is None
+    assert exchange.calls == ["balance"]
+
+
+@pytest.mark.parametrize("reply", ["not a dict", ["USDT"], 0])
+def test_testnet_malformed_balance_refuses(reply: object) -> None:
+    exchange = FakeAccountExchange(balance=reply)
+    client = BinanceLiveClient(credentials=TESTNET, exchange=exchange)
+
+    with pytest.raises(PermissionCheckFailedError) as refused:
+        client.verify_permissions()
+
+    assert refused.value.code == PERMISSION_CHECK_FAILED
+
+
+@pytest.mark.parametrize(
+    "restrictions",
+    [
+        {"enableWithdrawals": True, "enableSpotAndMarginTrading": True},
+        {"enableWithdrawals": False, "enableSpotAndMarginTrading": False},
+    ],
+)
+def test_mainnet_never_skips_restrictions(restrictions: dict[str, bool]) -> None:
+    """CB-2, PB-1: mainnet kimliğinde kısıt sorgusu her zaman yapılır; başarılı bakiye sorgusu
+    onun yerine geçmez, yasaklı yetki yine reddedilir."""
+    exchange = FakeAccountExchange(restrictions=restrictions)
+    client = BinanceLiveClient(credentials=MAINNET, exchange=exchange)
+
+    with pytest.raises(PermissionForbiddenError):
+        client.verify_permissions()
+
+    assert exchange.calls == ["restrictions"]
+
+
+def test_testnet_client_reaches_only_the_testnet_and_spot_markets() -> None:
+    """CB-1, plan Risk 2: gerçek ccxt istemcisi testnet'te sandbox modundadır; iki ağda da piyasa
+    listesi yalnız spot'tur (vadeli uçlara istek gitmez). Ağa çıkılmaz."""
+    testnet = BinanceLiveClient(credentials=TESTNET)._exchange
+    mainnet = BinanceLiveClient(credentials=MAINNET)._exchange
+
+    assert testnet.urls["api"]["private"].startswith("https://testnet.binance.vision/")
+    assert testnet.urls["api"]["public"].startswith("https://testnet.binance.vision/")
+    assert mainnet.urls["api"]["private"].startswith("https://api.binance.com/")
+    for exchange in (testnet, mainnet):
+        assert exchange.options["fetchMarkets"]["types"] == ["spot"]
+        assert exchange.options["defaultType"] == "spot"
