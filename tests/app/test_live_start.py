@@ -452,6 +452,11 @@ def _refused_live(root: Path, case: str, *, testnet: bool) -> str:
             text = text.replace('candle_interval = "1h"', 'candle_interval = "4h"', 1)
             text = text.replace('turn_interval = "1h"', 'turn_interval = "4h"', 1)
         cfg.write_text(text, encoding="utf-8")
+    elif case in ("whitelist_missing", "whitelist_different"):  # spec 0044 AC-3 (R-4)
+        pairs = '["BTC/USDT"]' if case == "whitelist_missing" else '["BTC/USDT", "SOL/USDT"]'
+        text = cfg.read_text(encoding="utf-8")
+        text = text.replace('whitelist = ["BTC/USDT", "ETH/USDT"]', f"whitelist = {pairs}", 1)
+        cfg.write_text(text, encoding="utf-8")
     else:  # the paper proof was run with another report of the same path
         assert case == "proof"
         paper = root / "paper.sqlite"
@@ -520,3 +525,12 @@ def test_live_candidate_mismatch_no_exchange_call(
     farklıysa reddeder; depo yazılmaz, borsaya istek yok, çıkış 1."""
     refusal = _refused_live(tmp_path, case, testnet=testnet)
     assert refusal.endswith(f"başlatma reddedildi: {message}")
+
+
+@pytest.mark.parametrize("testnet", [False, True])
+@pytest.mark.parametrize("case", ["whitelist_missing", "whitelist_different"])
+def test_live_whitelist_mismatch_no_exchange_call(tmp_path: Path, case: str, testnet: bool) -> None:
+    """Spec 0044 AC-3 (R-4, korunan davranış): rapordaki çift listesi çalışan beyaz listeden
+    eksik ya da farklıysa `start --live` (ve testnet) reddeder; borsaya istek yok, çıkış 1."""
+    refusal = _refused_live(tmp_path, case, testnet=testnet)
+    assert refusal.endswith("başlatma reddedildi: ayar uyuşmazlığı: whitelist")
