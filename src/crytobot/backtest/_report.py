@@ -13,6 +13,12 @@ Spec 0042 R-1 (0025 R-9/R-10'un varsayılan rapor kısmını geçersiz kılar): 
   (R-3); paper adayı varsa başlık onun bilgilerini taşır ve onun örneklem içi, örneklem dışı
   ("BR-10 kanıtı adayı" işaretiyle, yalnız orada), saklı dönem ve tüm koşu parçaları yazılır. Aday
   yoksa başlık yalnız ortak bilgileri (spread, üretim anı, rapor koşulları) taşır.
+
+Spec 0044 R-1, R-2 (plan Risk 2): son değerlendirme raporu, aday olsun olmasın, varsayımlardan
+sonra ve adaylardan önce her aralık için bir veri bölümü yazar: dönem, bitiş ve saklı dönemin son
+mumu (beklenen son açılış), ardından her boşluk `<çift> <ilk eksik> → <son eksik> (<n> mum)`
+satırıyla, ilk eksik muma göre zaman sırasıyla (eşitlikte verilen sıra: beyaz liste); boşluk
+yoksa `veri boşluğu: yok`. Varsayılan rapor değişmez.
 """
 
 from collections.abc import Mapping, Sequence
@@ -218,6 +224,45 @@ def report_text(facts: ReportFacts, metrics: RunMetrics) -> str:
 
 
 @dataclass(frozen=True)
+class DataGap:
+    """Spec 0044 R-2: bir boşluk — çift, ilk ve son eksik mumun açılışı, eksik mum sayısı."""
+
+    pair: str
+    first: datetime
+    last: datetime
+    count: int
+
+
+@dataclass(frozen=True)
+class IntervalData:
+    """Spec 0044 R-1, R-2: bir aralığın veri dosyası — dönem (bitiş hariç), saklı dönemin son
+    mumu (bitişten önce kapanan son beklenen açılış) ve boşluklar (beyaz liste sırasıyla)."""
+
+    interval: str
+    start: datetime
+    end: datetime
+    last_open: datetime
+    gaps: tuple[DataGap, ...]
+
+
+NO_GAPS = "veri boşluğu: yok"
+
+
+def _data(item: IntervalData) -> list[str]:
+    """Plan Risk 2: zaman sırası ilk eksik muma göre; eşitlikte verilen sıra (sıralama kararlı)."""
+    ordered = sorted(item.gaps, key=lambda gap: gap.first)
+    return [
+        f"veri — {item.interval}: dönem {_moment(item.start)} .. {_moment(item.end)} (bitiş hariç),"
+        f" saklı dönemin son mumu {_moment(item.last_open)}",
+        *(
+            f"{gap.pair} {_moment(gap.first)} → {_moment(gap.last)} ({gap.count} mum)"
+            for gap in ordered
+        ),
+        *([] if ordered else [NO_GAPS]),
+    ]
+
+
+@dataclass(frozen=True)
 class CandidateResult:
     """Bir adayın (strateji ve aralık) sonucu: seçilen ayar (`None`: örneklem içinde 30 işlemli
     kombinasyon yok), hesaplanan dönemlerin metrikleri ve hüküm (R-3)."""
@@ -262,10 +307,12 @@ def final_report_text(
     candidates: Sequence[CandidateResult],
     paper: int | None,
     metrics: RunMetrics | None,
+    *,
+    data: Sequence[IntervalData],
 ) -> str:
     """Spec 0042 R-1, R-3…R-5: son değerlendirme raporu. `paper` paper adayının sırasıdır; varsa
     `facts` ve `metrics` onun koşusudur (`metrics.holdout` dolu), yoksa `facts` yalnız ortak başlık
-    için kullanılır."""
+    için kullanılır. Spec 0044: `data` aralıkların veri bölümleri, verilen sırayla."""
     if paper is None:
         header = [f"spread: {format(facts.spread, 'f')}", *_common(facts)]
         named = NO_CANDIDATE
@@ -280,6 +327,8 @@ def final_report_text(
         "",
         *_assumptions(),
     ]
+    for item in data:
+        lines.extend(["", *_data(item)])
     for result in candidates:
         lines.extend(["", *_candidate(result)])
     if paper is not None:

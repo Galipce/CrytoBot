@@ -91,7 +91,7 @@ def passed(name: str = "S0", interval: str = "1h", verdict: str = PASSED) -> Can
 
 def final_text() -> str:
     """Tek aday, geçti: paper adayı odur."""
-    return final_report_text(FINAL_FACTS, 1, [passed()], 0, final_metrics())
+    return final_report_text(FINAL_FACTS, 1, [passed()], 0, final_metrics(), data=())
 
 
 def period_sections(report: str) -> dict[str, str]:
@@ -342,7 +342,7 @@ def test_no_candidate_report_has_only_the_shared_header() -> None:
     failed = CandidateResult(
         "S0", "4h", STRATEGY, metrics.in_sample, metrics.out_of_sample, metrics.holdout, OOS_NET
     )
-    report = final_report_text(FINAL_FACTS, 2, [unselected, failed], None, None)
+    report = final_report_text(FINAL_FACTS, 2, [unselected, failed], None, None, data=())
     assert header(report) == [
         FINAL_TITLE,
         "spread: 0.0005",
@@ -371,11 +371,13 @@ def test_no_candidate_report_has_only_the_shared_header() -> None:
 def test_mark_only_on_the_paper_candidate() -> None:
     """Plan Risk 3: işaret yalnız paper adayının örneklem dışı bölümünde, bir kez."""
     metrics = final_metrics()
-    report = final_report_text(FINAL_FACTS, 2, [passed("S0", "1h"), passed("S0", "4h")], 1, metrics)
+    report = final_report_text(
+        FINAL_FACTS, 2, [passed("S0", "1h"), passed("S0", "4h")], 1, metrics, data=()
+    )
     assert report.count(CANDIDATE_MARK) == 1
     assert "paper adayı: S0 4h" in report.splitlines()
     assert report == final_report_text(
-        FINAL_FACTS, 2, [passed("S0", "1h"), passed("S0", "4h")], 1, metrics
+        FINAL_FACTS, 2, [passed("S0", "1h"), passed("S0", "4h")], 1, metrics, data=()
     )
 
 
