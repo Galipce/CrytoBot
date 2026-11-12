@@ -1,11 +1,12 @@
 # Spec 0042 — Strateji değerlendirme düzeni
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0042-plan.md`
 - Self-critique: done
 - Source: ADR 0002 revisit trigger ("out-of-sample backtest maliyet sonrası kârsız → Faz 2'den önce strateji işi"); spec 0041 CB-6'nın beklediği kârlı paper kanıtı
 - Design: —
+- Supersedes: 0025 R-9/R-10'un varsayılan rapor kısmı (varsayılan rapor yalnız örneklem içini yazar; örneklem dışı, saklı dönem ve tüm koşu yalnız son değerlendirmede); 0028 R-3'ün kapı kısmı (kapı yalnız son değerlendirme raporunu kabul eder). Plan 0042 Risk 3 — Galip Badem, 2026-11-12.
 
 ## Intent
 Botun sahibi, canlıya geçmeden önce maliyetler düşüldükten sonra kârlı bir strateji istiyor. Bugünkü strateji (EMA kesişimi + RSI + ATR stop) örneklem dışında zararda: 4h'te -%5.9, kâr faktörü 0.76, 26 işlem; 1h'te hiç işlem yok. Paper kanıtı bu yüzden geçemiyor ve canlı aşama (0041 CB-6 dahil) bekliyor. Bu spec yeni strateji getirmez; önce ölçüm düzenini sabitler: geçmiş veri üç döneme bölünür, ayarlar yalnız örneklem içinde seçilir, örneklem dışı ve saklı dönem son değerlendirmede bir kez açılır, eşikler kodda sabittir. Böylece sonraki spec'in (0043) adayları ölçüme göre şekillendirilemez. Başarı: aynı düzen S0 (bugünkü strateji) üzerinde çalışır ve her aday için dürüst bir "geçti / geçmedi" ve tek bir paper adayı ya da "aday yok" sonucu verir. Kaldıraç, açığa satış (BR-2), risk limitlerinin değişmesi, LLM sinyalleri, aşama kapılarının gevşemesi ve işlem sıklığı hedefi bilerek yapılmıyor. Clarify kararları C-1…C-7 ve self-critique kararları G-1…G-7 Galip Badem, 2026-11-12 tarihinde onayladı.
@@ -40,13 +41,13 @@ none — no user interface. Etkileşim CLI çıktısı, ayar dosyası ve backtes
 
 ## Acceptance criteria
 - [ ] AC-1 — Varsayılan backtest koşusu yalnız örneklem içi sonuçları yazar; raporda ve konsolda örneklem dışı ya da saklı dönemden tek bir rakam yoktur. Son değerlendirme üç dönemi ayrı bölümlerde yazar ve başlığında son değerlendirme olduğunu belirtir.
-- [ ] AC-2 — Dönem tarihleri eksik, sırasız, veri aralığı dışında ya da bir dönemi boş bırakan değerdeyse backtest `ayar geçersiz: backtest.<alan>` ile reddeder ve rapor yazmaz.
+- [ ] AC-2 — Dönem tarihleri eksik, sırasız, veri aralığı dışında ya da bir dönemi boş bırakan değerdeyse backtest `ayar geçersiz: backtest.<alan>` ile reddeder ve rapor yazmaz. Eksik anahtar proje kuralıyla `ayar eksik: backtest.<alan>` olur (plan 0042 Risk 1, Galip Badem, 2026-11-12).
 - [ ] AC-3 — Birden fazla ayar kombinasyonunda seçilen kombinasyon, örneklem içinde en az 30 işlemi olanlar arasında en yüksek kâr faktörlüdür; örneklem dışı ve saklı dönem sonuçları değiştirildiğinde seçim değişmez. 30 işlemi olan kombinasyon yoksa sonuç "geçmedi: örneklem içi işlem yetersiz"dir.
 - [ ] AC-4 — Örneklem dışı eşik sınırları: kâr faktörü tam 1.2 ve tam 30 işlem geçer; 1.19 ya da 29 işlem geçmez; drawdown tam %15 geçmez; net kâr tam 0 geçmez. Zararlı işlemi olmayan (kâr faktörü tanımsız) ve diğer eşikleri geçen aday geçer. Her "geçmedi" satırı ilk tutmayan eşiği adlandırır.
 - [ ] AC-5 — Saklı dönem: örneklem dışında geçen aday saklı dönemde net kâr ≤ 0 ya da drawdown ≥ %15 ise "geçmedi: saklı dönem <eşik>" olur; saklı dönemde işlem sayısı karara girmez (0 işlem ve net kâr 0 → geçmedi).
 - [ ] AC-6 — Birden fazla aday geçerse rapor, örneklem içi ve örneklem dışı kâr faktörlerinin küçüğü en yüksek olanı tek paper adayı olarak adlandırır; eşitlikte örneklem dışı net kârı yüksek olanı. Hiçbiri geçmezse "aday yok" yazar. Rapor toplam sınanan kombinasyon sayısını yazar.
 - [ ] AC-7 — Bir son değerlendirmedeki bütün adayların rapor başlığındaki risk ve maliyet koşulları aynıdır; koşullar değerlendirme sırasında değişirse koşu rapor yazmadan reddeder.
-- [ ] AC-8 — Onaylı rapordaki strateji ya da ayarları çalışan ayardakinden farklıysa `start` ve `start --live` `ayar uyuşmazlığı: strateji` ile reddeder (depo yazılmaz, borsaya istek gitmez, çıkış 1). Son değerlendirme olmayan rapor aşama kapısında `rapor son değerlendirme değil` ile reddedilir.
+- [ ] AC-8 — Onaylı rapordaki strateji ya da ayarları çalışan ayardakinden farklıysa `start` ve `start --live` `ayar uyuşmazlığı: strateji` ile reddeder (depo yazılmaz, borsaya istek gitmez, çıkış 1). Son değerlendirme olmayan rapor aşama kapısında `rapor son değerlendirme değil` ile reddedilir. Strateji adı farklıysa metin `ayar uyuşmazlığı: strateji`; bir parametre farklıysa mevcut `ayar uyuşmazlığı: <parametre>` kalır (plan 0042 Risk 7, Galip Badem, 2026-11-12).
 - [ ] AC-9 — S0 üzerinde, bugünkü 4h verisi ve ayarlarıyla son değerlendirme koşulur, R-14 sınırında biter ve sonucu (beklenen: "aday yok") raporlar; koşu süresi ve rapor parmak izi VERIFY'a gözlem olarak girer.
 
 ## Definition of Done
