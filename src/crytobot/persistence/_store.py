@@ -52,6 +52,11 @@ _STARTS_TABLE = (
     "CREATE TABLE IF NOT EXISTS starts(seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT"
 )
 LAST_TURN_KEY = "last_turn"  # spec 0038 plan Risk 1: paper only, monotonic, revision unchanged
+# spec 0041 CB-4: the network a live store was opened on; added only (no format change), a store
+# without it is mainnet (G-1) and gets it on its first start (`bind_network`)
+NETWORK_KEY = "network"
+NETWORKS = ("mainnet", "testnet")
+MAINNET = NETWORKS[0]
 _SCHEMA = (
     "CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT",
     "CREATE TABLE entries(seq INTEGER PRIMARY KEY, row TEXT NOT NULL) STRICT",
@@ -76,6 +81,7 @@ class StoreOutcome(Enum):
     STALE_WRITE = "stale_write"
     HISTORY_IMMUTABLE = "history_immutable"
     LIVE_STORE_OUTDATED = "live_store_outdated"
+    NETWORK_MISMATCH = "network_mismatch"
 
 
 @dataclass(frozen=True)
@@ -88,6 +94,7 @@ class StoredState:
     execution: ExecutionState
     risk: RiskState
     last_turn: datetime | None = None  # spec 0038: the last turn written to a paper store
+    network: str = MAINNET  # spec 0041 CB-4: a store with no network recorded is mainnet (G-1)
 
 
 @dataclass(frozen=True)
@@ -220,10 +227,26 @@ def _flagged(outcome: StoreOutcome, state: StoredState, verb: str) -> StoreResul
     return StoreResult(outcome, state, found, f"{verb}; mutabakat tutmuyor: {shown}{suffix}")
 
 
-def create_store(path: object, mode: object) -> StoreResult:
-    """R-1: depoyu yalnız bu çağrı oluşturur; üst dizin oluşturulmaz, var olan dosyaya dokunmaz."""
+def _valid_network(network: object) -> bool:
+    return type(network) is str and network in NETWORKS
+
+
+def _network(meta: dict[str, str]) -> str:
+    """Spec 0041 G-1: kaydı olmayan depo `mainnet`; tanınmayan değer bozuk içeriktir."""
+    network = meta.get(NETWORK_KEY, MAINNET)
+    if network not in NETWORKS:
+        raise CodecError
+    return network
+
+
+def create_store(path: object, mode: object, network: object = None) -> StoreResult:
+    """R-1: depoyu yalnız bu çağrı oluşturur; üst dizin oluşturulmaz, var olan dosyaya dokunmaz.
+
+    Spec 0041 CB-4: `network` verilirse depo o ağa bağlı açılır (canlı depo)."""
     target = _target(path)
     if target is None or not _valid_mode(mode):
+        return _INVALID
+    if network is not None and not _valid_network(network):
         return _INVALID
     assert isinstance(mode, str)  # checked above
     if os.path.lexists(target):
@@ -243,6 +266,9 @@ def create_store(path: object, mode: object) -> StoreResult:
     }
     if mode == "live":  # spec 0036 R-13: this store records the exchange's real fills
         meta[LIVE_FILLS_KEY] = LIVE_FILLS
+    if network is not None:
+        assert isinstance(network, str)  # checked above
+        meta[NETWORK_KEY] = network
     try:
         with closing(_connect(target)) as database:
             database.execute("BEGIN EXCLUSIVE")
@@ -254,7 +280,9 @@ def create_store(path: object, mode: object) -> StoreResult:
         with suppress(OSError):
             target.unlink(missing_ok=True)
         return _WRITE_FAILED
-    state = StoredState(mode, 0, EMPTY_LEDGER, EMPTY_EXECUTION, EMPTY_STATE)
+    state = StoredState(
+        mode, 0, EMPTY_LEDGER, EMPTY_EXECUTION, EMPTY_STATE, None, network or MAINNET
+    )
     return StoreResult(StoreOutcome.CREATED, state, (), "depo oluşturuldu")
 
 
@@ -268,12 +296,13 @@ def _read(database: sqlite3.Connection, mode: str) -> StoreResult:
     execution = decode_orders(_rows(database, "orders"))
     risk = decode_risk(meta["risk"])
     last_turn = _last_turn(meta)
+    network = _network(meta)
     problems = _problems(ledger, execution, risk)
     if problems:
         return _refusal(StoreOutcome.UNREADABLE, f"depo okunamıyor: {problems[0]}")
     return _flagged(
         StoreOutcome.LOADED,
-        StoredState(mode, header, ledger, execution, risk, last_turn),
+        StoredState(mode, header, ledger, execution, risk, last_turn, network),
         "depo yüklendi",
     )
 
@@ -449,7 +478,9 @@ def save_store(
         encode_summary(ledger),
         encode_risk(risk),
     )
-    state = StoredState(base.mode, base.revision + 1, ledger, execution, risk, base.last_turn)
+    state = StoredState(
+        base.mode, base.revision + 1, ledger, execution, risk, base.last_turn, base.network
+    )
     try:
         if not target.exists():
             return _MISSING
@@ -623,6 +654,54 @@ def mark_turn(path: object, at: object) -> StoreResult:
         if not target.exists():
             return _MISSING
         return _waiting(lambda: _mark(target, at))
+    except sqlite3.Error as error:
+        return _BUSY if _busy(error) else _WRITE_FAILED
+    except CodecError:
+        return _UNREADABLE
+    except (KeyError, OSError, ValueError):
+        return _WRITE_FAILED
+
+
+def _network_mismatch(stored: str, wanted: str) -> StoreResult:
+    return _refusal(
+        StoreOutcome.NETWORK_MISMATCH, f"depo ağı uyuşmuyor: depo={stored} ayar={wanted}"
+    )
+
+
+def _bind(target: Path, network: str) -> StoreResult:
+    with closing(_connect(target)) as database:  # closing without COMMIT rolls back
+        database.execute("BEGIN EXCLUSIVE")
+        meta = _meta(database)
+        header = _header(meta, "live")
+        if isinstance(header, StoreResult):
+            return header
+        stored = meta.get(NETWORK_KEY)
+        if stored is not None:
+            if stored not in NETWORKS:
+                return _UNREADABLE
+            if stored != network:
+                return _network_mismatch(stored, network)
+            return StoreResult(StoreOutcome.SAVED, None, (), "depo ağı kayıtlı")
+        if network != MAINNET:  # G-1: a store with no record is mainnet, never another network
+            return _network_mismatch(MAINNET, network)
+        database.execute("INSERT INTO meta(key, value) VALUES (?, ?)", (NETWORK_KEY, network))
+        database.execute("COMMIT")
+        return StoreResult(StoreOutcome.SAVED, None, (), "depo ağı kaydedildi")
+
+
+def bind_network(path: object, network: object) -> StoreResult:
+    """Spec 0041 CB-4, G-1: canlı deponun ağını yalnız eksikse yazar; revizyon artmaz.
+
+    Kayıtlı ağ farklıysa `NETWORK_MISMATCH`, depo değişmez. Kaydı olmayan depo `mainnet`'tir:
+    başka bir ağla bağlanamaz."""
+    target = _target(path)
+    if target is None or not _valid_network(network):
+        return _INVALID
+    assert isinstance(network, str)  # checked above
+    try:
+        if not target.exists():
+            return _MISSING
+        return _waiting(lambda: _bind(target, network))
     except sqlite3.Error as error:
         return _BUSY if _busy(error) else _WRITE_FAILED
     except CodecError:
