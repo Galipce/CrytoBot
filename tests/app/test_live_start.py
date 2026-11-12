@@ -681,6 +681,8 @@ def test_testnet_gate_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     cfg, _ = _live_root(tmp_path / "b", config_testnet=True, store="mainnet")
     (tmp_path / "b" / "report.txt").write_bytes(b"x")
     console = start(cfg)
+    refusal = console.splitlines()[-1]
+    assert refusal.endswith("başlatma reddedildi: rapor başlığı eksik veya geçersiz")
     assert "paper kanıtı" not in console and "depo ağı" not in console
 
     # 3. paper proof before the network
