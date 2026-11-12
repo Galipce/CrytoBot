@@ -36,7 +36,10 @@ def live_dir(root: Path, *, testnet: bool = False) -> tuple[Path, Path]:
     """Hazır canlı depo ve kanıtlı paper deposuyla ayar dosyası."""
     config = write_test_config(root, mode="live", testnet=testnet)
     prepare_live_store(
-        (root / "bot.db").as_posix(), NOW, live_client=FakeLiveClient(free_balance=Decimal(1000))
+        (root / "bot.db").as_posix(),
+        NOW,
+        testnet=testnet,  # spec 0041 CB-4: the store is on the configured network
+        live_client=FakeLiveClient(free_balance=Decimal(1000)),
     )
     return config, root / "paper.sqlite"
 
@@ -70,7 +73,8 @@ def test_a_refused_paper_proof_sends_nothing_and_touches_no_live_store(tmp_path:
 
 
 def test_testnet_takes_the_same_gate(tmp_path: Path) -> None:
-    """CB-5: testnet'te atlama yolu yok."""
+    """CB-5: testnet'te atlama yolu yok. Verify round 1 F-12 (spec 0041 PB-3): depo testnet'te,
+    sonraki kapılar geçer; ret yalnız paper kanıtından gelir ve son satırdır."""
     config, paper = live_dir(tmp_path, testnet=True)
     paper.unlink()
     client = SpyClient()
@@ -78,8 +82,8 @@ def test_testnet_takes_the_same_gate(tmp_path: Path) -> None:
     code, console = start_live(config, client, stopped=True)
 
     assert code == EXIT_REFUSED
-    assert "paper kanıtı: paper deposu yok" in console
-    assert "Testnet" not in console
+    assert console.splitlines()[-1].endswith("başlatma reddedildi: paper kanıtı: paper deposu yok")
+    assert "depo ağı" not in console and "testnet" not in console
     assert client.calls == []
 
 

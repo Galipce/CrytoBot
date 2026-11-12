@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 import crytobot.__main__ as entry
-from crytobot.__main__ import EXIT_REFUSED, run
+from crytobot.__main__ import EXIT_OK, EXIT_REFUSED, run
 from crytobot.app import StopRequest, prepare_live_store
 from crytobot.market_data import MarketRead
 from tests.app.test_live_start import NOW, FakeLiveClient, write_test_config
@@ -131,3 +131,52 @@ def test_entry_labels_the_reporter_only_on_testnet(
     )
 
     assert labels == [label]
+
+
+_KEYS = {
+    "BINANCE_API_KEY": "mainnet-key",
+    "BINANCE_API_SECRET": "mainnet-secret",
+    "BINANCE_TESTNET_API_KEY": "testnet-key",
+    "BINANCE_TESTNET_API_SECRET": "testnet-secret",
+}
+
+
+def _record_built_clients(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, bool]]:
+    """`BinanceLiveClient` yerine: kimlikten kurulan istemcinin anahtarını ve ağını yazar, borsaya
+    çıkmaz. Ortamda iki anahtar seti vardır; çalışma dizini `.env` içermez."""
+    from crytobot.app import _start as start_module
+
+    built: list[tuple[str, bool]] = []
+
+    class Recording(FakeLiveClient):
+        def __init__(self, credentials: Any, exchange: Any = None) -> None:
+            built.append((credentials.api_key, credentials.testnet))
+            super().__init__(free_balance=Decimal(1000))
+
+    for name, value in _KEYS.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(start_module, "BinanceLiveClient", Recording)
+    return built
+
+
+@pytest.mark.parametrize(("testnet", "key"), [(True, "testnet-key"), (False, "mainnet-key")])
+def test_live_start_and_prepare_load_the_network_credentials(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, testnet: bool, key: str
+) -> None:
+    """Verify round 1 F-11 (PB-4, CB-1): istemci verilmeyen `prepare --live` ve `start --live`
+    testnet'te yalnız testnet anahtarıyla, mainnet'te yalnız mainnet anahtarıyla istemci kurar."""
+    monkeypatch.chdir(tmp_path)
+    cfg = write_test_config(tmp_path, mode="live", testnet=testnet)
+    built = _record_built_clients(monkeypatch)
+
+    prepared = run(["prepare", "--live"], config_path=cfg, console=io.StringIO())
+
+    assert prepared == EXIT_OK
+    assert built == [(key, testnet)]
+
+    stop = StopRequest()
+    stop.request("test")
+    started = run(["start", "--live"], config_path=cfg, console=io.StringIO(), stop=stop)
+
+    assert started == EXIT_OK
+    assert built == [(key, testnet), (key, testnet)]
