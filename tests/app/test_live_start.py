@@ -15,6 +15,7 @@ from crytobot.app import (
     StartOutcome,
     StopRequest,
     create_live_exchange,
+    network_note_text,
     open_for_start,
     prepare_live_store,
     prepare_store,
@@ -378,10 +379,12 @@ def test_live_start_fails_closed_on_credentials_or_permissions(tmp_path: Path) -
     assert res_w == EXIT_REFUSED
     assert WITHDRAWAL_PERMISSION_FORBIDDEN in out_w.getvalue()
 
-    # 6. Testnet modu bildirimi
+    # 6. Testnet modu bildirimi (spec 0041 CB-4: testnet başlatması testnet deposu ister)
     cfg_testnet = write_test_config(tmp_path / "cli_testnet", mode="live", testnet=True)
     store_tn = (tmp_path / "cli_testnet" / "bot.db").as_posix()
-    prepare_live_store(store_tn, NOW, live_client=FakeLiveClient(free_balance=Decimal("1000")))
+    prepare_live_store(
+        store_tn, NOW, testnet=True, live_client=FakeLiveClient(free_balance=Decimal("1000"))
+    )
 
     out_tn = io.StringIO()
     # Canlı başlatmayı başarılı kuruyoruz; hemen durdurmak için StopRequest
@@ -397,7 +400,7 @@ def test_live_start_fails_closed_on_credentials_or_permissions(tmp_path: Path) -
         stop=stop_req,
     )
     assert res_tn == EXIT_OK
-    assert "Testnet" in out_tn.getvalue()
+    assert network_note_text() in out_tn.getvalue()  # spec 0041 CB-2
 
 
 # --- spec 0040 CB-5, CB-6: the new refusals before any exchange call ---------------------------
@@ -465,3 +468,228 @@ def test_live_and_testnet_refusal_no_exchange_call(
     """CB-6: canlıda ve testnet'te yeni retler depoya yazmaz, borsaya gitmez, tur atmaz; çıkış 1."""
     refusal = _refused_live(tmp_path, case, testnet=testnet)
     assert refusal.endswith(f"başlatma reddedildi: {message}")
+
+
+# --- spec 0041 CB-2, CB-4, PB-3: the store's network and the testnet start ----------------------
+
+
+def _drop_network(store: Path) -> None:
+    """0041 öncesi canlı depo: ağ kaydı yok (G-1)."""
+    import sqlite3
+    from contextlib import closing
+
+    with closing(sqlite3.connect(store)) as database:
+        database.execute("DELETE FROM meta WHERE key = 'network'")
+        database.commit()
+
+
+def _live_root(root: Path, *, config_testnet: bool, store: str) -> tuple[Path, Path]:
+    """`store`: `mainnet`, `testnet` ya da `unrecorded` (ağ kaydı olmayan mainnet deposu)."""
+    cfg = write_test_config(root, mode="live", testnet=config_testnet)
+    db = root / "bot.db"
+    prepared = prepare_live_store(
+        db.as_posix(),
+        NOW,
+        testnet=store == "testnet",
+        live_client=FakeLiveClient(free_balance=Decimal(1000)),
+    )
+    assert prepared.outcome is PrepareOutcome.PREPARED
+    if store == "unrecorded":
+        _drop_network(db)
+    return cfg, db
+
+
+def _files(root: Path) -> dict[str, bytes]:
+    return {p.name: p.read_bytes() for p in sorted(root.iterdir()) if p.is_file()}
+
+
+@pytest.mark.parametrize(
+    ("store", "config_testnet", "message"),
+    [
+        ("mainnet", True, "depo ağı uyuşmuyor: depo=mainnet ayar=testnet"),
+        ("unrecorded", True, "depo ağı uyuşmuyor: depo=mainnet ayar=testnet"),
+        ("testnet", False, "depo ağı uyuşmuyor: depo=testnet ayar=mainnet"),
+    ],
+)
+def test_network_mismatch_refuses_before_exchange(
+    tmp_path: Path, store: str, config_testnet: bool, message: str
+) -> None:
+    """CB-4, G-1: uyuşmazlıkta borsaya istek gitmez, depoya ve kayda yazılmaz, tur yok, çıkış 1."""
+    cfg, _ = _live_root(tmp_path, config_testnet=config_testnet, store=store)
+    before = _files(tmp_path)
+    client = CallSpy()
+    stop = StopRequest()
+    stop.request("test")
+    out = io.StringIO()
+
+    code = run(["start", "--live"], config_path=cfg, console=out, live_client=client, stop=stop)
+
+    assert code == EXIT_REFUSED
+    assert client.calls == []
+    assert _files(tmp_path) == before
+    (refusal,) = out.getvalue().splitlines()
+    assert refusal.endswith(f"başlatma reddedildi: {message}")
+
+
+def test_unrecorded_store_is_bound_to_mainnet_on_first_start(tmp_path: Path) -> None:
+    """G-1: ağ kaydı olmayan canlı depo mainnet başlatmasında mainnet olarak kaydedilir."""
+    cfg, db = _live_root(tmp_path, config_testnet=False, store="unrecorded")
+    stop = StopRequest()
+    stop.request("test")
+
+    code = run(
+        ["start", "--live"],
+        config_path=cfg,
+        console=io.StringIO(),
+        live_client=FakeLiveClient(free_balance=Decimal(1000)),
+        stop=stop,
+    )
+
+    assert code == EXIT_OK
+    loaded = load_store(db, "live")
+    assert loaded.state is not None and loaded.state.network == "mainnet"
+    import sqlite3
+    from contextlib import closing
+
+    with closing(sqlite3.connect(db)) as database:
+        rows = dict(database.execute("SELECT key, value FROM meta").fetchall())
+    assert rows["network"] == "mainnet"
+
+
+@pytest.mark.parametrize(
+    ("store", "config_testnet", "expected"),
+    [
+        ("testnet", False, "depo ağı uyuşmuyor: depo=testnet ayar=mainnet"),
+        ("mainnet", True, "depo ağı uyuşmuyor: depo=mainnet ayar=testnet"),
+        ("testnet", True, "depo zaten var; hiçbir şey yazılmadı"),
+        ("mainnet", False, "depo zaten var; hiçbir şey yazılmadı"),
+    ],
+)
+def test_prepare_network_mismatch_no_request(
+    tmp_path: Path, store: str, config_testnet: bool, expected: str
+) -> None:
+    """CB-4, plan Risk 3: var olan depoda `prepare --live` borsaya çıkmaz; önce ağ, sonra "depo
+    zaten var". Depo değişmez, çıkış 1."""
+    cfg, db = _live_root(tmp_path, config_testnet=config_testnet, store=store)
+    before = db.read_bytes()
+    client = CallSpy()
+    out = io.StringIO()
+
+    code = run(["prepare", "--live"], config_path=cfg, console=out, live_client=client)
+
+    assert code == EXIT_REFUSED
+    assert client.calls == []
+    assert db.read_bytes() == before
+    assert out.getvalue().splitlines()[-1].endswith(f"hazırlık {expected}")
+
+
+def test_prepare_live_records_the_network(tmp_path: Path) -> None:
+    """CB-4: yeni canlı depo ayardaki ağa bağlı açılır."""
+    for testnet, network in ((False, "mainnet"), (True, "testnet")):
+        db = tmp_path / f"{network}.db"
+        prepared = prepare_live_store(
+            db.as_posix(), NOW, testnet=testnet, live_client=FakeLiveClient()
+        )
+        assert prepared.outcome is PrepareOutcome.PREPARED
+        loaded = load_store(db, "live")
+        assert loaded.state is not None and loaded.state.network == network
+
+
+class _Reports:
+    """Telegram taşıyıcısı yerine: gönderilen her metni yazar."""
+
+    def __init__(self) -> None:
+        self.texts: list[str] = []
+
+    def __call__(self, url: str, payload: dict[str, Any]) -> tuple[int, str]:
+        self.texts.append(str(payload.get("text", "")))
+        return 200, '{"ok":true}'
+
+
+def _start_once(cfg: Path, reports: _Reports) -> tuple[int, str]:
+    from crytobot.reporting import ReportingService, TelegramConfig
+
+    reporter = ReportingService(
+        TelegramConfig(enabled=True, bot_token="t", chat_id="c"), transport=reports
+    )
+    stop = StopRequest()
+    stop.request("test")
+    out = io.StringIO()
+    code = run(
+        ["start", "--live"],
+        config_path=cfg,
+        console=out,
+        live_client=FakeLiveClient(free_balance=Decimal(1000)),
+        stop=stop,
+        reporter=reporter,
+    )
+    return code, out.getvalue()
+
+
+def test_testnet_start_line_notes_skipped_check(tmp_path: Path) -> None:
+    """CB-2, G-5: testnet başlatmasında not konsola ve kayıt dosyasına yazılır, Telegram'a gitmez;
+    mainnet başlatmasında not yoktur (G-3)."""
+    cfg, _ = _live_root(tmp_path / "tn", config_testnet=True, store="testnet")
+    reports = _Reports()
+
+    code, console = _start_once(cfg, reports)
+
+    assert code == EXIT_OK
+    note = network_note_text()
+    assert "testnet: yetki denetimi atlandı" in note and "ağ=testnet" in note
+    assert any(row.endswith(f"başlatma {note}") for row in console.splitlines())
+    log = (tmp_path / "tn" / "bot.log").read_text(encoding="utf-8")
+    assert any(row.endswith(f"başlatma {note}") for row in log.splitlines())
+    assert not any("yetki denetimi atlandı" in text for text in reports.texts)
+
+    cfg_main, _ = _live_root(tmp_path / "mn", config_testnet=False, store="mainnet")
+    code, console = _start_once(cfg_main, _Reports())
+    assert code == EXIT_OK
+    log = (tmp_path / "mn" / "bot.log").read_text(encoding="utf-8")
+    for text in (console, log):
+        assert "ağ=testnet" not in text and "yetki denetimi atlandı" not in text
+
+
+def test_testnet_gate_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """CB-4, PB-3: ayar → rapor → paper kanıtı → depo ağı → kimlik/yetki; testnet hiçbirini
+    atlatmaz, ağa çıkan adım en sondadır."""
+    from crytobot.app import _start as start_module
+
+    loads: list[bool] = []
+
+    def spy_credentials(*args: Any, testnet: bool = False, **kwargs: Any) -> Any:
+        loads.append(testnet)
+        raise AssertionError("credentials must not be loaded before the earlier gates")
+
+    monkeypatch.setattr(start_module, "load_credentials", spy_credentials)
+
+    def start(cfg: Path) -> str:
+        stop = StopRequest()
+        stop.request("test")
+        out = io.StringIO()
+        assert run(["start", "--live"], config_path=cfg, console=out, stop=stop) == EXIT_REFUSED
+        return out.getvalue()
+
+    # 1. config: an unreadable network value comes before the report gate
+    cfg, _ = _live_root(tmp_path / "a", config_testnet=True, store="mainnet")
+    text = cfg.read_text(encoding="utf-8").replace("testnet = true", 'testnet = "true"')
+    cfg.write_text(text, encoding="utf-8")
+    (tmp_path / "a" / "report.txt").unlink()
+    assert "ayar geçersiz: exchange.testnet" in start(cfg)
+
+    # 2. report before the paper proof and the network
+    cfg, _ = _live_root(tmp_path / "b", config_testnet=True, store="mainnet")
+    (tmp_path / "b" / "report.txt").write_bytes(b"x")
+    console = start(cfg)
+    assert "paper kanıtı" not in console and "depo ağı" not in console
+
+    # 3. paper proof before the network
+    cfg, _ = _live_root(tmp_path / "c", config_testnet=True, store="mainnet")
+    (tmp_path / "c" / "paper.sqlite").unlink()
+    console = start(cfg)
+    assert "paper kanıtı: paper deposu yok" in console and "depo ağı" not in console
+
+    # 4. the network before credentials
+    cfg, _ = _live_root(tmp_path / "d", config_testnet=True, store="mainnet")
+    assert "depo ağı uyuşmuyor: depo=mainnet ayar=testnet" in start(cfg)
+    assert loads == []

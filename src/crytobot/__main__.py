@@ -5,6 +5,9 @@ Karar içermez: kararların hepsi `app`'tedir. Burada yalnız gerçek etkiler ba
 sinyaller, tek süreç kilidi, konsol ve kayıt dosyası yazıcısı, piyasa okuması. Yalnız paper vardır;
 mod seçeneği, API anahtarı ve ortam değişkeni okunmaz.
 
+Ağ (spec 0041): `[exchange] testnet` yalnız `app.load_network` ile, `start` ve `prepare` için bir
+kez okunur; testnet canlı koşusunda okuma, emir/hesap istemcisi ve Telegram öneki aynı ağdandır.
+
 `download` (spec 0023) geçmiş veriyi aynı ayar dosyasının `[history]` bölümüne göre indirir. Kilit
 alınmaz, depo ve kayıt dosyası açılmaz: çıktı yalnız konsoladır, çalışan bir paper botu etkilenmez.
 
@@ -49,6 +52,7 @@ from crytobot.app import (
     PrepareOutcome,
     StartOutcome,
     StopRequest,
+    bind_live_network,
     check_paper_proof,
     check_stage_gate,
     create_live_exchange,
@@ -58,7 +62,9 @@ from crytobot.app import (
     load_backtest_config,
     load_config,
     load_download_config,
+    load_network,
     load_stage_config,
+    network_note_text,
     open_for_start,
     prepare_live_store,
     prepare_store,
@@ -138,6 +144,7 @@ _BACKTEST_EXIT_CODES = {
     BacktestOutcome.REPORT_NOT_WRITTEN: EXIT_REPORT_NOT_WRITTEN,
 }
 _LOG_FAILED = "kayıt dosyası yazılamıyor: bot durdu"
+TESTNET_LABEL = "[TESTNET]"  # spec 0041 CB-5: every Telegram message of a testnet run
 _PIECE_S = 1.0
 
 Clock = Callable[[], datetime]
@@ -286,11 +293,12 @@ def make_wait(
     return wait
 
 
-def make_read(clock: Clock) -> Read:
-    """Okuma yalnız herkese açık uçlara, anahtarsız gider (spec 0017)."""
+def make_read(clock: Clock, testnet: bool = False) -> Read:
+    """Okuma yalnız herkese açık uçlara, anahtarsız gider (spec 0017). Spec 0041 CB-1: testnet
+    koşusunda bütün okumalar testnet'ten; mainnet'e geri dönülmez."""
 
     def read(pairs: tuple[str, ...], settings: ReadSettings) -> MarketRead:
-        return read_market_data(pairs, settings, clock)
+        return read_market_data(pairs, settings, clock, testnet=testnet)
 
     return read
 
@@ -565,8 +573,12 @@ def _start(
     reporter: ReportingService | None = None,
     exchange: object = None,
     paper_proof: PaperProof | None = None,
+    testnet: bool = False,
 ) -> int:
     check = open_for_start(config.store_path, mode=config.mode)
+    if check.outcome is StartOutcome.READY and config.mode == "live":
+        # spec 0041 CB-4, plan Risk 4: under the lock, before any turn; G-1 records mainnet
+        check = bind_live_network(config.store_path, testnet)
     if check.outcome is StartOutcome.READY and config.mode == "paper":
         # spec 0038 CB-1: after READY, before any turn; the report as an absolute path (G-5)
         absolute = None if report_path is None else str(Path(report_path).resolve())
@@ -581,6 +593,8 @@ def _start(
         hint = f"; {check.hint}" if check.hint is not None else ""
         output(line(parts.clock(), "başlatma", f"{check.message}{hint}"))
         return EXIT_REFUSED
+    if testnet:  # spec 0041 CB-2, G-5: console and log file, never Telegram
+        output(line(parts.clock(), "başlatma", network_note_text()))
     exit_ = run_loop(
         config,
         parts,
@@ -646,6 +660,19 @@ def run(
             )
         )
         return EXIT_REFUSED
+
+    testnet = False
+    if argv[0] in ("start", "prepare"):
+        # spec 0041 CB-3, plan Risk 7: the network's one reader, before every other gate
+        network_document = _load_toml(config_path)
+        if isinstance(network_document, str):
+            output.say(line(clock(), "ayar", f"bot başlamadı: {network_document}"))
+            return EXIT_REFUSED
+        network = load_network(network_document, config.mode)
+        if network.network is None:
+            output.say(line(clock(), "ayar", f"bot başlamadı: {network.message}"))
+            return EXIT_REFUSED
+        testnet = network.network == "testnet"
 
     if argv[0] == "status":
         running = is_lock_held(config.store_path)
@@ -715,24 +742,16 @@ def run(
             paper_proof = _paper_proof_gate(config_path, config, output, clock)
             if paper_proof is None:
                 return EXIT_REFUSED
-            document = _load_toml(config_path)
-            testnet = False
-            if (
-                isinstance(document, Mapping)
-                and "exchange" in document
-                and isinstance(document["exchange"], Mapping)
-            ):
-                testnet = bool(document["exchange"].get("testnet", False))
+            # spec 0041 CB-4: the store's network before credentials, the step that goes out
             live_exch, err = create_live_exchange(
                 testnet=testnet,
                 client=live_client,
+                store_path=config.store_path,
             )
             if live_exch is None:
                 output.say(line(clock(), "başlatma", f"başlatma reddedildi: {err}"))
                 return EXIT_REFUSED
             live_exchange = live_exch
-            if testnet:
-                output.say(line(clock(), "başlatma", "Binance Spot Testnet modunda çalışıyor"))
         elif not trial:
             passed, approved_by, report_path, report_sha256 = _stage_gate(
                 config_path, config, output, clock, mode="paper"
@@ -748,15 +767,6 @@ def run(
             output(line(clock(), argv[0], f"reddedildi: {refused}"))
             return EXIT_REFUSED
         if argv[0] == "prepare":
-            testnet = False
-            if is_live:
-                document = _load_toml(config_path)
-                if (
-                    isinstance(document, Mapping)
-                    and "exchange" in document
-                    and isinstance(document["exchange"], Mapping)
-                ):
-                    testnet = bool(document["exchange"].get("testnet", False))
             return _prepare(
                 config,
                 output,
@@ -770,7 +780,7 @@ def run(
             make_wait(stop, stop_flag_path=stop_flag_path(config.store_path))
             if wait is None
             else wait,
-            make_read(clock) if read is None else read,
+            make_read(clock, testnet=testnet) if read is None else read,
             output,
             stop,
             KillRequest(
@@ -784,7 +794,7 @@ def run(
                 load_reporting_config(document) if isinstance(document, Mapping) else None
             )
             if reporting_cfg is not None and reporting_cfg.is_active:
-                reporter = ReportingService(reporting_cfg)
+                reporter = ReportingService(reporting_cfg, label=TESTNET_LABEL if testnet else None)
         return _start(
             config,
             output,
@@ -796,6 +806,7 @@ def run(
             reporter=reporter,
             exchange=live_exchange,
             paper_proof=paper_proof,
+            testnet=testnet,
         )
     except LogWriteError:
         output.say(line(clock(), "durdurma", _LOG_FAILED))
