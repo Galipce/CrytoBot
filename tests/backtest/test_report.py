@@ -7,8 +7,10 @@ içini yazar (AC-1)."""
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
+from crytobot.app import BacktestOutcome
 from crytobot.backtest import (
     ASSUMPTIONS,
     CANDIDATE_MARK,
@@ -27,6 +29,8 @@ from crytobot.backtest import (
     report_text,
     run_metrics,
 )
+from tests.app import backtest_helpers as bh
+from tests.app.helpers import ETH
 from tests.backtest.test_metrics import BTC, DAY1, DAY2, RECORDS
 
 GENERATED = datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
@@ -373,3 +377,30 @@ def test_mark_only_on_the_paper_candidate() -> None:
     assert report == final_report_text(
         FINAL_FACTS, 2, [passed("S0", "1h"), passed("S0", "4h")], 1, metrics
     )
+
+
+# --- spec 0044 AC-1 (plan Risk 5): varsayılan rapor boşluklu veride bayt bayt aynı ---
+
+GOLDEN = Path(__file__).parent / "fixtures" / "default-report-gaps.txt"
+
+
+def gappy_report(root: Path) -> bytes:
+    """Boşluklu sentetik veriyle (tek eksik, ardışık eksik, ısınmadan taşan, sonda eksik)
+    varsayılan `backtest` koşusunun rapor dosyası, baytlarıyla."""
+    series = {
+        BTC: bh.candles(-bh.COUNT, [10, 8, 9, 10, 10, None, 12, None, None, 14, 10, 10, 10, 10]),
+        ETH: bh.candles(
+            -bh.COUNT, [10, None, None, 10, None, 10, 10, 10, 10, None, 10, 10, 10, None]
+        ),
+    }
+    setup = bh.config(root, split_at=bh.at(4), holdout_at=bh.at(6))
+    bh.write_history(Path(setup.data_path), bh.history(series, hours=10))
+    run = bh.Run(root)
+    exit_ = run(setup)
+    assert exit_.outcome is BacktestOutcome.COMPLETED, run.console
+    return Path(setup.report_path).read_bytes()
+
+
+def test_default_report_unchanged_with_gaps(tmp_path: Path) -> None:
+    """AC-1: fikstür değişiklikten önce `main` @59d22bc'de üretildi (plan Adım 3)."""
+    assert gappy_report(tmp_path) == GOLDEN.read_bytes()
