@@ -13,6 +13,11 @@
   borsa destekliyorsa IP kısıtlaması açık. Bot başlarken anahtar yetkilerini doğrulayabiliyorsa withdrawal
   yetkisi görürse çalışmayı reddeder.
 - Testnet, paper ve live için **ayrı anahtarlar**; live anahtarı paper modda yüklenmez.
+- **Testnet yetki istisnası (spec 0041 CB-2):** Binance Spot Testnet anahtar kısıtı ucunu sunmaz. Yalnız
+  `[exchange] testnet = true` iken (o koşuda yalnız `BINANCE_TESTNET_API_KEY`/`SECRET` yüklenir, istemci sandbox
+  modundadır) kısıt sorgusunun yerine testnet anahtarıyla imzalı bakiye sorgusu yapılır; başarısızsa
+  `PERMISSION_CHECK_FAILED` ile fail-closed. Mainnet'te yetki denetimi atlanamaz: testnet bayrağı dışında hiçbir
+  ayar, argüman ya da ortam değişkeni onu değiştirmez.
 
 ## Input & output
 - Borsa, haber, whitepaper ve LLM yanıtları **güvenilmeyen girdidir**; sınırda `pydantic` şemalarıyla doğrulanır.
