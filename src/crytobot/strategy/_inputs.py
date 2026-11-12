@@ -164,7 +164,6 @@ CANDIDATES: tuple[type[Settings], ...] = (
     BreakoutSettings,
     TrendDipSettings,
 )
-_TYPES = CANDIDATES
 
 
 def candidate(name: object) -> type[Settings] | None:
@@ -230,7 +229,7 @@ def _threshold(value: object) -> Decimal:
 def _check_settings(settings: object) -> tuple[Settings, Decimal | None, Decimal, Decimal]:
     """Alan sırasıyla denetim; S0'ın sırası bugünküyle aynıdır. Döner: ayar, eşik (S2'de
     `None`), `k`, `r`."""
-    if not isinstance(settings, _TYPES):
+    if not isinstance(settings, CANDIDATES):
         raise InvalidInputError(InputProblem.NOT_SETTINGS, "settings")
     threshold: Decimal | None = None
     if isinstance(settings, StrategySettings | TrendFilterSettings):
