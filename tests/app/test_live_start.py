@@ -693,3 +693,71 @@ def test_testnet_gate_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     cfg, _ = _live_root(tmp_path / "d", config_testnet=True, store="mainnet")
     assert "depo ağı uyuşmuyor: depo=mainnet ayar=testnet" in start(cfg)
     assert loads == []
+
+
+# --- review round 1 F-1: the network check under the lock (plan Amendment A-2) ------------------
+
+
+def _no_turn(pairs: tuple[str, ...], settings: object) -> Any:
+    raise AssertionError("a refused start reads nothing and runs no turn")
+
+
+def test_mismatch_missed_before_the_lock_is_refused_under_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A-2: kilitten önceki salt okunur okuma depoyu göremezse (ör. sıcak günlük) uyuşmazlık kilit
+    altında, ilk turdan önce reddedilir: çıkış 1, depo baytları aynı, tur yok."""
+    from crytobot.app import _start as start_module
+
+    monkeypatch.setattr(start_module, "store_network_problem", lambda *a, **k: None)
+    cfg, db = _live_root(tmp_path, config_testnet=True, store="mainnet")
+    before = db.read_bytes()
+    stop = StopRequest()  # not requested: a wrongly passed gate would run a turn
+    out = io.StringIO()
+
+    code = run(
+        ["start", "--live"],
+        config_path=cfg,
+        console=out,
+        live_client=FakeLiveClient(free_balance=Decimal(1000)),
+        stop=stop,
+        read=_no_turn,
+    )
+
+    assert code == EXIT_REFUSED
+    assert db.read_bytes() == before
+    rows = out.getvalue().splitlines()
+    assert rows[-1].endswith("başlatma reddedildi: depo ağı uyuşmuyor: depo=mainnet ayar=testnet")
+    assert not any("başladı:" in row for row in rows)
+    log = (tmp_path / "bot.log").read_text(encoding="utf-8")
+    assert "depo ağı uyuşmuyor: depo=mainnet ayar=testnet" in log
+
+
+def test_network_not_written_refuses_the_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A-2, G-1: ağ kaydı yazılamazsa başlatma reddedilir (kaydı olmayan koşu yok)."""
+    from crytobot.app import _start as start_module
+    from crytobot.persistence import StoreOutcome, StoreResult
+
+    def cannot_write(path: object, network: object) -> StoreResult:
+        return StoreResult(StoreOutcome.WRITE_FAILED, None, (), "yazılamadı")
+
+    monkeypatch.setattr(start_module, "bind_network", cannot_write)
+    cfg, _ = _live_root(tmp_path, config_testnet=False, store="unrecorded")
+    stop = StopRequest()
+    out = io.StringIO()
+
+    code = run(
+        ["start", "--live"],
+        config_path=cfg,
+        console=out,
+        live_client=FakeLiveClient(free_balance=Decimal(1000)),
+        stop=stop,
+        read=_no_turn,
+    )
+
+    assert code == EXIT_REFUSED
+    rows = out.getvalue().splitlines()
+    assert rows[-1].endswith("başlatma reddedildi: depo ağı yazılamadı: yazılamadı")
+    assert not any("başladı:" in row for row in rows)
