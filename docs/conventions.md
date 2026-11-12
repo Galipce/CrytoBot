@@ -117,6 +117,10 @@
   ile gelir. Dosya, ortam ve sinyal işi `__main__`'dedir — from spec 0022, plan Risk 1, 11
 - Yönlendirilmiş (pipe) konsol Windows'ta yerel kod sayfasındadır (cp1254), UTF-8 değildir: alt sürecin çıktısını test eden
   kayıt dosyasına (UTF-8) bakar; konsol `errors="replace"` ile yazar — from spec 0022, build (`tests/main/test_lock_process.py`)
+- Döngünün `except Exception` ağı (`app/_loop.py`, tur adımı) enjekte edilen `read`'in `AssertionError`'ını da yutar:
+  "tur atılmamalı" diye fırlatan sahte okuma, durdurma isteği ya da fırlatan `wait` verilmeyen testte gerilemeyi
+  kırmızıya değil sonsuz beklemeye çevirir. Ret testinde `StopRequest` baştan istenir (yanlış geçen kapı çıkış 0 ve
+  başlatma satırı üretir, assert düşer) — from spec 0041, review round 2 F-7
 - mypy yalnız koştuğu makinenin platformunu denetler: Windows'ta yeşil olan kod CI'da (ubuntu) kırmızı olabilir. Platforma
   özgü ad (`signal.SIGBREAK`, `msvcrt`, `fcntl`) koşullu ifadede değil, `if sys.platform == "win32":` bloğunda kullanılır; yerelde
   `mypy --platform linux src tests tools` ile denenir — from spec 0022, ship PR CI (`tests/main/test_entry.py`, A-3)

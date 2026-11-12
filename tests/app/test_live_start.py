@@ -714,7 +714,10 @@ def test_mismatch_missed_before_the_lock_is_refused_under_it(
     monkeypatch.setattr(start_module, "store_network_problem", lambda *a, **k: None)
     cfg, db = _live_root(tmp_path, config_testnet=True, store="mainnet")
     before = db.read_bytes()
-    stop = StopRequest()  # not requested: a wrongly passed gate would run a turn
+    stop = StopRequest()
+    # review round 2 F-7: requested up front; a wrongly passed gate then starts and stops at
+    # once (exit 0, a start line) instead of hanging: the loop swallows `_no_turn`'s error
+    stop.request("test")
     out = io.StringIO()
 
     code = run(
@@ -748,6 +751,7 @@ def test_network_not_written_refuses_the_start(
     monkeypatch.setattr(start_module, "bind_network", cannot_write)
     cfg, _ = _live_root(tmp_path, config_testnet=False, store="unrecorded")
     stop = StopRequest()
+    stop.request("test")  # review round 2 F-7: a regression fails instead of hanging
     out = io.StringIO()
 
     code = run(
