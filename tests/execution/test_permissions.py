@@ -254,3 +254,81 @@ def test_testnet_client_reaches_only_the_testnet_and_spot_markets() -> None:
     for exchange in (testnet, mainnet):
         assert exchange.options["fetchMarkets"]["types"] == ["spot"]
         assert exchange.options["defaultType"] == "spot"
+
+
+# --- review round 1 F-4: the live client's real requests on the testnet -------------------------
+
+_EXCHANGE_INFO = {
+    "timezone": "UTC",
+    "serverTime": 1793880000000,
+    "rateLimits": [],
+    "symbols": [
+        {
+            "symbol": "BTCUSDT",
+            "status": "TRADING",
+            "baseAsset": "BTC",
+            "baseAssetPrecision": 8,
+            "quoteAsset": "USDT",
+            "quotePrecision": 8,
+            "quoteAssetPrecision": 8,
+            "orderTypes": ["MARKET", "STOP_LOSS_LIMIT"],
+            "isSpotTradingAllowed": True,
+            "isMarginTradingAllowed": False,
+            "permissions": ["SPOT"],
+            "permissionSets": [["SPOT"]],
+            "filters": [],
+        }
+    ],
+}
+_ACCOUNT = {"balances": [{"asset": "USDT", "free": "100.0", "locked": "0.0"}]}
+_TICKER = {"symbol": "BTCUSDT", "lastPrice": "10.50", "bidPrice": "10.40", "askPrice": "10.60"}
+
+
+class _RecordedSession:
+    """`requests.Session` yerine: her isteğin adresini yazar, yola göre kayıtlı yanıt verir."""
+
+    def __init__(self) -> None:
+        self.urls: list[str] = []
+        self.headers: dict[str, str] = {}
+        import requests
+
+        self.cookies = requests.cookies.RequestsCookieJar()
+
+    def request(self, method: str, url: str, **kwargs: object) -> object:
+        import json
+
+        import requests
+
+        self.urls.append(url)
+        for path, body in (
+            ("exchangeInfo", _EXCHANGE_INFO),
+            ("/account", _ACCOUNT),
+            ("ticker/24hr", _TICKER),
+        ):
+            if path in url:
+                response = requests.Response()
+                response.status_code = 200
+                response._content = json.dumps(body).encode("utf-8")
+                response.headers.update({"Content-Type": "application/json"})
+                return response
+        raise AssertionError(f"no recorded response for {url}")
+
+
+def test_testnet_live_client_requests_reach_only_the_testnet() -> None:
+    """CB-1, CB-2: gerçek ccxt istemcisinin yetki denetimi, bakiye ve son fiyat istekleri yalnız
+    `testnet.binance.vision`'a gider; kısıt ucu (`sapi`) ve vadeli uçlar çağrılmaz. Ağa çıkılmaz."""
+    from urllib.parse import urlsplit
+
+    client = BinanceLiveClient(credentials=TESTNET)
+    session = _RecordedSession()
+    client._exchange.session = session
+
+    client.verify_permissions()
+    balances = client.fetch_balances()
+    price = client.fetch_last_price("BTC/USDT")
+
+    assert balances["USDT"].free == 100
+    assert price == 10.5
+    assert session.urls
+    assert {urlsplit(url).hostname for url in session.urls} == {"testnet.binance.vision"}
+    assert not any("sapi" in url or "apiRestrictions" in url for url in session.urls)
