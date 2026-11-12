@@ -252,7 +252,7 @@ def test_strategy_name_is_read() -> None:
 
 # --- spec 0043 (plan Risk 8): adayların parametre satırı yazılır ve okunur ---
 
-CANDIDATE_LINES = {
+CANDIDATE_LINES: dict[str, tuple[dict[str, int | Decimal | str], str]] = {
     "S1": (
         {
             "fast_period": 12,

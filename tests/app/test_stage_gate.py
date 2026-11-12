@@ -529,3 +529,103 @@ def test_real_final_report_passes_to_the_thresholds(tmp_path: Path) -> None:
     stage = replace(make_stage_config(), report_sha256=report_fingerprint(text))
     result = gate(stage, make_bot_config(), read_report(path))
     assert result.message == "eşik karşılanmadı: net kâr sıfırdan büyük olmalı"
+
+
+# --- spec 0043 AC-9 (R-1, R-5; plan Risk 7, A-1) ---
+
+CANDIDATE_STRATEGIES: dict[str, dict[str, Any]] = {
+    "S1": {**BASE["strategy"], "trend_period": 150},
+    "S2": {"breakout_period": 55, "atr_period": 14, "k": "3", "r": "2"},
+    "S3": {"rsi_period": 14, "rsi_threshold": "35", "atr_period": 14, "k": "1.5", "r": "2"},
+}
+
+
+def candidate_bot(name: str, interval: str = "1h") -> BotConfig:
+    document: dict[str, Any] = {section: dict(values) for section, values in BASE.items()}
+    document["strategy"] = {"name": name, **CANDIDATE_STRATEGIES[name]}
+    for section, key in (("bot", "turn_interval"), ("market", "candle_interval")):
+        document[section][key] = interval
+    config = load_config(document, NOW).config
+    assert config is not None
+    return config
+
+
+def candidate_report(name: str, interval: str = "1h", **changes: Any) -> ReportRead:
+    """Çalışan adayın parametreleriyle rapor; `changes` parametreleri değiştirir."""
+    values = {
+        key: int(value) if isinstance(value, int) else Decimal(value)
+        for key, value in CANDIDATE_STRATEGIES[name].items()
+    }
+    return make_report(
+        strategy={**values, **changes},
+        strategy_name=name,
+        candle_interval=interval,
+        turn_interval=interval,
+    )
+
+
+def candidate_refusal(bot: BotConfig, report: ReportRead) -> str:
+    result = gate(make_stage_config(), bot, report)
+    assert not result.passed
+    return result.message
+
+
+@pytest.mark.parametrize("name", sorted(CANDIDATE_STRATEGIES))
+def test_candidate_matching_report_passes(name: str) -> None:
+    for interval in ("1h", "4h"):
+        result = gate(
+            make_stage_config(), candidate_bot(name, interval), candidate_report(name, interval)
+        )
+        assert (result.passed, result.message) == (True, "aşama onayı ve rapor geçerli")
+
+
+@pytest.mark.parametrize(
+    ("name", "parameter", "value"),
+    [
+        ("S1", "trend_period", 100),  # L
+        ("S1", "fast_period", 9),
+        ("S2", "breakout_period", 20),  # N
+        ("S2", "k", Decimal(2)),
+        ("S3", "rsi_threshold", Decimal(30)),  # oversold threshold
+        ("S3", "k", Decimal(2)),
+        ("S3", "atr_period", 13),
+    ],
+)
+def test_candidate_parameter_mismatch(name: str, parameter: str, value: object) -> None:
+    """AC-9: rapordaki adayın herhangi bir parametresi çalışan ayardan farklıysa adıyla ret."""
+    report = candidate_report(name, "1h", **{parameter: value})
+    assert candidate_refusal(candidate_bot(name), report) == f"ayar uyuşmazlığı: {parameter}"
+
+
+def test_candidate_parameters_compared_in_definition_order() -> None:
+    report = candidate_report("S1", k=Decimal(3), trend_period=200)
+    assert candidate_refusal(candidate_bot("S1"), report) == "ayar uyuşmazlığı: k"
+
+
+def test_candidate_interval_mismatch() -> None:
+    """AC-9, R-5: adayın aralığı (rapordaki mum aralığı) çalışan mum aralığından farklıysa ret;
+    çift listesi bugünkü gibi önce."""
+    bot = candidate_bot("S2", "1h")
+    assert (
+        candidate_refusal(bot, candidate_report("S2", "4h")) == "ayar uyuşmazlığı: candle_interval"
+    )
+    other_pairs = replace(candidate_report("S2", "4h").data, pairs=("BTC/USDT",))  # type: ignore[type-var]
+    assert candidate_refusal(bot, ReportRead(other_pairs, None, sha256=SHA)) == (
+        "ayar uyuşmazlığı: whitelist"
+    )
+
+
+def test_candidate_name_and_missing_parameters() -> None:
+    """Plan A-1: rapor çalışan adayın adını taşıyıp parametresini eksik bırakırsa `rapor eksik:
+    strateji`; başka adayın raporu `ayar uyuşmazlığı: strateji`."""
+    s1 = candidate_bot("S1")
+    incomplete = make_report(strategy=dict(STRATEGY), strategy_name="S1")  # no trend_period
+    assert candidate_refusal(s1, incomplete) == "rapor eksik: strateji"
+    assert candidate_refusal(s1, candidate_report("S3")) == "ayar uyuşmazlığı: strateji"
+    assert candidate_refusal(s1, make_report()) == "ayar uyuşmazlığı: strateji"  # an S0 report
+    assert candidate_refusal(make_bot_config(), candidate_report("S1")) == (
+        "ayar uyuşmazlığı: strateji"
+    )
+    assert candidate_refusal(s1, make_report(strategy=None, strategy_name="S9")) == (
+        "ayar uyuşmazlığı: strateji"
+    )

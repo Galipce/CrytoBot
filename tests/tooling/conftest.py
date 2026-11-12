@@ -82,7 +82,7 @@ def project(tmp_path: Path) -> Project:
     ignore = shutil.ignore_patterns("__pycache__")
     # The copy's only slow tests are the ones a tooling test writes: "no slow test" stays reachable,
     # and no self-test depends on a time measurement.
-    ignore_slow = shutil.ignore_patterns("__pycache__", "test_volume.py")
+    ignore_slow = shutil.ignore_patterns("__pycache__", "test_volume.py", "test_evaluation_grid.py")
     shutil.copytree(ROOT / "src", tmp_path / "src", ignore=ignore)
     shutil.copytree(ROOT / "tools", tmp_path / "tools", ignore=ignore)
     (tmp_path / "tests").mkdir()

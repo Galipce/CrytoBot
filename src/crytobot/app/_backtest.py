@@ -23,8 +23,8 @@ Spec 0042 R-1 (plan Adım 4): varsayılan koşu yalnız örneklem içi tur anlar
 koşar; sonraki mumlar hiçbir tura verilmez, rapor ve konsol yalnız örneklem içini yazar. Dönem
 denetimi veri okununca: `start < split_at < holdout_at < end` (her dönem en az bir tur; ilk sorun
 `ayar geçersiz: backtest.<alan>`). Son değerlendirme (`_evaluation.py`) aynı parçaları kullanır:
-`_history`, `_simulate`, `_facts`, `_publish`. Strateji adı bu spec'te sabit `STRATEGY_NAME`
-(plan Risk 4; ayarı 0043'te).
+`_history`, `_simulate`, `_facts`, `_publish`. Spec 0043: strateji adı ve parametreleri çalışan
+adayın ayarındandır (`settings.name`, `settings.parameters()`).
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -40,7 +40,6 @@ from crytobot.app._loop import ForcedStop, StopRequest
 from crytobot.app._notices import TurnMemory, TurnNotice
 from crytobot.app._result import TurnOutcome, TurnResult
 from crytobot.app._session import AppError
-from crytobot.app._stage import STRATEGY_NAME
 from crytobot.app._start import PrepareOutcome, prepare_store
 from crytobot.app._turn import run_turn
 from crytobot.backtest import (
@@ -55,7 +54,7 @@ from crytobot.market_data import CANDLE_INTERVALS, HistoryData, HistoryRead, His
 from crytobot.persistence import StoredState, load_store
 from crytobot.portfolio import SnapshotOutcome, account_state
 from crytobot.risk import AccountState, ApprovalReason, RiskState, approve_trade
-from crytobot.strategy import NoProposalReason, StrategySettings
+from crytobot.strategy import NoProposalReason, Settings
 
 _EVENT = "backtest"
 _NOT_WRITTEN = "rapor yazılmadı"
@@ -291,17 +290,10 @@ class _Run:
         self.closures = len(closures)
 
 
-def strategy_setting(strategy: StrategySettings) -> dict[str, int | Decimal | str]:
-    """Raporun strateji satırının değerleri (spec 0040 CB-4), kapının adlarıyla."""
-    return {
-        "fast_period": strategy.fast_period,
-        "slow_period": strategy.slow_period,
-        "rsi_period": strategy.rsi_period,
-        "rsi_threshold": strategy.rsi_threshold,
-        "atr_period": strategy.atr_period,
-        "k": strategy.k,
-        "r": strategy.r,
-    }
+def strategy_setting(strategy: Settings) -> dict[str, int | Decimal | str]:
+    """Raporun strateji satırının değerleri (spec 0040 CB-4), kapının adlarıyla ve adayın tanım
+    sırasıyla (spec 0043, plan Risk 8)."""
+    return dict(strategy.parameters())
 
 
 def _facts(config: BacktestConfig, data: HistoryData, generated_at: datetime) -> ReportFacts:
@@ -326,7 +318,7 @@ def _facts(config: BacktestConfig, data: HistoryData, generated_at: datetime) ->
         max_open_positions=bot.turn.limits.max_open_positions,
         profit_cost_multiple=bot.turn.limits.profit_cost_multiple,
         opening_balance=bot.opening_balance,
-        strategy_name=STRATEGY_NAME,
+        strategy_name=bot.turn.strategy.name,
         holdout_at=config.holdout_at,
     )
 

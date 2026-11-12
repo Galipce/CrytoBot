@@ -532,7 +532,7 @@ def test_strategy_refusal_writes_nothing_exit_1(bot: Bot, extra: str, message: s
     gitmez, çıkış 1."""
     assert bot.run("prepare")[0] == EXIT_OK
     before = {path.name: path.read_bytes() for path in bot.root.iterdir() if path.is_file()}
-    text = config_text(bot.root).replace("[strategy]\n", f"[strategy]\n{extra}\n")
+    text = config_text(bot.root).replace('name = "S0"\n', f"{extra}\n")
     bot.config_path.write_text(text, encoding="utf-8")
     before["crytobot.toml"] = bot.config_path.read_bytes()
     for command in (["start"], ["start", "--trial"], ["prepare"]):
