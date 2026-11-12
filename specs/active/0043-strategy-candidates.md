@@ -23,6 +23,7 @@ none — no user interface.
 ## Constraints & out of scope
 - Sensitive area: none — risk limitleri, emir gönderimi, kimlik ve kalıcı durum değişmez.
 - Kapsam dışı: R-2 dışında aday; kaldıraç, açığa satış (BR-2); risk limitleri; LLM ya da dış sinyal; birden fazla stratejinin aynı anda koşması.
+- Not (0042 VERIFY V-3, Galip Badem, 2026-11-12): "aday yok" raporu nedenin rakamını (ör. örneklem içi işlem sayısı 29) göstermiyor; ANALYZE'da değerlendirilir.
 
 ## Acceptance criteria
 <!-- 0042 ship edildikten sonra ANALYZE'da yazılır (Self-critique: pending). -->

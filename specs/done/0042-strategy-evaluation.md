@@ -1,6 +1,6 @@
 # Spec 0042 — Strateji değerlendirme düzeni
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0042-plan.md`
 - Self-critique: done
@@ -40,28 +40,28 @@ none — no user interface. Etkileşim CLI çıktısı, ayar dosyası ve backtes
 - Clarify kararları C-1…C-7 ve self-critique kararları G-1…G-7 (Galip Badem, 2026-11-12) Intent, R-1…R-8 ve bu bölüme işlendi; G-5 (çiftler, tarihler) spec 0043'tedir.
 
 ## Acceptance criteria
-- [ ] AC-1 — Varsayılan backtest koşusu yalnız örneklem içi sonuçları yazar; raporda ve konsolda örneklem dışı ya da saklı dönemden tek bir rakam yoktur. Son değerlendirme üç dönemi ayrı bölümlerde yazar ve başlığında son değerlendirme olduğunu belirtir.
-- [ ] AC-2 — Dönem tarihleri eksik, sırasız, veri aralığı dışında ya da bir dönemi boş bırakan değerdeyse backtest `ayar geçersiz: backtest.<alan>` ile reddeder ve rapor yazmaz. Eksik anahtar proje kuralıyla `ayar eksik: backtest.<alan>` olur (plan 0042 Risk 1, Galip Badem, 2026-11-12).
-- [ ] AC-3 — Birden fazla ayar kombinasyonunda seçilen kombinasyon, örneklem içinde en az 30 işlemi olanlar arasında en yüksek kâr faktörlüdür; örneklem dışı ve saklı dönem sonuçları değiştirildiğinde seçim değişmez. 30 işlemi olan kombinasyon yoksa sonuç "geçmedi: örneklem içi işlem yetersiz"dir.
-- [ ] AC-4 — Örneklem dışı eşik sınırları: kâr faktörü tam 1.2 ve tam 30 işlem geçer; 1.19 ya da 29 işlem geçmez; drawdown tam %15 geçmez; net kâr tam 0 geçmez. Zararlı işlemi olmayan (kâr faktörü tanımsız) ve diğer eşikleri geçen aday geçer. Her "geçmedi" satırı ilk tutmayan eşiği adlandırır.
-- [ ] AC-5 — Saklı dönem: örneklem dışında geçen aday saklı dönemde net kâr ≤ 0 ya da drawdown ≥ %15 ise "geçmedi: saklı dönem <eşik>" olur; saklı dönemde işlem sayısı karara girmez (0 işlem ve net kâr 0 → geçmedi).
-- [ ] AC-6 — Birden fazla aday geçerse rapor, örneklem içi ve örneklem dışı kâr faktörlerinin küçüğü en yüksek olanı tek paper adayı olarak adlandırır; eşitlikte örneklem dışı net kârı yüksek olanı. Hiçbiri geçmezse "aday yok" yazar. Rapor toplam sınanan kombinasyon sayısını yazar.
-- [ ] AC-7 — Bir son değerlendirmedeki bütün adayların rapor başlığındaki risk ve maliyet koşulları aynıdır; koşullar değerlendirme sırasında değişirse koşu rapor yazmadan reddeder.
-- [ ] AC-8 — Onaylı rapordaki strateji ya da ayarları çalışan ayardakinden farklıysa `start` ve `start --live` `ayar uyuşmazlığı: strateji` ile reddeder (depo yazılmaz, borsaya istek gitmez, çıkış 1). Son değerlendirme olmayan rapor aşama kapısında `rapor son değerlendirme değil` ile reddedilir. Strateji adı farklıysa metin `ayar uyuşmazlığı: strateji`; bir parametre farklıysa mevcut `ayar uyuşmazlığı: <parametre>` kalır (plan 0042 Risk 7, Galip Badem, 2026-11-12).
-- [ ] AC-9 — S0 üzerinde, bugünkü 4h verisi ve ayarlarıyla son değerlendirme koşulur, R-14 sınırında biter ve sonucu (beklenen: "aday yok") raporlar; koşu süresi ve rapor parmak izi VERIFY'a gözlem olarak girer.
+- [x] AC-1 — Varsayılan backtest koşusu yalnız örneklem içi sonuçları yazar; raporda ve konsolda örneklem dışı ya da saklı dönemden tek bir rakam yoktur. Son değerlendirme üç dönemi ayrı bölümlerde yazar ve başlığında son değerlendirme olduğunu belirtir.
+- [x] AC-2 — Dönem tarihleri eksik, sırasız, veri aralığı dışında ya da bir dönemi boş bırakan değerdeyse backtest `ayar geçersiz: backtest.<alan>` ile reddeder ve rapor yazmaz. Eksik anahtar proje kuralıyla `ayar eksik: backtest.<alan>` olur (plan 0042 Risk 1, Galip Badem, 2026-11-12).
+- [x] AC-3 — Birden fazla ayar kombinasyonunda seçilen kombinasyon, örneklem içinde en az 30 işlemi olanlar arasında en yüksek kâr faktörlüdür; örneklem dışı ve saklı dönem sonuçları değiştirildiğinde seçim değişmez. 30 işlemi olan kombinasyon yoksa sonuç "geçmedi: örneklem içi işlem yetersiz"dir.
+- [x] AC-4 — Örneklem dışı eşik sınırları: kâr faktörü tam 1.2 ve tam 30 işlem geçer; 1.19 ya da 29 işlem geçmez; drawdown tam %15 geçmez; net kâr tam 0 geçmez. Zararlı işlemi olmayan (kâr faktörü tanımsız) ve diğer eşikleri geçen aday geçer. Her "geçmedi" satırı ilk tutmayan eşiği adlandırır.
+- [x] AC-5 — Saklı dönem: örneklem dışında geçen aday saklı dönemde net kâr ≤ 0 ya da drawdown ≥ %15 ise "geçmedi: saklı dönem <eşik>" olur; saklı dönemde işlem sayısı karara girmez (0 işlem ve net kâr 0 → geçmedi).
+- [x] AC-6 — Birden fazla aday geçerse rapor, örneklem içi ve örneklem dışı kâr faktörlerinin küçüğü en yüksek olanı tek paper adayı olarak adlandırır; eşitlikte örneklem dışı net kârı yüksek olanı. Hiçbiri geçmezse "aday yok" yazar. Rapor toplam sınanan kombinasyon sayısını yazar.
+- [x] AC-7 — Bir son değerlendirmedeki bütün adayların rapor başlığındaki risk ve maliyet koşulları aynıdır; koşullar değerlendirme sırasında değişirse koşu rapor yazmadan reddeder.
+- [x] AC-8 — Onaylı rapordaki strateji ya da ayarları çalışan ayardakinden farklıysa `start` ve `start --live` `ayar uyuşmazlığı: strateji` ile reddeder (depo yazılmaz, borsaya istek gitmez, çıkış 1). Son değerlendirme olmayan rapor aşama kapısında `rapor son değerlendirme değil` ile reddedilir. Strateji adı farklıysa metin `ayar uyuşmazlığı: strateji`; bir parametre farklıysa mevcut `ayar uyuşmazlığı: <parametre>` kalır (plan 0042 Risk 7, Galip Badem, 2026-11-12).
+- [x] AC-9 — S0 üzerinde, bugünkü 4h verisi ve ayarlarıyla son değerlendirme koşulur, R-14 sınırında biter ve sonucu (beklenen: "aday yok") raporlar; koşu süresi ve rapor parmak izi VERIFY'a gözlem olarak girer.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed (`docs/domain.md` BR-10 satırı, `docs/commands.md` backtest)
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed (`docs/domain.md` BR-10 satırı, `docs/commands.md` backtest)
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 1 (Approved; plan Risk 1, 3, 7 açıklama satırları) |
+| Fix rounds | 1 (fix-1, yalnız docstring) |
+| Review findings: real / noise / deferred | 1 / 3 / 0 (review); VERIFY Info: 0 / 1 / 1 (B-84) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
