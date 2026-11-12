@@ -2,7 +2,8 @@
 
 Kasa, turun kasa gözlemiyle aynı tanımdır: her turdan sonra, açık pozisyonlar her çiftin son
 bilinen tur fiyatıyla (`TurnRecord.marks`). Örneklem dışı parça, son örneklem içi turun kasası ve
-açık pozisyonlarıyla başlar; tüm koşu açılış kasasıyla.
+açık pozisyonlarıyla başlar; saklı dönem (spec 0042 R-1) aynı yolla son örneklem dışı turun kasası
+ve açık pozisyonlarıyla; tüm koşu açılış kasasıyla.
 
 - Gerçekleşen: parçada kapanan işlemlerin `Closure.realized` toplamı (komisyonlar dahil, slippage
   dolum fiyatında).
@@ -84,9 +85,13 @@ class PartMetrics:
 
 @dataclass(frozen=True)
 class RunMetrics:
+    """`holdout`: yalnız saklı dönem başı verildiyse (spec 0042); o zaman örneklem dışı saklı
+    dönemin başında biter."""
+
     in_sample: PartMetrics
     out_of_sample: PartMetrics
     whole: PartMetrics
+    holdout: PartMetrics | None = None
 
 
 def unrealized(positions: Sequence[Position], marks: Mapping[str, Decimal]) -> Decimal:
@@ -180,24 +185,41 @@ def part_metrics(
         )
 
 
+def _boundary(
+    start: tuple[Decimal, Decimal, bool], before: Sequence[TurnRecord]
+) -> tuple[Decimal, Decimal, bool]:
+    """Bir sonraki parçanın başlangıcı: önceki parçanın son turunun kasası, açık pozisyonlarının
+    gerçekleşmemiş değeri ve durdurması; önceki parçada tur yoksa önceki parçanın başlangıcı."""
+    if not before:
+        return start
+    last = before[-1]
+    return last.equity, unrealized(last.positions, last.marks), last.halted
+
+
 def run_metrics(
     opening_equity: Decimal,
     records: Sequence[TurnRecord],
     split_at: datetime,
     pairs: Sequence[str],
+    holdout_at: datetime | None = None,
 ) -> RunMetrics:
-    """R-9: kesintisiz koşu ayrım anında ikiye bölünür; tüm koşu tek parçadır."""
+    """R-9: kesintisiz koşu ayrım anında ikiye bölünür; tüm koşu tek parçadır. Spec 0042:
+    `holdout_at` verilirse örneklem dışı o anda biter, saklı dönem o an ve sonrasıdır."""
+    opening = (opening_equity, Decimal(0), False)
     inside = [record for record in records if record.at < split_at]
-    outside = [record for record in records if record.at >= split_at]
-    if inside:
-        last = inside[-1]
-        split_equity = last.equity
-        split_unrealized = unrealized(last.positions, last.marks)
-        split_halted = last.halted
-    else:
-        split_equity, split_unrealized, split_halted = opening_equity, Decimal(0), False
+    outside = [
+        record
+        for record in records
+        if record.at >= split_at and (holdout_at is None or record.at < holdout_at)
+    ]
+    out_start = _boundary(opening, inside)
+    holdout = None
+    if holdout_at is not None:
+        held = [record for record in records if record.at >= holdout_at]
+        holdout = part_metrics(*_boundary(out_start, outside), held, pairs)
     return RunMetrics(
-        part_metrics(opening_equity, Decimal(0), False, inside, pairs),
-        part_metrics(split_equity, split_unrealized, split_halted, outside, pairs),
-        part_metrics(opening_equity, Decimal(0), False, records, pairs),
+        part_metrics(*opening, inside, pairs),
+        part_metrics(*out_start, outside, pairs),
+        part_metrics(*opening, records, pairs),
+        holdout,
     )

@@ -1,4 +1,7 @@
-"""Spec 0028 AC-1, AC-2, AC-3, AC-8: BR-10 aşama kapısı CLI ve fail-closed başlatma testleri."""
+"""Spec 0028 AC-1, AC-2, AC-3, AC-8: BR-10 aşama kapısı CLI ve fail-closed başlatma testleri.
+
+Spec 0042 (plan Risk 8): geçerli rapor son değerlendirme biçimindedir (tek aday, paper adayı S0);
+AC-8: strateji adı farklı ya da rapor son değerlendirme değilse ret, depo yok, çıkış 1."""
 
 import hashlib
 from datetime import UTC, datetime, timedelta
@@ -12,8 +15,10 @@ from crytobot.app import TRIAL_MARK
 from crytobot.app import _start as start_module
 from crytobot.backtest import (
     CANDIDATE_MARK,
+    PASSED,
+    CandidateResult,
     ReportFacts,
-    report_text,
+    final_report_text,
     run_metrics,
 )
 from crytobot.persistence import StoreOutcome, StoreResult, load_start_records
@@ -52,9 +57,21 @@ def make_valid_report_text() -> str:
             "r": Decimal("2"),
         },
         **CONDITION_FACTS,
+        strategy_name="S0",
+        holdout_at=DAY2 + timedelta(days=5),
     )
-    metrics = run_metrics(Decimal(10000), (), DAY2, (BTC, "ETH/USDT"))
-    text = report_text(facts, metrics)
+    metrics = run_metrics(Decimal(10000), (), DAY2, (BTC, "ETH/USDT"), facts.holdout_at)
+    assert facts.strategy is not None
+    result = CandidateResult(
+        "S0",
+        "1h",
+        facts.strategy,
+        metrics.in_sample,
+        metrics.out_of_sample,
+        metrics.holdout,
+        PASSED,
+    )
+    text = final_report_text(facts, 1, [result], 0, metrics)
     old_part = f"== örneklem dışı — {CANDIDATE_MARK} =="
     new_part = f"""{old_part}
 turlar: 120 (ilk 2026-01-02T00:00:00+00:00, son 2026-01-07T00:00:00+00:00)
@@ -325,6 +342,22 @@ def _break(case: str, config: Path, report: Path) -> str:
     if case == "spread_missing":
         config.write_text(text.replace(BACKTEST_SPREAD, "\n"), encoding="utf-8")
         return "ayar eksik: backtest.spread"
+    if case in ("strategy", "not_final"):  # spec 0042 AC-8: the approval follows the new bytes
+        body = report.read_text(encoding="utf-8")
+        if case == "strategy":
+            body = body.replace("strateji: S0 ", "strateji: S1 ", 1)
+        else:
+            body = body.replace(
+                "CrytoBot backtest raporu — son değerlendirme", "CrytoBot backtest raporu", 1
+            )
+        report.write_bytes(body.encode("utf-8"))
+        config.write_text(
+            text.replace(sha_line, f'report_sha256 = "{fingerprint(report)}"\n'),
+            encoding="utf-8",
+        )
+        return (
+            "ayar uyuşmazlığı: strateji" if case == "strategy" else "rapor son değerlendirme değil"
+        )
     assert case == "condition"
     config.write_text(text.replace('fee = "0.001"', 'fee = "0.002"'), encoding="utf-8")
     return "ayar uyuşmazlığı: fee"
@@ -346,6 +379,17 @@ def _break(case: str, config: Path, report: Path) -> str:
 def test_new_refusals_write_nothing_exit_1(tmp_path: Path, case: str) -> None:
     """CB-6: her yeni ret depoya yazmadan, kilit almadan, borsaya gitmeden, tur atmadan; çıkış 1
     ve satır yalnız ilk karşılanmayan denetimi adlandırır."""
+    _refused_start(tmp_path, case)
+
+
+@pytest.mark.parametrize("case", ["strategy", "not_final"])
+def test_strategy_mismatch_writes_nothing_exit_1(tmp_path: Path, case: str) -> None:
+    """Spec 0042 AC-8: strateji adı farklı ya da rapor son değerlendirme değilse `start` reddeder;
+    depo yazılmaz, istemci çağrısı yok, tur yok, çıkış 1."""
+    _refused_start(tmp_path, case)
+
+
+def _refused_start(tmp_path: Path, case: str) -> None:
     bot = Bot(tmp_path)
     report_file = _proven_config(tmp_path)
     assert bot.run("prepare")[0] == EXIT_OK

@@ -7,6 +7,11 @@ Spec 0040 (plan Risk 4): dosya bir kez bayt olarak okunur; parmak izi (`ReportRe
 ayrıştırma aynı baytlardandır. Üretim anı, spread, strateji ve rapor koşulları başlıkta yoksa
 ayrıştırma bozuk saymaz, alanı boş bırakır: eksikliği kapı adıyla söyler (CB-4). Var olan ama
 değeri bozuk satır yine `CORRUPT`'tır.
+
+Spec 0042 R-7 (0028 R-3'ün kapı kısmını geçersiz kılar): yalnız son değerlendirme raporu okunur.
+İlk satır varsayılan raporun başlığıysa `NOT_FINAL` ("rapor son değerlendirme değil"), aday
+işaretinden önce. `paper adayı: aday yok` → `NO_CANDIDATE_MARK`. Strateji satırının ilk `=`'siz
+parçası strateji adıdır (`ParsedReport.strategy_name`); yoksa `None`.
 """
 
 from collections.abc import Mapping
@@ -16,7 +21,16 @@ from decimal import Decimal, DecimalException
 from enum import Enum
 from pathlib import Path
 
-from crytobot.backtest._report import CANDIDATE_MARK, CONDITIONS, GENERATED_LABEL, UNDEFINED
+from crytobot.backtest._report import (
+    CANDIDATE_MARK,
+    CONDITIONS,
+    FINAL_TITLE,
+    GENERATED_LABEL,
+    NO_CANDIDATE,
+    PAPER_LABEL,
+    TITLE,
+    UNDEFINED,
+)
 from crytobot.backtest._report_file import fingerprint_of
 
 
@@ -29,6 +43,7 @@ class ReportReadProblem(Enum):
     CORRUPT = "corrupt"
     INCOMPLETE = "incomplete"
     NO_CANDIDATE_MARK = "no_candidate_mark"
+    NOT_FINAL = "not_final"
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +70,7 @@ class ParsedReport:
     strategy: Mapping[str, int | Decimal] | None = None
     generated_at: datetime | None = None
     conditions: Mapping[str, Decimal] = field(default_factory=dict)
+    strategy_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,8 +83,14 @@ class ReportRead:
     sha256: str | None = None
 
 
+def _strategy_name(line: str) -> str | None:
+    """`strateji: S0 fast=12 ...` satırının ilk `=`'siz parçası (spec 0042 R-7)."""
+    tokens = line.split()
+    return tokens[0] if tokens and "=" not in tokens[0] else None
+
+
 def _parse_strategy(line: str) -> dict[str, int | Decimal]:
-    """`strateji: fast=12 slow=26 ...` satırını ayrıştırır."""
+    """`strateji: [ad] fast=12 slow=26 ...` satırını ayrıştırır; ad `_strategy_name`'dedir."""
     params: dict[str, int | Decimal] = {}
     tokens = line.split()
     for token in tokens:
@@ -122,7 +144,9 @@ def parse_report(text: str) -> ReportRead:
         return ReportRead(None, ReportReadProblem.EMPTY, "rapor dosyası boş")
 
     lines = [line.strip() for line in text.splitlines()]
-    if not lines or lines[0] != "CrytoBot backtest raporu":
+    if lines and lines[0] == TITLE:
+        return ReportRead(None, ReportReadProblem.NOT_FINAL, "rapor son değerlendirme değil")
+    if not lines or lines[0] != FINAL_TITLE:
         return ReportRead(None, ReportReadProblem.CORRUPT, "rapor başlığı eksik veya geçersiz")
 
     candle_interval: str | None = None
@@ -130,8 +154,10 @@ def parse_report(text: str) -> ReportRead:
     pairs: tuple[str, ...] | None = None
     spread: Decimal | None = None
     strategy: dict[str, int | Decimal] | None = None
+    strategy_name: str | None = None
     generated_at: datetime | None = None
     conditions: dict[str, Decimal] = {}
+    paper: str | None = None
 
     for line in lines:
         name, _, value = line.partition(":")
@@ -161,9 +187,15 @@ def parse_report(text: str) -> ReportRead:
                 strategy = _parse_strategy(raw_strategy)
             except (ValueError, DecimalException):
                 return ReportRead(None, ReportReadProblem.CORRUPT, "geçersiz strateji satırı")
+            strategy_name = _strategy_name(raw_strategy)
+        elif name == PAPER_LABEL:
+            paper = value.strip()
         elif line.startswith("== "):
             # Başlık bölümü bitti
             break
+
+    if paper == NO_CANDIDATE:
+        return ReportRead(None, ReportReadProblem.NO_CANDIDATE_MARK, "rapor aday işareti taşımıyor")
 
     if candle_interval is None or turn_interval is None or pairs is None:
         return ReportRead(None, ReportReadProblem.CORRUPT, "başlık bilgileri eksik")
@@ -242,6 +274,7 @@ def parse_report(text: str) -> ReportRead:
         strategy=strategy,
         generated_at=generated_at,
         conditions=conditions,
+        strategy_name=strategy_name,
     )
     return ReportRead(data=data, problem=None)
 

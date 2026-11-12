@@ -1,5 +1,9 @@
 """Spec 0028 AC-6 (R-4) ve AC-7 (R-5) aşama kapısı testleri (plan Adım 2); spec 0040 CB-1…CB-4,
-CB-6 (G-6 sırası) ve PB-1 (mevcut eşik ve uyuşmazlık testleri, assert'ler aynen)."""
+CB-6 (G-6 sırası) ve PB-1 (mevcut eşik ve uyuşmazlık testleri, assert'ler aynen).
+
+Spec 0042 AC-8 (plan Risk 7, 8): rapor fixture'ları son değerlendirme biçiminde ve strateji adı
+`S0` taşır; ad farklıysa `ayar uyuşmazlığı: strateji`, varsayılan rapor `rapor son değerlendirme
+değil`."""
 
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -21,11 +25,14 @@ from crytobot.app import (
 )
 from crytobot.backtest import (
     CONDITIONS,
+    PASSED,
     CandidateMetrics,
+    CandidateResult,
     ParsedReport,
     ReportFacts,
     ReportRead,
     ReportReadProblem,
+    final_report_text,
     read_report,
     report_fingerprint,
     report_text,
@@ -91,6 +98,7 @@ def make_report(
     generated_at: datetime | None = GENERATED,
     conditions: dict[str, Decimal] | None = None,
     sha256: str | None = SHA,
+    strategy_name: str | None = "S0",
 ) -> ReportRead:
     candidate = CandidateMetrics(
         net=net,
@@ -108,6 +116,7 @@ def make_report(
         strategy=dict(STRATEGY) if strategy is None else strategy,
         generated_at=generated_at,
         conditions=dict(CONDITION_VALUES) if conditions is None else conditions,
+        strategy_name=strategy_name,
     )
     return ReportRead(data, None, sha256=sha256)
 
@@ -264,9 +273,8 @@ def test_happy_gate_with_every_fact() -> None:
     assert gate(make_stage_config(), make_bot_config(), make_report()).passed is True
 
 
-def _real_report(path: Path) -> str:
-    """Diskte gerçek bir rapor (ayrışır); eşiklere bakılmaz, parmak izi önce gelir."""
-    facts = ReportFacts(
+def _facts() -> ReportFacts:
+    return ReportFacts(
         NOW - timedelta(days=10),
         NOW - timedelta(days=2),
         "1h",
@@ -279,8 +287,27 @@ def _real_report(path: Path) -> str:
         STRATEGY,
         generated_at=GENERATED,
         **{name: value for name, value in CONDITION_VALUES.items()},  # type: ignore[arg-type]
+        strategy_name="S0",
+        holdout_at=NOW - timedelta(days=3),
     )
-    text = report_text(facts, run_metrics(Decimal(10000), (), facts.split_at, facts.pairs))
+
+
+def _real_report(path: Path) -> str:
+    """Diskte gerçek bir son değerlendirme raporu (ayrışır); eşiklere bakılmaz, parmak izi önce
+    gelir."""
+    facts = _facts()
+    metrics = run_metrics(Decimal(10000), (), facts.split_at, facts.pairs, facts.holdout_at)
+    assert facts.strategy is not None
+    result = CandidateResult(
+        "S0",
+        "1h",
+        facts.strategy,
+        metrics.in_sample,
+        metrics.out_of_sample,
+        metrics.holdout,
+        PASSED,
+    )
+    text = final_report_text(facts, 1, [result], 0, metrics)
     path.write_bytes(text.encode("utf-8"))
     return text
 
@@ -447,3 +474,58 @@ def test_check_order_first_failure_only() -> None:
     assert _refusal(make_report(conditions=conditions, candle_interval="4h")) == (
         "ayar uyuşmazlığı: candle_interval"
     )
+
+
+# --- spec 0042 AC-8 (R-7; plan Risk 7) ---
+
+
+def test_strategy_name_mismatch_refused() -> None:
+    """Ad farklıysa `ayar uyuşmazlığı: strateji`, parametrelerden önce; adsız rapor da farklıdır."""
+    assert _refusal(make_report(strategy_name="S1")) == "ayar uyuşmazlığı: strateji"
+    assert _refusal(make_report(strategy_name=None)) == "ayar uyuşmazlığı: strateji"
+    strategy = dict(STRATEGY, k=Decimal(3))
+    assert _refusal(make_report(strategy_name="S1", strategy=strategy)) == (
+        "ayar uyuşmazlığı: strateji"
+    )
+    # a parameter difference keeps its own name (plan Risk 7)
+    assert _refusal(make_report(strategy=strategy)) == "ayar uyuşmazlığı: k"
+    # the existing setting mismatches still come first; the conditions after
+    assert _refusal(make_report(strategy_name="S1", candle_interval="4h")) == (
+        "ayar uyuşmazlığı: candle_interval"
+    )
+    conditions = dict(CONDITION_VALUES, fee=Decimal("0.5"))
+    assert _refusal(make_report(strategy_name="S1", conditions=conditions)) == (
+        "ayar uyuşmazlığı: strateji"
+    )
+
+
+def test_non_final_report_refused(tmp_path: Path) -> None:
+    """Varsayılan (son değerlendirme olmayan) rapor, parmak izi doğru olsa da kapıdan geçmez."""
+    path = tmp_path / "rapor.txt"
+    facts = _facts()
+    text = report_text(facts, run_metrics(Decimal(10000), (), facts.split_at, facts.pairs))
+    path.write_bytes(text.encode("utf-8"))
+    stage = replace(make_stage_config(), report_sha256=report_fingerprint(text))
+    result = gate(stage, make_bot_config(), read_report(path))
+    assert (result.passed, result.message) == (False, "rapor son değerlendirme değil")
+    not_final = ReportRead(None, ReportReadProblem.NOT_FINAL, "rapor son değerlendirme değil", SHA)
+    assert _refusal(not_final) == "rapor son değerlendirme değil"
+
+
+def test_final_report_without_candidate_refused(tmp_path: Path) -> None:
+    path = tmp_path / "rapor.txt"
+    facts = _facts()
+    text = final_report_text(facts, 1, [], None, None)
+    path.write_bytes(text.encode("utf-8"))
+    stage = replace(make_stage_config(), report_sha256=report_fingerprint(text))
+    result = gate(stage, make_bot_config(), read_report(path))
+    assert (result.passed, result.message) == (False, "rapor aday işareti taşımıyor")
+
+
+def test_real_final_report_passes_to_the_thresholds(tmp_path: Path) -> None:
+    """Gerçek bir son değerlendirme raporu adı ve okunabilirliğiyle geçer; ret eşiktedir."""
+    path = tmp_path / "rapor.txt"
+    text = _real_report(path)
+    stage = replace(make_stage_config(), report_sha256=report_fingerprint(text))
+    result = gate(stage, make_bot_config(), read_report(path))
+    assert result.message == "eşik karşılanmadı: net kâr sıfırdan büyük olmalı"

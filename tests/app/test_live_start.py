@@ -35,7 +35,8 @@ NOW = datetime(2026, 11, 9, 20, 0, tzinfo=UTC)
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE = ROOT / "crytobot.example.toml"
 
-SAMPLE_REPORT_TEXT = """CrytoBot backtest raporu
+# spec 0042 (plan Risk 8): the gate reads only a final evaluation report naming its strategy
+SAMPLE_REPORT_TEXT = """CrytoBot backtest raporu — son değerlendirme
 dönem: 2026-01-01T00:00:00+00:00 .. 2026-01-03T00:00:00+00:00
 mum aralığı: 1h
 tur aralığı: 1h
@@ -44,7 +45,7 @@ ayrım anı: 2026-01-02T00:00:00+00:00
 indirme anı: 2026-02-01T12:30:00+00:00
 ısınma mumu (candle_count): 200
 spread: 0.0005
-strateji: fast=12 slow=26 rsi=14 rsi_threshold=70 atr=14 k=2 r=2
+strateji: S0 fast=12 slow=26 rsi=14 rsi_threshold=70 atr=14 k=2 r=2
 üretim anı: 2026-11-09T10:00:00+00:00
 fee: 0.001
 slippage: 0.001
@@ -54,6 +55,8 @@ max_drawdown: 0.15
 max_open_positions: 5
 profit_cost_multiple: 2
 opening_balance: 10000
+sınanan kombinasyon: 1
+paper adayı: S0 1h
 
 == örneklem dışı — BR-10 kanıtı adayı ==
 net kâr/zarar: 9.89000000 USDT (getiri %0.9891)
@@ -431,6 +434,16 @@ def _refused_live(root: Path, case: str, *, testnet: bool) -> str:
     elif case == "spread":
         text = cfg.read_text(encoding="utf-8").replace('spread = "0.0005"', 'spread = "yarım"')
         cfg.write_text(text, encoding="utf-8")
+    elif case in ("not_final", "strategy"):  # spec 0042 AC-8; the approval follows the new bytes
+        body = report.read_text(encoding="utf-8")
+        if case == "not_final":
+            body = body.replace(" — son değerlendirme", "", 1)
+        else:
+            body = body.replace("strateji: S0 ", "strateji: S1 ", 1)
+        old_sha = hashlib.sha256(report.read_bytes()).hexdigest()
+        report.write_bytes(body.encode("utf-8"))
+        new_sha = hashlib.sha256(report.read_bytes()).hexdigest()
+        cfg.write_text(cfg.read_text(encoding="utf-8").replace(old_sha, new_sha), encoding="utf-8")
     else:  # the paper proof was run with another report of the same path
         assert case == "proof"
         paper = root / "paper.sqlite"
@@ -463,5 +476,22 @@ def test_live_and_testnet_refusal_no_exchange_call(
     tmp_path: Path, case: str, message: str, testnet: bool
 ) -> None:
     """CB-6: canlıda ve testnet'te yeni retler depoya yazmaz, borsaya gitmez, tur atmaz; çıkış 1."""
+    refusal = _refused_live(tmp_path, case, testnet=testnet)
+    assert refusal.endswith(f"başlatma reddedildi: {message}")
+
+
+@pytest.mark.parametrize("testnet", [False, True])
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("not_final", "rapor son değerlendirme değil"),
+        ("strategy", "ayar uyuşmazlığı: strateji"),
+    ],
+)
+def test_live_non_final_report_no_exchange_call(
+    tmp_path: Path, case: str, message: str, testnet: bool
+) -> None:
+    """Spec 0042 AC-8: `start --live` (ve testnet) son değerlendirme olmayan ya da başka stratejili
+    raporla reddeder; depo yazılmaz, borsaya istek yok, çıkış 1."""
     refusal = _refused_live(tmp_path, case, testnet=testnet)
     assert refusal.endswith(f"başlatma reddedildi: {message}")
