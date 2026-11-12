@@ -232,13 +232,15 @@ def query_status(
     last_summary = f"zaman={last_time_str}, son kasa={state.risk.last_equity}"
 
     head = f"{LIVE_BANNER}\n" if loaded.mode == "live" else ""
+    # spec 0041 CB-5, G-3: the network is shown only on a testnet store; mainnet is unchanged
+    network = " ağ=testnet" if state.network == "testnet" else ""
     warning = f"UYARI: {loaded.mismatch_text()}\n" if loaded.mismatch else ""
     summary = (
         f"{head}"
         f"=== CrytoBot Durum Raporu ===\n"
         f"{warning}"
         f"Süreç Durumu: {process_status}\n"
-        f"Çalışma Modu: {loaded.mode}\n"
+        f"Çalışma Modu: {loaded.mode}{network}\n"
         f"Serbest Bakiye: {free_balance} USDT\n"
         f"Toplam Kasa: {total_equity} USDT\n"
         f"Zirve Kasa: {peak_equity} USDT\n"

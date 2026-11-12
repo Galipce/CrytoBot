@@ -79,3 +79,15 @@ def test_live_mode_line_is_text() -> None:
     assert 'modeBanner.textContent = "CANLI MOD — gerçek para"' in html
     assert 'modeWarning.textContent = "UYARI: " + data.mode_mismatch' in html
     assert "innerHTML" not in html.split("// Spec 0035 R-3")[1].split("haltBadge")[0]
+
+
+def test_testnet_badge() -> None:
+    """Spec 0041 CB-5, G-3: TESTNET rozeti metindir, başta gizlidir ve yalnız `network` alanı
+    `testnet` iken gösterilir; gizli rozet `.badge`'in görünürlüğüyle açılmaz."""
+    html = render_dashboard_html()
+
+    assert '<span id="badge-network" class="badge badge-network" hidden>TESTNET</span>' in html
+    assert ".badge[hidden] { display: none; }" in html
+    assert 'getElementById("badge-network").hidden = data.network !== "testnet";' in html
+    # the live banner text is unchanged on either network (PB-1)
+    assert 'modeBanner.textContent = "CANLI MOD — gerçek para"' in html

@@ -84,7 +84,7 @@ def get_dashboard_status(
         "message": f"Kasa: {equity:.2f} USDT",
     }
 
-    return 200, {
+    body: dict[str, object] = {
         "is_running": is_running,
         "mode": loaded.mode,
         "mode_mismatch": mismatch,
@@ -100,3 +100,6 @@ def get_dashboard_status(
         "last_turn": last_turn,
         "logs": list(logs),
     }
+    if state.network == "testnet":  # spec 0041 CB-5, G-3: absent on mainnet, as before
+        body["network"] = "testnet"
+    return 200, body

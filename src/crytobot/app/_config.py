@@ -334,3 +334,35 @@ def load_config(document: object, now: datetime) -> ConfigResult:
     except _Problem as problem:
         return ConfigResult(None, problem.setting, problem.message)
     return ConfigResult(config, None, "ayarlar geçerli")
+
+
+MAINNET = "mainnet"
+TESTNET = "testnet"
+TESTNET_PAPER_REFUSAL = "ayar geçersiz: exchange.testnet (testnet yalnız live modda)"
+
+
+@dataclass(frozen=True)
+class NetworkResult:
+    """Spec 0041: `network` yalnız `[exchange] testnet` geçerliyse doludur (`mainnet`/`testnet`)."""
+
+    network: str | None
+    message: str
+
+
+def load_network(document: object, mode: str) -> NetworkResult:
+    """Spec 0041 CB-3, plan Risk 7: ağın tek okuyucusu. Bölüm ya da anahtar yoksa `mainnet`;
+    değer `true`/`false` değilse (metin `"false"` dahil) ayar geçersizdir; paper modda testnet
+    reddedilir. Dokunmaz, ağa çıkmaz."""
+    table = document.get("exchange") if isinstance(document, Mapping) else None
+    if table is None:
+        return NetworkResult(MAINNET, "ağ: mainnet")
+    if not isinstance(table, Mapping):
+        return NetworkResult(None, "ayar geçersiz: exchange")
+    value = table.get("testnet", False)
+    if type(value) is not bool:
+        return NetworkResult(None, "ayar geçersiz: exchange.testnet")
+    if not value:
+        return NetworkResult(MAINNET, "ağ: mainnet")
+    if mode != "live":
+        return NetworkResult(None, TESTNET_PAPER_REFUSAL)
+    return NetworkResult(TESTNET, "ağ: testnet")

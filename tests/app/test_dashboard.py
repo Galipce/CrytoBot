@@ -129,3 +129,25 @@ def test_mismatch_warning(tmp_path: Path) -> None:
     assert code == 200
     assert data["mode"] == "live"
     assert data["mode_mismatch"] == "mod uyuşmazlığı: ayar=paper, depo=live"
+
+
+def test_api_status_network_only_on_testnet(tmp_path: Path) -> None:
+    """Spec 0041 CB-5, G-3: `/api/status` ağı yalnız testnet deposunda taşır; mainnet'te alan
+    yoktur, yanıtın geri kalanı aynıdır."""
+    import dataclasses
+
+    from tests.app.test_control_live import store_in, store_on_testnet
+
+    testnet_db = store_on_testnet(tmp_path / "tn.db")
+    testnet = dataclasses.replace(make_bot_config(testnet_db, tmp_path / "tn.log"), mode="live")
+    code, data = get_dashboard_status(testnet, clock=lambda: T0)
+    assert code == 200
+    assert data["network"] == "testnet"
+    assert data["mode"] == "live"
+
+    mainnet_db = store_in(tmp_path / "mn.db", "live")
+    mainnet = dataclasses.replace(make_bot_config(mainnet_db, tmp_path / "mn.log"), mode="live")
+    code, plain = get_dashboard_status(mainnet, clock=lambda: T0)
+    assert code == 200
+    assert "network" not in plain
+    assert {key: value for key, value in data.items() if key != "network"} == plain

@@ -192,3 +192,59 @@ def test_audit_row_is_valid_json_with_escapes() -> None:
         "timestamp": "2026-11-10T12:00:00+00:00",
     }
     assert "\n" not in row
+
+
+# --- spec 0041 CB-4 (G-2), CB-5: control shows the store's network and never checks it ----------
+
+
+def store_on_testnet(path: Path) -> Path:
+    """Defteri açılmış, testnet'e bağlı canlı depo."""
+    created = create_store(path, "live", "testnet")
+    assert created.state is not None
+    ledger = open_ledger(EMPTY_LEDGER, DEPOSIT, NOW).ledger
+    saved = save_store(path, created.state, ledger, created.state.execution, created.state.risk)
+    assert saved.state is not None
+    return path
+
+
+def _testnet_config(tmp_path: Path) -> BotConfig:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    db_path = store_on_testnet(tmp_path / "bot.db")
+    return dataclasses.replace(make_bot_config(db_path, tmp_path / "bot.log"), mode="live")
+
+
+def network_of(config: BotConfig) -> str:
+    loaded = load_store(config.store_path, "live")
+    assert loaded.state is not None
+    return loaded.state.network
+
+
+def test_status_shows_testnet(tmp_path: Path) -> None:
+    """CB-5: testnet deposunda mod satırı ağı taşır; mainnet deposunda satır bugünküyle aynı."""
+    status = query_status(_testnet_config(tmp_path / "tn"), clock=lambda: T0)
+    assert status.success
+    assert "Çalışma Modu: live ağ=testnet" in status.message.splitlines()
+
+    (tmp_path / "mn").mkdir()
+    mainnet = config_for(tmp_path / "mn", "live", "live")
+    lines = query_status(mainnet, clock=lambda: T0).message.splitlines()
+    assert "Çalışma Modu: live" in lines
+    assert "ağ=" not in "\n".join(lines)
+
+
+def test_control_commands_ignore_network(tmp_path: Path) -> None:
+    """G-2: kill-switch, resume, stop ve status ağ denetimi yapmaz; ayar hangi ağı söylerse
+    söylesin (kontrol ağı okumaz) testnet deposunda çalışır, deponun ağı değişmez."""
+    config = _testnet_config(tmp_path)
+
+    assert engage_kill_switch(config, clock=lambda: T0).success
+    assert kill_switch_of(config, "live")
+    assert resume_operations(config, clock=lambda: T0).success
+    assert not kill_switch_of(config, "live")
+    stopped: list[bool] = []
+    result = request_stop(
+        config, clock=lambda: T0, is_running=True, on_stop_requested=lambda: stopped.append(True)
+    )
+    assert result.success and stopped == [True]
+    assert query_status(config, clock=lambda: T0).success
+    assert network_of(config) == "testnet"

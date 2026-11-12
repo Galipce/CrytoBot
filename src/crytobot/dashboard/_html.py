@@ -77,6 +77,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       color: var(--accent);
       border: 1px solid var(--accent);
     }
+    .badge[hidden] { display: none; }
+    .badge-network {
+      background-color: var(--amber-bg);
+      color: var(--amber);
+      border: 1px solid var(--amber);
+    }
     .badge-halt-none {
       background-color: var(--green-bg);
       color: var(--green);
@@ -240,6 +246,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <h1>CrytoBot</h1>
         <span id="badge-process" class="badge badge-stopped">Durdu</span>
         <span id="badge-mode" class="badge badge-mode">—</span>
+        <span id="badge-network" class="badge badge-network" hidden>TESTNET</span>
         <span id="badge-halt" class="badge badge-halt-none">Normal</span>
       </div>
       <div class="controls">
@@ -376,6 +383,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           modeBanner.textContent = "";
           modeBanner.style.display = "none";
         }
+        // Spec 0041 CB-5: ağ yalnız testnet'te gösterilir; mainnet'te alan yoktur (G-3)
+        document.getElementById("badge-network").hidden = data.network !== "testnet";
         const modeWarning = document.getElementById("mode-warning");
         if (data.mode_mismatch) {
           modeWarning.textContent = "UYARI: " + data.mode_mismatch;

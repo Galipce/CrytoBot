@@ -12,6 +12,13 @@ from crytobot.app._result import TurnResult
 from crytobot.market_data import CANDLE_INTERVALS, InputProblem
 
 TRIAL_MARK = "BR-10 öncesi deneme, strateji kanıtı değil"
+TESTNET_SKIPPED = "testnet: yetki denetimi atlandı"
+
+
+def network_note_text() -> str:
+    """Spec 0041 CB-2, G-5 (plan Risk 1): testnet başlatmasının notu; başlatma satırının yanında
+    konsola ve kayıt dosyasına yazılır, Telegram'a gitmez. Mainnet'te yazılmaz (G-3)."""
+    return f"ağ=testnet — {TESTNET_SKIPPED}; anahtar kısıtı yerine imzalı hesap sorgusu geçti"
 
 
 def stamp(at: object) -> str:

@@ -36,7 +36,17 @@ from crytobot.app._backtest_config import (
     BacktestConfigResult,
     load_backtest_config,
 )
-from crytobot.app._config import SETTING_NAMES, BotConfig, ConfigResult, load_config
+from crytobot.app._config import (
+    MAINNET,
+    SETTING_NAMES,
+    TESTNET,
+    TESTNET_PAPER_REFUSAL,
+    BotConfig,
+    ConfigResult,
+    NetworkResult,
+    load_config,
+    load_network,
+)
 from crytobot.app._control import (
     ControlResult,
     engage_kill_switch,
@@ -53,7 +63,7 @@ from crytobot.app._download import (
     load_download_config,
     run_download,
 )
-from crytobot.app._events import TRIAL_MARK, line
+from crytobot.app._events import TESTNET_SKIPPED, TRIAL_MARK, line, network_note_text
 from crytobot.app._inputs import PairMarket, TurnSettings
 from crytobot.app._loop import (
     MAX_WAIT_S,
@@ -83,19 +93,25 @@ from crytobot.app._start import (
     PrepareResult,
     StartCheck,
     StartOutcome,
+    bind_live_network,
     create_live_exchange,
     open_for_start,
     prepare_live_store,
     prepare_store,
     read_pairs,
     record_start,
+    store_network_problem,
 )
 from crytobot.app._turn import run_turn
 
 __all__: list[str] = [
+    "MAINNET",
     "MAX_WAIT_S",
     "PREPARE_HINT",
     "SETTING_NAMES",
+    "TESTNET",
+    "TESTNET_PAPER_REFUSAL",
+    "TESTNET_SKIPPED",
     "TRIAL_MARK",
     "BacktestConfig",
     "BacktestConfigResult",
@@ -116,6 +132,7 @@ __all__: list[str] = [
     "LogWriteError",
     "LoopExit",
     "LoopParts",
+    "NetworkResult",
     "NoticeKind",
     "PairMarket",
     "PairNote",
@@ -135,6 +152,7 @@ __all__: list[str] = [
     "TurnOutcome",
     "TurnResult",
     "TurnSettings",
+    "bind_live_network",
     "check_paper_proof",
     "check_stage_gate",
     "create_live_exchange",
@@ -144,7 +162,9 @@ __all__: list[str] = [
     "load_backtest_config",
     "load_config",
     "load_download_config",
+    "load_network",
     "load_stage_config",
+    "network_note_text",
     "open_for_start",
     "prepare_live_store",
     "prepare_store",
@@ -157,5 +177,6 @@ __all__: list[str] = [
     "run_download",
     "run_loop",
     "run_turn",
+    "store_network_problem",
     "to_turn_market",
 ]
