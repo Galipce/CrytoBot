@@ -8,7 +8,12 @@ risk ve maliyet koşullarıyla değerlendirir ve tek bir son değerlendirme rapo
    sonra mum sayısı her kombinasyonun `required_candles`'ına yeter mi; değilse
    `ayar geçersiz: market.candle_count`, tur atılmaz, rapor yazılmaz.
 2. Rapor dosyası (ilk yapılandırmanın yolu) yok mu; sonra her yapılandırmanın veri dosyası ve üç
-   dönemi — hiçbir tur atılmadan önce.
+   dönemi — hiçbir tur atılmadan önce. Spec 0044 (plan Adım 6, Risk 3, 4): sonra her yapılandırma
+   (sırasıyla), çift (dosya sırası) ve dönem (örneklem içi, örneklem dışı, saklı dönem) için dönemde
+   kapanmış mum var mı; ilk eksik `veri eksik: <çift> <aralık> <dönem>` (R-3). Sonra veri
+   dosyalarının bitişi aynı mı; değilse `veri dosyası uyumsuz: aralıkların bitişi farklı`.
+   Her aralığın boşlukları (`period_gaps`, dosyanın dönemi) rapora geçer (R-2); boşluk koşuyu
+   durdurmaz, mum eklenmez.
 3. Her aday için ızgaranın her kombinasyonu yalnız örneklem içi turlarla koşar (sonraki mumlar
    tura verilmez); `select_combination` örneklem içi metriklerle seçer (R-2). Yalnız seçilen
    kombinasyon baştan sona bir kez daha koşar: örneklem dışı ve saklı dönem yalnız onun için
@@ -56,6 +61,8 @@ from crytobot.backtest import (
     CONDITIONS,
     Assessed,
     CandidateResult,
+    DataGap,
+    IntervalData,
     RunMetrics,
     final_report_text,
     not_enough_trades,
@@ -64,7 +71,7 @@ from crytobot.backtest import (
     select_combination,
     verdict,
 )
-from crytobot.market_data import HistoryData
+from crytobot.market_data import HistoryData, has_candle, period_gaps
 from crytobot.strategy import Settings, required_candles
 
 
@@ -98,6 +105,45 @@ def _warm_enough(
         count = configs[index].bot.read.candle_count
         if any(count < required_candles(setting) for setting in grid):
             raise _refused("ayar geçersiz: market.candle_count")
+
+
+def _periods(
+    config: BacktestConfig, data: HistoryData
+) -> tuple[tuple[str, datetime, datetime], ...]:
+    return (
+        ("örneklem içi", data.start, config.split_at),
+        ("örneklem dışı", config.split_at, config.holdout_at),
+        ("saklı dönem", config.holdout_at, data.end),
+    )
+
+
+def _every_period_has_candles(
+    configs: Sequence[BacktestConfig], datas: Sequence[HistoryData]
+) -> None:
+    """Spec 0044 R-3, AC-2: bir çiftin bir aralıkta bir dönemde hiç kapanmış mumu yoksa ret."""
+    for config, data in zip(configs, datas, strict=True):
+        interval = _interval_text(data.candle_interval)
+        for pair in data.pairs:
+            for name, start, end in _periods(config, data):
+                if not has_candle(pair, start, end):
+                    raise _refused(f"veri eksik: {pair.pair} {interval} {name}")
+
+
+def _same_end(datas: Sequence[HistoryData]) -> None:
+    """Plan Risk 4 (R-1): saklı dönem iki aralıkta aynı anda biter."""
+    if any(data.end != datas[0].end for data in datas):
+        raise _refused("veri dosyası uyumsuz: aralıkların bitişi farklı")
+
+
+def _data_section(data: HistoryData) -> IntervalData:
+    """R-2: aralığın dönemi, saklı dönemin son mumu ve her çiftin boşlukları (dosya sırası)."""
+    interval = data.candle_interval
+    gaps = tuple(
+        DataGap(gap.pair, gap.first, gap.last, gap.count)
+        for pair in data.pairs
+        for gap in period_gaps(pair, interval, data.start, data.end)
+    )
+    return IntervalData(_interval_text(interval), data.start, data.end, data.end - interval, gaps)
 
 
 def _store(base: str, index: int) -> str:
@@ -189,6 +235,9 @@ def _evaluate(
     first = configs[0]
     _report_free(first.report_path, parts)
     datas = [_history(config, parts) for config in configs]
+    _every_period_has_candles(configs, datas)
+    _same_end(datas)
+    data_sections = [_data_section(data) for data in datas]
     combinations = sum(len(grid) for _, grid in pairs)
     _say(parts, f"son değerlendirme başladı: aday={len(pairs)} kombinasyon={combinations}")
     evaluation = _Evaluation(configs, parts)
@@ -213,13 +262,18 @@ def _evaluate(
     generated_at = parts.clock()
     if paper is None:
         facts = _facts(first, datas[0], generated_at)
-        report = final_report_text(facts, combinations, results, None, None)
+        report = final_report_text(facts, combinations, results, None, None, data=data_sections)
     else:
         chosen = full[paper]
         assert chosen is not None
         metrics, selected, data = chosen
         report = final_report_text(
-            _facts(selected, data, generated_at), combinations, results, paper, metrics
+            _facts(selected, data, generated_at),
+            combinations,
+            results,
+            paper,
+            metrics,
+            data=data_sections,
         )
     return _publish(parts, first.report_path, report, evaluation.turns)
 

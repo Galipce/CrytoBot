@@ -254,8 +254,9 @@ def test_trade_spanning_split_counts_where_it_closes(
 def test_end_equity_uses_last_known_price(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """AC-8, R-10: açık pozisyon, son turda mumu olmayan çift son bilinen fiyatla değerlenir."""
     force_pass(monkeypatch)
-    series = {BTC: candles(-COUNT, [10, 8, 9, 10, 10, 12, None])}
-    chosen = prepared(tmp_path, series, hours=3, split_at=at(1), holdout_at=at(2))
+    # spec 0044 R-3 (plan A-1): the holdout holds a candle (hour 2), the last turn (hour 3) none
+    series = {BTC: candles(-COUNT, [10, 8, 9, 10, 10, 12, 12, None])}
+    chosen = prepared(tmp_path, series, hours=4, split_at=at(1), holdout_at=at(2))
     run = Run(tmp_path)
     exit_ = run.final(chosen)
     assert exit_.outcome is BacktestOutcome.COMPLETED, exit_.message
@@ -269,26 +270,42 @@ def test_end_equity_uses_last_known_price(tmp_path: Path, monkeypatch: pytest.Mo
 def test_late_listed_pair_counts_missing_turns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """AC-6: geç listelenen çiftin önceki turları eksik sayılır, çift başına; koşu sürer."""
+    """AC-6: geç listelenen çiftin önceki turları eksik sayılır, çift başına; koşu sürer.
+    Spec 0044 R-3 (plan A-2): çift örneklem içinde listelenir; her dönemde mumu vardır."""
     force_pass(monkeypatch)
+    series = {
+        BTC: candles(-COUNT, [10, 10, 10, 10, 10, 10, 10, 10]),
+        ETH: candles(1, [10, 10, 10]),
+    }
+    chosen = prepared(tmp_path, series, turn=settings((BTC, ETH)), holdout_at=at(3))
+    run = Run(tmp_path)
+    assert run.final(chosen).outcome is BacktestOutcome.COMPLETED
+    report = run.report(chosen)
+    # ETH: no candle before hour 1, at hour 1 a price but no closed candle; at 2 its first closed
+    assert report_lines(report, IN)["fiyatı ya da verisi eksik tur (çift başına)"] == (
+        "BTC/USDT 0, ETH/USDT 2"
+    )
+    assert report_lines(report, OUT)["fiyatı ya da verisi eksik tur (çift başına)"] == (
+        "BTC/USDT 0, ETH/USDT 0"
+    )
+    assert report_lines(report, WHOLE)["fiyatı ya da verisi eksik tur (çift başına)"] == (
+        "BTC/USDT 0, ETH/USDT 2"
+    )
+
+
+def test_pair_listed_after_the_in_sample_period_refused(tmp_path: Path) -> None:
+    """Spec 0044 R-3, AC-2 (plan A-2): örneklem içinde hiç mumu olmayan çift (2. saatte
+    listelenen ETH) son değerlendirmede reddedilir; tur atılmaz, rapor yazılmaz."""
     series = {
         BTC: candles(-COUNT, [10, 10, 10, 10, 10, 10, 10, 10]),
         ETH: candles(2, [10, 10]),
     }
     chosen = prepared(tmp_path, series, turn=settings((BTC, ETH)), holdout_at=at(3))
     run = Run(tmp_path)
-    assert run.final(chosen).outcome is BacktestOutcome.COMPLETED
-    report = run.report(chosen)
-    # ETH: no candle before hour 2, at hour 2 a price but no closed candle; at 3 its first closed
-    assert report_lines(report, IN)["fiyatı ya da verisi eksik tur (çift başına)"] == (
-        "BTC/USDT 0, ETH/USDT 2"
-    )
-    assert report_lines(report, OUT)["fiyatı ya da verisi eksik tur (çift başına)"] == (
-        "BTC/USDT 0, ETH/USDT 1"
-    )
-    assert report_lines(report, WHOLE)["fiyatı ya da verisi eksik tur (çift başına)"] == (
-        "BTC/USDT 0, ETH/USDT 3"
-    )
+    exit_ = run.final(chosen)
+    assert exit_.outcome is BacktestOutcome.REFUSED
+    assert exit_.message == "veri eksik: ETH/USDT 1h örneklem içi"
+    assert exit_.turns == 0 and not Path(chosen.report_path).exists()
 
 
 def _corrupt(path: Path) -> None:
