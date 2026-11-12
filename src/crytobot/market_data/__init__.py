@@ -18,8 +18,12 @@ da durdurma isteği indirmeyi durdurur ve tamamlanmış görünen dosya bırakma
 Backtest girdisi (spec 0025): `read_history` veri dosyasını bütünüyle okur ve denetler. Sonuç ya
 `HistoryData`'dır ya da adı konmuş bir sorun (`HistoryReadProblem`: yok, okunamıyor, bozuk,
 tamamlanmamış, güvenilmeyen veri). 0017'nin mum denetimleri aynen uygulanır; boşluk doldurulmaz.
+
+Dönem boşlukları (spec 0044): `period_gaps` bir çiftin dönemdeki boşluklarını (`CandleGap`)
+indirme özetinin `boşluk=` kuralıyla verir; `has_candle` dönemde mum olup olmadığını söyler. Saftır.
 """
 
+from crytobot.market_data._gaps import CandleGap, has_candle, period_gaps
 from crytobot.market_data._history import (
     HistoryRequest,
     HistoryResult,
@@ -53,6 +57,7 @@ from crytobot.market_data._types import settings_problem as read_settings_proble
 
 __all__: list[str] = [
     "CANDLE_INTERVALS",
+    "CandleGap",
     "HistoryData",
     "HistoryPair",
     "HistoryRead",
@@ -73,6 +78,8 @@ __all__: list[str] = [
     "ReadIssue",
     "ReadSettings",
     "download_history",
+    "has_candle",
+    "period_gaps",
     "read_history",
     "read_market_data",
     "read_settings_problem",
