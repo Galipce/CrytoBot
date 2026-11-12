@@ -193,12 +193,17 @@ def read_market_data(
     settings: ReadSettings,
     clock: Callable[[], datetime],
     *,
-    connect: Callable[[], PublicExchange] = connect_public,
+    connect: Callable[[], PublicExchange] | None = None,
+    testnet: bool = False,
 ) -> MarketRead:
     """Verilen çiftler için tek geçiş; yalnız herkese açık veri okur. İstisna fırlatmaz (R-3).
 
     Geçersiz girdide borsaya çağrı gitmez, `input_problem` döner. Sonuçta ham yanıt metni yoktur.
+    `connect` verilmezse istemci ağa göre kurulur (spec 0041 CB-1): `testnet` ise her okuma
+    testnet'ten yapılır, hatalar mainnet'tekiyle aynı sınıflandırılır, mainnet'e dönülmez.
     """
+    if connect is None:
+        connect = (lambda: connect_public(testnet=True)) if testnet else connect_public
     problem = _input_problem(pairs, settings)
     reader = _Clock(clock)
     if problem is None:

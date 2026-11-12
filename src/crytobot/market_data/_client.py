@@ -66,7 +66,7 @@ class PublicExchange(Protocol):
 
 
 class _BinancePublic:
-    def __init__(self, library: Any) -> None:
+    def __init__(self, library: Any, testnet: bool = False) -> None:
         self._library = library
         self._seen = threading.local()
         # No credential is given; ccxt reads none from the environment (plan Risk 14)
@@ -80,6 +80,9 @@ class _BinancePublic:
                 },
             }
         )
+        if testnet:
+            # spec 0041 CB-1: every public endpoint on the testnet; no mainnet fallback (S-3)
+            self._exchange.set_sandbox_mode(True)
         # Exact text instead of float (plan Risk 3)
         self._exchange.number = str
         forward = self._exchange.on_rest_response
@@ -154,8 +157,10 @@ class _BinancePublic:
         return self._request(timeout, lambda: self._exchange.publicGetTicker24hr(params))
 
 
-def connect_public() -> PublicExchange:
-    """Anahtarsız Binance istemcisi; soket açmaz, ilk çağrıya kadar ağa çıkmaz."""
+def connect_public(testnet: bool = False) -> PublicExchange:
+    """Anahtarsız Binance istemcisi; soket açmaz, ilk çağrıya kadar ağa çıkmaz.
+
+    Spec 0041 CB-1: `testnet` ise bütün uçlar Binance Spot Testnet'tir (ccxt sandbox modu)."""
     import ccxt
 
-    return _BinancePublic(ccxt)
+    return _BinancePublic(ccxt, testnet)
