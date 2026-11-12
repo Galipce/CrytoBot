@@ -1,9 +1,9 @@
 """Geçmiş veri üzerinde strateji+risk+simüle execution koşturmak.
 
 Spec 0025: koşunun kendisi (turlar, simüle saat) `app`'tedir; burada koşunun sonucu vardır.
-`run_metrics` tur kayıtlarından (`TurnRecord`) örneklem içi, örneklem dışı ve tüm koşu için
-metrikleri hesaplar (saf hesap). `report_text` raporu belirlenimci düz metin olarak yazar: koşunun
-varsayımları, parçaların metrikleri; yalnız örneklem dışı "BR-10 kanıtı adayı"dır, hüküm yoktur.
+`run_metrics` tur kayıtlarından (`TurnRecord`) örneklem içi, örneklem dışı, saklı dönem (verildiyse)
+ve tüm koşu için metrikleri hesaplar (saf hesap). `report_text` varsayılan raporu belirlenimci düz
+metin olarak yazar: koşunun varsayımları ve yalnız örneklem içi metrikler; aday işareti, hüküm yok.
 `write_report` raporu `.part` üzerinden, var olan dosyanın üzerine yazmadan diske koyar;
 `report_exists` yolda ya da `.part` yolunda bir şey olup olmadığını söyler. `report_fingerprint`
 yazılan baytların SHA-256 özetidir (spec 0040). Spec 0042: değerlendirme kuralı
