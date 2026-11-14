@@ -1,0 +1,48 @@
+CrytoBot backtest raporu
+dönem: 2026-01-01T00:00:00+00:00 .. 2026-01-01T10:00:00+00:00 (bitiş hariç)
+mum aralığı: 1h
+tur aralığı: 1h
+ayrım anı: 2026-01-01T04:00:00+00:00 (örneklem içi bu andan önceki turlar)
+çiftler: BTC/USDT, ETH/USDT
+indirme anı: 2026-03-01T12:00:00+00:00
+ısınma mumu (candle_count): 4
+spread: 0.0005
+strateji: fast=1 slow=2 rsi=2 rsi_threshold=70 atr=2 k=2 r=2
+üretim anı: 2026-03-02T09:30:00+00:00
+fee: 0.001
+slippage: 0.001
+per_trade_risk: 0.01
+daily_loss_limit: 0.03
+max_drawdown: 0.15
+max_open_positions: 5
+profit_cost_multiple: 2
+opening_balance: 10000
+
+varsayımlar:
+- fiyat: tur anında açılan mumun açılışı
+- spread: ayardaki sabit değer; dolumlara eklenmez, yalnız maliyet kapısında (BR-8) kullanılır
+- çift kuralları: indirme anındaki hâliyle, dönem boyunca sabit
+- stop ve hedef yalnız tur anlarında, tur fiyatıyla denetlenir; mum içi en yüksek ve en düşük değere bakılmaz
+- risk, stop fiyatında satış slippage'ı ve komisyonuyla hesaplanır; stopun altına boşluklu düşüş hesaba katılmaz, gerçekleşen zarar işlem başına risk sınırını aşabilir
+- mum boşlukları doldurulmaz
+
+== örneklem içi ==
+turlar: 4 (ilk 2026-01-01T00:00:00+00:00, son 2026-01-01T03:00:00+00:00)
+başlangıç kasası: 10000.00000000 USDT
+bitiş kasası: 10000.00000000 USDT
+net kâr/zarar: 0.00000000 USDT (getiri %0.0000)
+gerçekleşen kâr/zarar: 0.00000000 USDT
+gerçekleşmemiş kâr/zarar: 0.00000000 USDT
+işlem: 0 (kazanan 0, zararlı 0)
+kazanma oranı: tanımsız
+kâr faktörü: tanımsız
+en büyük drawdown: %0.0000
+ortalama günlük getiri: %0.0000
+ödenen komisyon: 0.00000000 USDT
+ödenen slippage: 0.00000000 USDT
+günlük zarar durdurmalı gün: 0
+drawdown durdurması: yok
+fiyatı ya da verisi eksik tur (çift başına): BTC/USDT 3, ETH/USDT 2
+öneri yok (nedene göre): yok
+ret (nedene göre): yok
+gönderilmeyen durum bildirimi (türe göre): invalid_data 3, stale_data 2

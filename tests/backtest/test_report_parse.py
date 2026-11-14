@@ -18,6 +18,8 @@ from crytobot.backtest import (
     NOT_ENOUGH_TRADES,
     PASSED,
     CandidateResult,
+    DataGap,
+    IntervalData,
     ReportFacts,
     ReportReadProblem,
     final_report_text,
@@ -29,6 +31,17 @@ from crytobot.backtest import (
 )
 from tests.backtest.test_metrics import BTC, DAY1, DAY2, RECORDS
 from tests.backtest.test_report import CONDITION_FACTS, GENERATED, HOLDOUT
+
+# spec 0044 (plan Risk 10): the data section with a gap; the parser reads the report as before
+DATA = (
+    IntervalData(
+        "1h",
+        DAY1,
+        DAY1 + timedelta(days=2),
+        DAY1 + timedelta(days=2, hours=-1),
+        (DataGap(BTC, DAY2, DAY2 + timedelta(hours=1), 2),),
+    ),
+)
 
 FACTS = ReportFacts(
     start=DAY1,
@@ -72,7 +85,7 @@ def sample_report_with(facts: ReportFacts) -> str:
         metrics.holdout,
         PASSED,
     )
-    return final_report_text(facts, 1, [result], 0, metrics)
+    return final_report_text(facts, 1, [result], 0, metrics, data=DATA)
 
 
 def test_report_candidate_mark_and_existence(tmp_path: Path) -> None:
@@ -235,7 +248,7 @@ def test_non_final_report_is_named_before_the_mark() -> None:
 
 def test_no_candidate_final_report_has_no_mark() -> None:
     unselected = CandidateResult("S0", "4h", None, None, None, None, NOT_ENOUGH_TRADES)
-    report = final_report_text(FACTS, 1, [unselected], None, None)
+    report = final_report_text(FACTS, 1, [unselected], None, None, data=DATA)
     res = parse_report(report)
     assert res.problem is ReportReadProblem.NO_CANDIDATE_MARK
     assert res.detail == "rapor aday işareti taşımıyor"

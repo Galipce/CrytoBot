@@ -15,7 +15,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 
 | Module | Single responsibility | Owns |
 |---|---|---|
-| `market_data` | Mum, fiyat, emir defteri verisini borsadan çekmek ve saklamak | OHLCV geçmişi, ticker anlık görüntüleri, geçmiş veri dosyası (backtest girdisi, spec 0023) |
+| `market_data` | Mum, fiyat, emir defteri verisini borsadan çekmek ve saklamak | OHLCV geçmişi, ticker anlık görüntüleri, geçmiş veri dosyası (backtest girdisi, spec 0023); dönem boşlukları ve dönemde mum denetimi — saf, indirme özetinin `boşluk=` kuralıyla (spec 0044) |
 | `news` | Haber/duyuru kaynaklarını takip edip haber skoru üretmek | Haber kayıtları, haber skorları |
 | `research` | Whitepaper/proje dokümanlarını okuyup kaynak alıntılı araştırma skoru üretmek | Doküman önbelleği, araştırma skorları |
 | `llm` | Claude API'ye tek erişim noktası: şema doğrulama, harcama limiti | LLM çağrı günlüğü, günlük harcama |
@@ -24,7 +24,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | `risk` | Her işlem önerisini BR-3…BR-11'e göre onaylamak/reddetmek, pozisyon boyutlamak | Risk limitleri, sabit üst sınırlar, kill switch durumu |
 | `execution` | Onaylı emirleri borsaya (live) / simülatöre (paper, backtest) iletmek, emir durumunu izlemek | Emir kayıtları, clientOrderId'ler |
 | `portfolio` | Pozisyonlar, bakiye mutabakatı, kâr/zarar defteri | Defter (append-only), pozisyonlar, kasa geçmişi |
-| `backtest` | Geçmiş veri üzerinde strateji+risk+simüle execution koşturmak | Backtest sonuçları: metrikler, rapor metni ve rapor dosyası (spec 0025); değerlendirme kuralı — örneklem içi seçim, sabit eşikli hüküm, paper adayı — ve son değerlendirme raporu (spec 0042); son değerlendirmenin sabit R-3 ızgarası (`app/_grid.py`) ve iki aralığı 1h, 4h (spec 0043) |
+| `backtest` | Geçmiş veri üzerinde strateji+risk+simüle execution koşturmak | Backtest sonuçları: metrikler, rapor metni ve rapor dosyası (spec 0025); değerlendirme kuralı — örneklem içi seçim, sabit eşikli hüküm, paper adayı — ve son değerlendirme raporu (spec 0042); son değerlendirmenin sabit R-3 ızgarası (`app/_grid.py`) ve iki aralığı 1h, 4h (spec 0043); son değerlendirme raporunda aralık başına veri bölümü — dönem, saklı dönemin son mumu, boşluklar (spec 0044; boşlukları `app` `market_data`'dan alıp verir) |
 | `control` | CLI ve Telegram komutları, yetkilendirme (chat ID, TOTP, teyit), audit log | Audit log, mod/aşama durumu |
 | `reporting` | Günlük rapor, metrikler (günlük hedef dahil), bildirim gönderimi | Rapor kayıtları |
 | `persistence` | Defter, emirler ve risk durumunu tek SQLite deposunda korumak; okunamayan depoda durumu reddetmek | Depo dosyası, biçim sürümü, depo modu |

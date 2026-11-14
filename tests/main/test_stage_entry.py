@@ -71,7 +71,7 @@ def make_valid_report_text() -> str:
         metrics.holdout,
         PASSED,
     )
-    text = final_report_text(facts, 1, [result], 0, metrics)
+    text = final_report_text(facts, 1, [result], 0, metrics, data=())
     old_part = f"== örneklem dışı — {CANDIDATE_MARK} =="
     new_part = f"""{old_part}
 turlar: 120 (ilk 2026-01-02T00:00:00+00:00, son 2026-01-07T00:00:00+00:00)
@@ -360,6 +360,16 @@ def _break(case: str, config: Path, report: Path) -> str:
         )
     if case in ("trend_period", "candidate_interval", "candidate_k"):  # spec 0043 AC-9
         return _break_candidate(case, config, report, text, sha_line)
+    if case in ("whitelist_missing", "whitelist_extra", "whitelist_different"):  # spec 0044 AC-3
+        pairs = {
+            "whitelist_missing": '["BTC/USDT"]',
+            "whitelist_extra": '["BTC/USDT", "ETH/USDT", "SOL/USDT"]',
+            "whitelist_different": '["BTC/USDT", "SOL/USDT"]',
+        }[case]
+        old = 'whitelist = ["BTC/USDT", "ETH/USDT"]'
+        assert text.count(old) == 1
+        config.write_text(text.replace(old, f"whitelist = {pairs}"), encoding="utf-8")
+        return "ayar uyuşmazlığı: whitelist"
     assert case == "condition"
     config.write_text(text.replace('fee = "0.001"', 'fee = "0.002"'), encoding="utf-8")
     return "ayar uyuşmazlığı: fee"
@@ -437,3 +447,10 @@ def _refused_start(tmp_path: Path, case: str) -> None:
     assert load_start_records(bot.store).records == ()
     assert event_lines(console, "tur") == []
     assert bot.exchange.touched == []
+
+
+@pytest.mark.parametrize("case", ["whitelist_missing", "whitelist_extra", "whitelist_different"])
+def test_whitelist_mismatch_writes_nothing_exit_1(tmp_path: Path, case: str) -> None:
+    """Spec 0044 AC-3 (R-4, korunan davranış): rapordaki çift listesi çalışan beyaz listeden eksik,
+    fazla ya da farklıysa `start` reddeder; depo yazılmaz, istemci çağrısı yok, tur yok, çıkış 1."""
+    _refused_start(tmp_path, case)

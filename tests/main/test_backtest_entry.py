@@ -10,6 +10,7 @@ import io
 import json
 import tomllib
 from collections.abc import Iterator
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -406,4 +407,24 @@ def test_holdout_outside_the_data_is_refused_before_any_turn(
     code, console = tester.run(["backtest", "--final"])
     assert code == EXIT_REFUSED
     assert "ayar geçersiz: backtest.holdout_at" in console
+    assert not tester.report.exists()
+
+
+def test_final_missing_data_exit_1(tester: Backtester, small_grid: None) -> None:
+    """Spec 0044 AC-2: bir çiftin bir aralıkta bir dönemde hiç kapanmış mumu yoksa `backtest
+    --final` adıyla reddeder; tur atılmaz, rapor yazılmaz, çıkış 1."""
+    write_final(tester)
+    path = tester.root / "history-4h.jsonl"
+    data = final_history(4 * HOUR, lambda _index: 10, (BTC, ETH))
+    holdout, end = at(12), at(16)
+    pairs = tuple(
+        replace(item, candles=tuple(c for c in item.candles if not holdout <= c.open_time < end))
+        if item.pair == ETH
+        else item
+        for item in data.pairs
+    )
+    write_history(path, replace(data, pairs=pairs))
+    code, console = tester.run(["backtest", "--final"])
+    assert code == EXIT_REFUSED
+    assert console == "backtest reddedildi: veri eksik: ETH/USDT 4h saklı dönem; tur atılmadı\n"
     assert not tester.report.exists()

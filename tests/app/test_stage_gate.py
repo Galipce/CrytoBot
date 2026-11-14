@@ -307,7 +307,7 @@ def _real_report(path: Path) -> str:
         metrics.holdout,
         PASSED,
     )
-    text = final_report_text(facts, 1, [result], 0, metrics)
+    text = final_report_text(facts, 1, [result], 0, metrics, data=())
     path.write_bytes(text.encode("utf-8"))
     return text
 
@@ -515,7 +515,7 @@ def test_non_final_report_refused(tmp_path: Path) -> None:
 def test_final_report_without_candidate_refused(tmp_path: Path) -> None:
     path = tmp_path / "rapor.txt"
     facts = _facts()
-    text = final_report_text(facts, 1, [], None, None)
+    text = final_report_text(facts, 1, [], None, None, data=())
     path.write_bytes(text.encode("utf-8"))
     stage = replace(make_stage_config(), report_sha256=report_fingerprint(text))
     result = gate(stage, make_bot_config(), read_report(path))
@@ -629,3 +629,20 @@ def test_candidate_name_and_missing_parameters() -> None:
     assert candidate_refusal(s1, make_report(strategy=None, strategy_name="S9")) == (
         "ayar uyuşmazlığı: strateji"
     )
+
+
+def test_whitelist_different_pair_refused() -> None:
+    """Spec 0044 AC-3 (R-4): aynı sayıda ama farklı çift → ret (eksik ve fazla: yukarıda)."""
+    result = gate(
+        make_stage_config(), make_bot_config(), make_report(pairs=("BTC/USDT", "SOL/USDT"))
+    )
+    assert result.passed is False
+    assert result.message == "ayar uyuşmazlığı: whitelist"
+
+
+def test_whitelist_same_set_any_order_passes() -> None:
+    """Spec 0044 AC-3 (R-4): aynı liste, sıra farkı dahil, geçer."""
+    bot = make_bot_config()
+    assert tuple(bot.turn.whitelist) == ("BTC/USDT", "ETH/USDT")
+    result = gate(make_stage_config(), bot, make_report(pairs=("ETH/USDT", "BTC/USDT")))
+    assert result.passed is True, result.message
