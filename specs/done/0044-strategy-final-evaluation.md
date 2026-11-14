@@ -1,6 +1,6 @@
 # Spec 0044 — 2022 verisi ve son değerlendirme
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0044-plan.md`
 - Self-critique: done
@@ -33,26 +33,26 @@ none — no user interface. Etkileşim CLI çıktısı, değerlendirme ayarı ve
 - Kapsam dışı: yeni aday, ızgara ya da eşik (0042, 0043 sabitler); çift başına spread ya da ücret; boşluk doldurma; varsayılan `backtest` raporunun değişmesi; kaldıraç, açığa satış (BR-2); risk limitleri; LLM ya da dış sinyal; beyaz listenin değişmesi ve paper'a geçiş; son değerlendirmenin yeniden koşulmasına teknik kilit; canlı ya da testnet koşusu.
 
 ## Acceptance criteria
-- [ ] AC-1 — Son değerlendirme raporu her aralık (1h, 4h) ve çift için her boşluğu `<çift> <ilk eksik mum> → <son eksik mum> (<n> mum)` olarak zaman sırasıyla yazar; tek eksik mum `n = 1` ile, ardışık eksikler tek satırla görünür; boşluğu olmayan aralık `veri boşluğu: yok` yazar. Bir çiftin bir aralıktaki boşluk satırı sayısı aynı dosyanın indirme özetindeki `boşluk=` değerine eşittir (K-3). Boşluk koşuyu durdurmaz ve mum eklenmez. Varsayılan `backtest` raporu bayt bayt aynı kalır.
-- [ ] AC-2 — Son değerlendirmede bir çiftin bir aralıkta bir dönemde hiç kapanmış mumu yoksa `veri eksik: <çift> <aralık> <dönem>` ile reddedilir (dönem: `örneklem içi | örneklem dışı | saklı dönem`); tur atılmaz, rapor yazılmaz, çıkış 1. Dönemde tek kapanmış mum varsa ret yoktur, eksik kısım AC-1'deki gibi boşluktur.
-- [ ] AC-3 — Rapordaki çift listesi çalışan beyaz listeden farklıysa (eksik, fazla ya da farklı çift) `start` ve `start --live` `ayar uyuşmazlığı: whitelist` ile reddeder; aynı liste (sıra farkı dahil) geçer (korunan davranış).
-- [ ] AC-4 — 1h, beş çift, R-1'in bütün dönemiyle en ağır kombinasyonun (S3, k=1.5; K-4) varsayılan `backtest` koşusu 60 dakikada biter (VERIFY gözlemi: komut, süre).
-- [ ] AC-5 — R-1 verisiyle son değerlendirme koşulur ve R-6'nın bütün kalemleri (veri sha256'ları, indirme anı, saklı dönemin son mumu, sonuç, aday hükümleri, boşluk listesi, rapor parmak izi, tarih, toplam süre) planın `## Build evidence` bölümüne yazılır.
-- [ ] AC-6 — VERIFY aynı veri dosyalarıyla (sha256 eşit) son değerlendirmeyi bağımsız tekrarlar; `paper adayı:` satırı, her `sonuç:` satırı ve boşluk listesi AC-5'teki kayıtla birebir aynıdır.
-- [ ] AC-7 — Değerlendirme boyunca çalışan `crytobot.toml` ve kökteki `crytobot-history-2026*.jsonl`, `crytobot-backtest-2026*.txt` dosyaları değişmez (öncesi/sonrası sha256) ve yeni veri dosyaları git'e girmez.
+- [x] AC-1 — Son değerlendirme raporu her aralık (1h, 4h) ve çift için her boşluğu `<çift> <ilk eksik mum> → <son eksik mum> (<n> mum)` olarak zaman sırasıyla yazar; tek eksik mum `n = 1` ile, ardışık eksikler tek satırla görünür; boşluğu olmayan aralık `veri boşluğu: yok` yazar. Bir çiftin bir aralıktaki boşluk satırı sayısı aynı dosyanın indirme özetindeki `boşluk=` değerine eşittir (K-3). Boşluk koşuyu durdurmaz ve mum eklenmez. Varsayılan `backtest` raporu bayt bayt aynı kalır.
+- [x] AC-2 — Son değerlendirmede bir çiftin bir aralıkta bir dönemde hiç kapanmış mumu yoksa `veri eksik: <çift> <aralık> <dönem>` ile reddedilir (dönem: `örneklem içi | örneklem dışı | saklı dönem`); tur atılmaz, rapor yazılmaz, çıkış 1. Dönemde tek kapanmış mum varsa ret yoktur, eksik kısım AC-1'deki gibi boşluktur.
+- [x] AC-3 — Rapordaki çift listesi çalışan beyaz listeden farklıysa (eksik, fazla ya da farklı çift) `start` ve `start --live` `ayar uyuşmazlığı: whitelist` ile reddeder; aynı liste (sıra farkı dahil) geçer (korunan davranış).
+- [x] AC-4 — 1h, beş çift, R-1'in bütün dönemiyle en ağır kombinasyonun (S3, k=1.5; K-4) varsayılan `backtest` koşusu 60 dakikada biter (VERIFY gözlemi: komut, süre).
+- [x] AC-5 — R-1 verisiyle son değerlendirme koşulur ve R-6'nın bütün kalemleri (veri sha256'ları, indirme anı, saklı dönemin son mumu, sonuç, aday hükümleri, boşluk listesi, rapor parmak izi, tarih, toplam süre) planın `## Build evidence` bölümüne yazılır.
+- [x] AC-6 — VERIFY aynı veri dosyalarıyla (sha256 eşit) son değerlendirmeyi bağımsız tekrarlar; `paper adayı:` satırı, her `sonuç:` satırı ve boşluk listesi AC-5'teki kayıtla birebir aynıdır.
+- [x] AC-7 — Değerlendirme boyunca çalışan `crytobot.toml` ve kökteki `crytobot-history-2026*.jsonl`, `crytobot-backtest-2026*.txt` dosyaları değişmez (öncesi/sonrası sha256) ve yeni veri dosyaları git'e girmez.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed (`docs/commands.md`, `docs/architecture.md`)
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 (Approved metin, onaydan sonra değişmedi) |
+| Fix rounds | 0 |
+| Review findings: real / noise / deferred | 0 / 2 (I-1, I-2) / 0; BUILD gözlemi B-86 ertelendi; VERIFY Info: AC-4 süre dosyası yok (üst sınır kanıtı kabul) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
