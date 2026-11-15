@@ -7,6 +7,7 @@ Spec 0019: `market_data`'nın yalnız kökü import edilir, alt modülleri edilm
 işlevi hiçbir biçimde kullanılamaz, adı `app` kaynağında geçemez (CB-2, CB-3): `app` borsaya çıkmaz.
 
 Spec 0026: `backtest`'in de yalnız kökü import edilir (CB-4, R-3d); alt modülleri ve `*` edilmez.
+Spec 0045 (plan A-2): `calibration`'ın da yalnız kökü.
 """
 
 import ast
@@ -39,7 +40,7 @@ ALLOWED_MODULES = {
     "crytobot.risk",
     "crytobot.strategy",
 }
-ROOT_ONLY_MODULES = {"crytobot.market_data", "crytobot.backtest"}
+ROOT_ONLY_MODULES = {"crytobot.market_data", "crytobot.backtest", "crytobot.calibration"}
 MARKET_READER = "read_market_data"
 CLOCK_CALLS = {"now", "utcnow", "today", "time", "monotonic"}
 

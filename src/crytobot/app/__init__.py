@@ -38,6 +38,12 @@ Aday stratejiler (spec 0043): `[strategy] name` S0…S3'ten birini seçer (yoksa
 değerlendirme `final_configs` ile `[backtest] final_data`'nın iki aralığını (1h, 4h) ve her
 aralıkta sabit R-3 ızgarasını (`CANDIDATE_GRIDS`) sınar; aşama kapısı rapordaki adayın adını,
 bütün parametrelerini ve aralığını çalışan ayarla karşılaştırır.
+
+Kalibrasyon (spec 0045): `load_calibration_config` `[calibration]` bölümünü (beş veri yolu,
+ölçüm maliyetleri, çıktı yolları, son ölçümün onayı) denetler; `run_calibration` 1. aşamayı
+(varsayılan ölçüm, ayarlama, çapraz sınama → ayar seti, rapor, kayıtlar), `run_calibration_final`
+onaylı ayar setiyle son ölçümü (üç dönem, hüküm) `CalibrationParts` ile verilen okuma, yazma,
+konsol ve saatle koşar. Botun işlem davranışına, deposuna ve ayarına dokunmaz.
 """
 
 from crytobot.app._backtest import BacktestExit, BacktestOutcome, BacktestParts, run_backtest
@@ -48,6 +54,16 @@ from crytobot.app._backtest_config import (
     FinalConfigsResult,
     final_configs,
     load_backtest_config,
+)
+from crytobot.app._calibration import (
+    CalibrationConfig,
+    CalibrationConfigResult,
+    CalibrationExit,
+    CalibrationOutcome,
+    CalibrationParts,
+    load_calibration_config,
+    run_calibration,
+    run_calibration_final,
 )
 from crytobot.app._config import SETTING_NAMES, BotConfig, ConfigResult, load_config
 from crytobot.app._control import (
@@ -121,6 +137,11 @@ __all__: list[str] = [
     "BacktestParts",
     "BotConfig",
     "BuyHalt",
+    "CalibrationConfig",
+    "CalibrationConfigResult",
+    "CalibrationExit",
+    "CalibrationOutcome",
+    "CalibrationParts",
     "ConfigResult",
     "ControlResult",
     "DownloadConfig",
@@ -161,6 +182,7 @@ __all__: list[str] = [
     "get_dashboard_status",
     "line",
     "load_backtest_config",
+    "load_calibration_config",
     "load_config",
     "load_download_config",
     "load_stage_config",
@@ -173,6 +195,8 @@ __all__: list[str] = [
     "request_stop",
     "resume_operations",
     "run_backtest",
+    "run_calibration",
+    "run_calibration_final",
     "run_download",
     "run_evaluation",
     "run_loop",

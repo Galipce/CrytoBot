@@ -24,6 +24,9 @@
 | Aşama (stage) | backtest → paper → live (küçük sermaye) → live; her geçiş insan onaylı | |
 | Kill switch | Tüm yeni işlemleri durduran acil anahtar | CLI veya Telegram |
 | Günlük hedef | Günlük kâr % (hedef %20–25) — **ölçülen metrik, karar kuralı değil** | Bkz. BR-1 |
+| İsabet (kalibrasyon) | "Al" sinyalinden sonraki en çok 24 mumda fiyatın, 1×ATR altına inmeden önce giriş + max(2×ATR, maliyet mesafesi)'ne ulaşması (spec 0045 Q-1) | Kâr/zarar değil; "sat" için ters yön |
+| Taban oran | Dönemin her mumu "al" sayıldığında aynı kuralla bulunan isabet oranı (rastgele girişin isabeti, spec 0045 Q-3) | Sinyalin isabeti bununla karşılaştırılır |
+| Olağandışı mum | Boyu 4×ATR'yi, hacmi önceki 20 mumun ortalamasının 5 katını aşan; 3×ATR'yi aşan gövdesini 3 mumda en az ⅔ geri veren; ya da beş çiftin en az dördünde aynı anda boyu 3×ATR'yi aşan mum (spec 0045 Q-8) | Veriden çıkarılmaz; oranlar onlarla ve onlarsız raporlanır |
 
 ## Business rules
 

@@ -3,9 +3,10 @@ plan Risk 7, 8).
 
 Biçim UTF-8 JSON Lines'tır. 1. satır başlıktır (`format`, `version`, mum aralığı, dönem, ısınma
 başlangıcı, indirme anı, çift sırasıyla kurallar ve fiyat adımı). Sonra çift başına, açılış
-sırasıyla mum satırları gelir: `[çift, açılış ms, open, high, low, close]`, fiyatlar borsanın
-metniyle. Son satır tamamlanma satırıdır (`complete`, çift başına mum sayısı); onsuz dosya bozuk
-sayılır (okuyucu 0025).
+sırasıyla mum satırları gelir: `[çift, açılış ms, open, high, low, close, volume]`, fiyatlar ve
+hacim borsanın metniyle. Sürüm 1'de hacim sütunu yoktur (spec 0045 plan Risk 1: sürüm 2 hacmi
+ekler; okuyucu ikisini de okur). Son satır tamamlanma satırıdır (`complete`, çift başına mum
+sayısı); onsuz dosya bozuk sayılır (okuyucu 0025).
 
 Yazma `<yol>.part`'a yapılır, `.part` dışlayıcı açılır: var olan `.part` başka bir indirmenindir,
 silinmez. Başarıda `os.link` ile son ada bağlanır: hedef varsa `FileExistsError`, üzerine yazılmaz.
@@ -25,7 +26,7 @@ from typing import IO, Final
 from crytobot.market_data._types import MarketDataError, MarketRules
 
 FORMAT: Final = "crytobot-history"
-VERSION: Final = 1
+VERSION: Final = 2
 PART_SUFFIX: Final = ".part"
 
 
@@ -103,9 +104,10 @@ def header_line(header: FileHeader) -> str:
     )
 
 
-def candle_line(pair: str, open_ms: int, prices: Sequence[str]) -> str:
-    """`prices`: borsanın open, high, low, close metni; denetlenmiş, yuvarlanmaz (R-3)."""
-    return _line([pair, open_ms, *prices])
+def candle_line(pair: str, open_ms: int, prices: Sequence[str], volume: str) -> str:
+    """`prices`: borsanın open, high, low, close metni; `volume`: hacim metni (sürüm 2). İkisi de
+    denetlenmiş, yuvarlanmaz (R-3)."""
+    return _line([pair, open_ms, *prices, volume])
 
 
 def complete_line(counts: Sequence[tuple[str, int]]) -> str:

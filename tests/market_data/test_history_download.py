@@ -25,7 +25,7 @@ WARM_MS = START_MS - WARMUP * HOUR_MS
 
 
 def expected_lines(pair: str, rows: list[list[object]]) -> list[list[object]]:
-    return [[pair, row[0], *row[1:5]] for row in rows if WARM_MS <= row[0] < END_MS]  # type: ignore[operator]
+    return [[pair, row[0], *row[1:6]] for row in rows if WARM_MS <= row[0] < END_MS]  # type: ignore[operator]
 
 
 def test_multi_page_download_writes_every_closed_candle_exactly(tmp_path: Path) -> None:
@@ -41,7 +41,7 @@ def test_multi_page_download_writes_every_closed_candle_exactly(tmp_path: Path) 
     assert data.candles == expected_lines(BTC, history[BTC]) + expected_lines(ETH, history[ETH])
     assert len([row for row in data.candles if row[0] == BTC]) == DAYS * 24 + WARMUP
     # 8 decimals and trailing zeros stay as the exchange wrote them
-    assert data.candles[0][2:6] == history[BTC][1500 - WARMUP][1:5]
+    assert data.candles[0][2:7] == history[BTC][1500 - WARMUP][1:6]
     assert all(type(text) is str for row in data.candles for text in row[2:])
     pages = [request for request in exchange.kline_requests if request["symbol"] == "BTCUSDT"]
     assert len(pages) == 2
@@ -59,7 +59,7 @@ def test_header_carries_rules_tick_interval_period_and_moment(tmp_path: Path) ->
     data = read_file(path)
     assert data.header == {
         "format": "crytobot-history",
-        "version": 1,
+        "version": 2,
         "exchange": "binance",
         "candle_interval": "1h",
         "start": "2026-01-01T00:00:00+00:00",

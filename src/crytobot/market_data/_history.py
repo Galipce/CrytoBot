@@ -37,7 +37,7 @@ from crytobot.market_data._history_file import (
     existing,
     header_line,
 )
-from crytobot.market_data._numbers import ms_from_utc, utc_from_ms
+from crytobot.market_data._numbers import exact_decimal, ms_from_utc, utc_from_ms
 from crytobot.market_data._pairs import pair_spec
 from crytobot.market_data._types import (
     CANDLE_INTERVALS,
@@ -51,6 +51,7 @@ from crytobot.market_data._types import (
 
 _MILLISECOND: Final = timedelta(milliseconds=1)
 _PRICE_COLUMNS: Final = slice(1, 5)
+_VOLUME_COLUMN: Final = 5
 _UNAVAILABLE: Final = frozenset(
     {
         IssueReason.NOT_LISTED,
@@ -83,6 +84,8 @@ class HistoryStopReason(Enum):
 
 # Untrusted, not a pair-level fact: a candle after the requested end belongs to no page (R-5)
 OUTSIDE_REQUEST: Final = "outside_request"
+# Untrusted: the volume column is missing or not a plain non-negative number (spec 0045 Risk 1)
+BAD_VOLUME: Final = "bad_volume"
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +172,17 @@ def _window(request: HistoryRequest) -> _Window:
     # The first turn at `start` reads the last `candle_count` candles closed by then
     warm = start // interval_ms * interval_ms - request.settings.candle_count * interval_ms
     return _Window(interval_ms, max(warm, 0), start, ms_from_utc(request.end))
+
+
+def _volume(row: object) -> str | None:
+    """Hacim metni (Binance mum satırının 6. sütunu); düz, negatif olmayan sayı değilse `None`."""
+    if not isinstance(row, list | tuple) or len(row) <= _VOLUME_COLUMN:
+        return None
+    text = row[_VOLUME_COLUMN]
+    if exact_decimal(text) is None:
+        return None
+    assert isinstance(text, str)  # exact_decimal takes text only
+    return text
 
 
 def _moment(value: int) -> datetime:
@@ -278,9 +292,14 @@ class _Download:
                 raise self.untrusted(pair, IssueReason.TIME_OUT_OF_ORDER.value)
         if opens[-1] > end_ms:
             raise self.untrusted(pair, OUTSIDE_REQUEST)
+        volumes = [_volume(row) for row in rows]
+        if None in volumes:
+            raise self.untrusted(pair, BAD_VOLUME)
         lines: list[str] = []
         later = into.first
-        for open_ms, row in zip(reversed(opens), reversed(rows), strict=True):
+        for open_ms, row, volume in zip(
+            reversed(opens), reversed(rows), reversed(volumes), strict=True
+        ):
             if not (window.warm <= open_ms and open_ms + window.interval_ms <= window.end):
                 continue
             if later is None:
@@ -294,7 +313,9 @@ class _Download:
             into.count += 1
             into.in_period += open_ms >= window.start
             assert isinstance(row, list | tuple)  # parse_rows passed it
-            lines.append(candle_line(pair, open_ms, [str(text) for text in row[_PRICE_COLUMNS]]))
+            assert volume is not None  # checked above
+            prices = [str(text) for text in row[_PRICE_COLUMNS]]
+            lines.append(candle_line(pair, open_ms, prices, volume))
         lines.reverse()
         into.pages.append(lines)
         into.first = later
