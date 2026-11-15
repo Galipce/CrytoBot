@@ -213,17 +213,18 @@ class ArchiveStore:
                 "INSERT OR REPLACE INTO meta (name, value) VALUES ('last_run_at', ?)", (_text(at),)
             )
 
-    def existing(self, article_ids: Sequence[str]) -> set[str]:
-        """Arşivde zaten bulunan kimlikler."""
-        found: set[str] = set()
+    def existing(self, article_ids: Sequence[str]) -> dict[str, int]:
+        """Arşivde zaten bulunan kimlikler → ilk yazıldıkları katalog (plan A-3)."""
+        found: dict[str, int] = {}
         try:
             for start in range(0, len(article_ids), 500):
                 chunk = tuple(article_ids[start : start + 500])
                 marks = ", ".join("?" for _ in chunk)
                 found.update(
-                    str(row[0])
+                    (str(row[0]), int(row[1]))
                     for row in self._connection.execute(
-                        f"SELECT article_id FROM archive WHERE article_id IN ({marks})", chunk
+                        f"SELECT article_id, catalog_id FROM archive WHERE article_id IN ({marks})",
+                        chunk,
                     )
                 )
         except sqlite3.Error:

@@ -393,6 +393,27 @@ def test_cross_catalog_duplicate_does_not_stop_early(two: Harness) -> None:
     assert [row["catalog_id"] for row in two.rows() if row["article_id"] == ids(shared)[0]] == [A]
 
 
+def test_cross_catalog_id_from_earlier_run_does_not_stop_early(two: Harness) -> None:
+    """Review round 1 M-1, plan A-3: önceki bir çalıştırmada başka katalogdan yazılmış kimlik tamam
+    kataloğu erken durdurmaz; boşluk kalmaz."""
+    two.run()
+    only_b = articles(9, 60, START - timedelta(minutes=2))
+    shared = articles(8, 1, START - timedelta(minutes=1))
+    two.binance.publish(B, *only_b)
+    two.binance.publish(A, *shared)
+    two.binance.publish(B, *shared)
+    two.hook = lambda index, url: Fetched(error="http_503") if index == 2 else None  # B p1
+    assert two.run() is ArchiveOutcome.FAILED  # A wrote the shared id, B never saw it
+    assert ids(shared)[0] in two.archived()
+    two.hook = None
+    assert two.run() is ArchiveOutcome.COMPLETE
+    assert set(ids(only_b)) <= set(two.archived())
+    assert two.pages_of(B) == [1, 2]
+    assert two.lines[2].startswith("arşiv katalog=Delisting yeni=60 tekrar=")
+    assert two.run() is ArchiveOutcome.COMPLETE  # B now stops at its own record
+    assert two.pages_of(B) == [1]
+
+
 def test_interrupted_refresh_resumes_to_the_end(two: Harness) -> None:
     """Plan A-1: tamam katalogun yeniden okuması yarıda kalırsa katalog eksik olur ve sonraki
     çalıştırma o sayfadan sona kadar okur; yeni duyuru kaybolmaz."""

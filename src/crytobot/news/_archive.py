@@ -4,8 +4,9 @@ Kararlar burada; gerçek etkiler (UTC saat, monoton saat, bekleme, durdurma, get
 yazıcısı) `ArchiveParts` ile gelir. Önce keşif (`pageSize=1`): kataloglar ve bildirdikleri
 toplamlar yanıttan okunur, ayarda ya da kodda katalog listesi yoktur (G-7). Sonra katalog katalog,
 en yeniden en eskiye 50'şerlik sayfalar. Tamamlanmamış katalog kayıtlı sıradaki sayfadan sürer
-(R-4); tamam katalog 1. sayfadan okunur ve arşivde olup *bu çalıştırmada yazılmamış* bir kimliğe
-ulaşınca, o sayfanın kalan yenileri yazıldıktan sonra bırakılır (plan Risk 7). 50'den az duyurulu
+(R-4); tamam katalog 1. sayfadan okunur ve arşive *bu katalogla* yazılmış, *bu çalıştırmada
+yazılmamış* bir kimliğe ulaşınca, o sayfanın kalan yenileri yazıldıktan sonra bırakılır (plan Risk
+7, A-3). 50'den az duyurulu
 ya da boş sayfa kataloğun sonudur.
 
 Aynı anda tek istek; bir yanıtın bitişinden sonrakinin başlangıcına en az `request_gap_s` saniye,
@@ -151,8 +152,11 @@ class _Run:
             items = [None if raw is None else prepare_archive(raw, at) for raw in articles]
             valid = [item for item in items if item is not None]
             stored = self.store.existing([item.article_id for item in valid])
+            # only a record this catalog wrote in an earlier run stops it (plan A-3)
             known = any(
-                item.article_id not in self.written for item in valid if item.article_id in stored
+                stored.get(item.article_id) == state.catalog_id
+                and item.article_id not in self.written
+                for item in valid
             )
             finished = len(articles) < PAGE_SIZE or (refresh and known)
             state = replace(

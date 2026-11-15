@@ -131,7 +131,9 @@ def test_state_round_trip_and_discovery_unlists(store: ArchiveStore) -> None:
 def test_existing_ids(store: ArchiveStore) -> None:
     store.write_page(1, "A", [item(str(n)) for n in range(1200)], state())
     asked = [str(n) for n in range(1100, 1300)]
-    assert store.existing(asked) == {str(n) for n in range(1100, 1200)}
+    store.write_page(2, "B", [item("1150"), item("5000")], state(2, "B"))
+    expected = {str(n): 1 for n in range(1100, 1200)}
+    assert store.existing([*asked, "5000"]) == {**expected, "5000": 2}
 
 
 def test_unopenable_and_foreign_format(tmp_path: Path) -> None:
