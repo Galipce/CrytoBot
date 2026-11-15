@@ -75,7 +75,8 @@ source_modules = ["crytobot.analysis"]
 forbidden_modules = [
     "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.strategy",
     "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest", "crytobot.control",
-    "crytobot.reporting", "crytobot.app", "crytobot.persistence", "crytobot.dashboard",    "crytobot.calibration",
+    "crytobot.reporting", "crytobot.app", "crytobot.persistence", "crytobot.dashboard",
+    "crytobot.calibration",  # spec 0045
 ]
 allow_indirect_imports = true
 
