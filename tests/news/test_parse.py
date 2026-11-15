@@ -40,6 +40,37 @@ def test_recorded_binance_sample() -> None:
     assert items[0].text == ""
 
 
+def test_atom_xhtml_content_kept_in_order_with_markup() -> None:
+    """Review round 1 F-1: RFC 4287 `type="xhtml"` içerik belge sırasıyla, işaretlemesiyle."""
+    body = (
+        b'<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>x</id><title>t</title>'
+        b'<content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml">'
+        b"Fiyat <b>yuzde 5</b> artti.</div></content></entry></feed>"
+    )
+    assert parse_feed(body)[0].text == "<div>Fiyat <b>yuzde 5</b> artti.</div>"
+
+
+def test_rss_inline_elements_kept_escaped_text_stays_escaped() -> None:
+    body = (
+        b'<rss version="2.0"><channel><item><guid>a</guid><title>t</title><description>'
+        b'Fiyat <b>x</b> &amp; y <a href="https://e.org/?a=1&amp;b=2">l</a></description>'
+        b"</item></channel></rss>"
+    )
+    assert parse_feed(body)[0].text == (
+        'Fiyat <b>x</b> &amp; y <a href="https://e.org/?a=1&amp;b=2">l</a>'
+    )
+
+
+def test_text_without_child_elements_unchanged() -> None:
+    """CDATA ve kaçırılmış HTML eskisi gibi: metin olduğu gibi, yeniden kaçırılmaz."""
+    body = (
+        b'<rss version="2.0"><channel><item><guid>a</guid><title>A &amp; B</title>'
+        b"<description><![CDATA[<p>x & y</p>]]></description></item></channel></rss>"
+    )
+    item = parse_feed(body)[0]
+    assert (item.title, item.text) == ("A & B", "<p>x & y</p>")
+
+
 @pytest.mark.parametrize(
     "value",
     ["Sun, 15 Nov 2026 02:50:57 -0000", "15/11/2026", "", "Sun, 15 Nov 2026 02:50:57"],

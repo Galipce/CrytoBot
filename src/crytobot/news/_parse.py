@@ -2,10 +2,14 @@
 
 RSS 2.0 ve Atom `xml.parsers.expat` ile okunur: iç ya da dış her varlık bildirimi ve dış varlık
 başvurusu `xml_entity`, bozuk XML `bad_xml`, RSS ya da Atom olmayan belge `bad_schema`. Varlıksız
-düz DOCTYPE kabul edilir. Binance duyuru listesi katı şemayla okunur: sapma `bad_schema`, bozuk
-JSON ya da UTF-8 `bad_json`. İçerik hiçbir biçimde çalıştırılmaz; bağlantılar izlenmez.
+düz DOCTYPE kabul edilir. Öğe çocuğu olmayan alanın metni olduğu gibi alınır (CDATA ya da
+kaçırılmış HTML); karışık içerik (Atom `type="xhtml"`, satır içi öğeli açıklama) belge sırasıyla,
+işaretlemesiyle yeniden yazılır (review round 1 F-1). Binance duyuru listesi katı şemayla okunur:
+sapma `bad_schema`, bozuk JSON ya da UTF-8 `bad_json`. İçerik hiçbir biçimde çalıştırılmaz;
+bağlantılar izlenmez.
 """
 
+import html
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -29,16 +33,28 @@ class ParseError(Exception):
         self.name = name
 
 
+def _local(name: str) -> str:
+    return name.rsplit(_SEP, 1)[-1]
+
+
 @dataclass
 class _Node:
+    """Öğe: `content` metin parçaları ve çocuk öğeler, belge sırasıyla."""
+
     name: str
     attrs: dict[str, str]
-    parts: list[str] = field(default_factory=list)
-    children: list["_Node"] = field(default_factory=list)
+    content: list["str | _Node"] = field(default_factory=list)
+
+    @property
+    def children(self) -> list["_Node"]:
+        return [each for each in self.content if isinstance(each, _Node)]
 
     @property
     def text(self) -> str:
-        return "".join(self.parts) + "".join(child.text for child in self.children)
+        """Çocuğu yoksa metin olduğu gibi; karışık içerik işaretlemesiyle (F-1)."""
+        if not self.children:
+            return "".join(each for each in self.content if isinstance(each, str))
+        return "".join(_markup(each) for each in self.content)
 
     def child(self, name: str) -> "_Node | None":
         return next((each for each in self.children if each.name == name), None)
@@ -46,6 +62,16 @@ class _Node:
     def child_text(self, name: str) -> str | None:
         node = self.child(name)
         return None if node is None else node.text
+
+
+def _markup(part: "str | _Node") -> str:
+    if isinstance(part, str):
+        return html.escape(part, quote=False)
+    attrs = "".join(
+        f' {_local(key)}="{html.escape(value, quote=True)}"' for key, value in part.attrs.items()
+    )
+    inner = "".join(_markup(each) for each in part.content)
+    return f"<{_local(part.name)}{attrs}>{inner}</{_local(part.name)}>"
 
 
 def _refuse_entity(*_args: object) -> None:
@@ -60,14 +86,14 @@ def _tree(body: bytes) -> _Node:
 
     def start(name: str, attrs: dict[str, str]) -> None:
         node = _Node(name, attrs)
-        stack[-1].children.append(node)
+        stack[-1].content.append(node)
         stack.append(node)
 
     def end(_name: str) -> None:
         stack.pop()
 
     def chars(data: str) -> None:
-        stack[-1].parts.append(data)
+        stack[-1].content.append(data)
 
     parser.StartElementHandler = start
     parser.EndElementHandler = end
@@ -170,7 +196,10 @@ def _atom(feed: _Node) -> list[RawItem]:
 
 def parse_feed(body: bytes) -> list[RawItem]:
     """RSS 2.0 ya da Atom akışının öğeleri, belge sırasıyla."""
-    root = _tree(body)
+    return _feed(_tree(body))
+
+
+def _feed(root: _Node) -> list[RawItem]:
     if root.name == "rss":
         channel = root.child("channel")
         if channel is None:
