@@ -449,6 +449,24 @@ def test_invalid_article_on_full_page_does_not_end_catalog(tmp_path: Path) -> No
     assert harness.lines[1].startswith("arşiv katalog=Listing yeni=119 tekrar=0 geçersiz=1 ")
 
 
+def test_page_shift_during_refresh_does_not_stop_early(two: Harness) -> None:
+    """VERIFY F-2: yeniden okumada başa eklenen duyurular bu çalıştırmada yazılmış kimlikleri
+    sonraki sayfaya iter; onlar durma nedeni değildir, yeni duyuru kaybolmaz."""
+    two.run()
+    new = articles(5, 160, START - timedelta(minutes=1))
+    two.binance.publish(A, *new)
+
+    def publish_before_second_page(index: int, url: str) -> Fetched | None:
+        if index == 2:  # discovery, A p1, A p2
+            two.binance.publish(A, *articles(6, 5, START))
+        return None
+
+    two.hook = publish_before_second_page
+    assert two.run() is ArchiveOutcome.COMPLETE
+    assert set(ids(new)) <= set(two.archived())
+    assert two.pages_of(A) == [1, 2, 3, 4]
+
+
 def test_interrupted_refresh_resumes_to_the_end(two: Harness) -> None:
     """Plan A-1: tamam katalogun yeniden okuması yarıda kalırsa katalog eksik olur ve sonraki
     çalıştırma o sayfadan sona kadar okur; yeni duyuru kaybolmaz."""
