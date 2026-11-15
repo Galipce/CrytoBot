@@ -52,6 +52,7 @@ from crytobot.calibration import (
     SettingsProblem,
     SettingsSet,
     final_stage,
+    fingerprint,
     read_settings,
     records_text,
     report_text,
@@ -359,7 +360,7 @@ def _progress(parts: CalibrationParts) -> Callable[[str], None]:
 def _write(parts: CalibrationParts, label: str, path: str, text: str) -> None:
     if not parts.write_file(path, text):
         raise _Halt(CalibrationOutcome.NOT_WRITTEN, f"{label} yazılamadı: {path}")
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    digest = fingerprint(text)
     _say(parts, f"{label} parmak izi: {digest} ({path})")
 
 
@@ -386,7 +387,7 @@ def _stage_one(
     digests = tuple((fact.interval, fact.sha256) for fact in inputs.facts)
     settings = settings_text(measured.choices, generated_at, config.costs, digests)
     _write(parts, "ayar seti", config.settings_path, settings)
-    sha = hashlib.sha256(settings.encode("utf-8")).hexdigest()
+    sha = fingerprint(settings)
     facts = ReportFacts(False, generated_at, config.costs, inputs.facts, inputs.gaps, sha)
     _publish(parts, measured, facts, config.report_path, config.records_path)
     return f"tamam: ayar seti {config.settings_path}"
@@ -401,6 +402,7 @@ def _approved_settings(
     raw = parts.read_bytes(config.settings_path)
     if raw is None:
         raise _refused(f"ayar seti dosyası yok: {config.settings_path}")
+    # the approval covers the file's bytes, also when they are not UTF-8 (then: "bozuk")
     if hashlib.sha256(raw).hexdigest() != approval.settings_sha256:
         raise _refused("ayar seti parmak izi onayla tutmuyor (calibration.settings_sha256)")
     try:
