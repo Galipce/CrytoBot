@@ -14,6 +14,7 @@ VIOLATIONS = {
     "R-3f": {"src/crytobot/backtest/_probe.py": "import crytobot.market_data\n"},
     "R-3g": {"src/crytobot/dashboard/_probe.py": "import crytobot.control\n"},
     "R-3h": {"src/crytobot/calibration/_probe.py": "import crytobot.market_data\n"},  # spec 0045
+    "R-3i": {"src/crytobot/news/_probe.py": "import crytobot.market_data\n"},  # spec 0046
     "R-3d": {
         "src/crytobot/risk/limits.py": '"""Risk modülünün iç alt modülü."""\n',
         "src/crytobot/reporting/_probe.py": "from crytobot.risk import limits\n",
@@ -39,7 +40,7 @@ def test_clean_tree_passes(project: Project) -> None:
     result = project.run_step("boundaries")
 
     assert result.returncode == 0, result.stdout
-    assert "8 kept, 0 broken" in result.stdout
+    assert "9 kept, 0 broken" in result.stdout
 
 
 def test_module_importing_its_own_submodule_passes(project: Project) -> None:

@@ -1,0 +1,31 @@
+# CrytoBot haber toplama ayarı örneği (spec 0046). Kopyala: crytobot-news.toml (çalışma dizininde,
+# git'e girmez). Botun ayarından (crytobot.toml) ayrıdır: bot bu dosyayı okumaz.
+# `python -m crytobot news` durdurulana kadar turlar atar; `python -m crytobot news status` ağa
+# çıkmadan durumu gösterir. Telegram bildirimi crytobot.toml'daki [reporting.telegram] ayarıyladır.
+# Haber metni güvenilmeyen girdidir: yalnız saklanır, çalıştırılmaz; bağlantılar izlenmez.
+
+[news]
+store_path = "crytobot-news.db"   # haber kaydı (kendi SQLite deposu); bot deposu olamaz
+log_path = "crytobot-news.log"    # kayıt dosyası; bot kaydından ayrı, yalnız sona eklenir, UTF-8
+interval_minutes = 15             # iki turun başlangıcı arası, dakika; en az 5
+max_response_kb = 2048            # bir kaynağın yanıtı en çok bu kadar KB (1 KB = 1024 bayt)
+source_alert_hours = 6            # bu süreden uzun aralıksız hata veren kaynak için tek bildirim
+
+# Kaynaklar: `type` "binance-duyuru" (JSON) ya da "rss" (RSS 2.0 ve Atom); yalnız https.
+# `enabled = false` olan kaynak sorgulanmaz. Kaynak çıkarılınca eski kayıtları kalır.
+# Binance duyuru ucu belgelenmiş değildir ve değişebilir: değişirse kaynak hatası olur.
+[[news.sources]]
+name = "binance-duyuru"
+type = "binance-duyuru"
+url = "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=20"
+
+[[news.sources]]
+name = "coindesk"
+type = "rss"
+url = "https://www.coindesk.com/arc/outboundfeeds/rss"
+
+[[news.sources]]
+name = "cointelegraph"
+type = "rss"
+url = "https://cointelegraph.com/rss"
+enabled = true

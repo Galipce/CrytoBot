@@ -122,6 +122,19 @@ forbidden_modules = [
 ]
 allow_indirect_imports = true
 
+# Spec 0046 (plan Risk 1, A-1): news collection runs outside the trading loop; the entry point
+# wires its real effects, `app` does not mediate.
+[[tool.importlinter.contracts]]
+name = "R-3i: news imports no trading module"
+type = "forbidden"
+source_modules = ["crytobot.news"]
+forbidden_modules = [
+    "crytobot.app", "crytobot.persistence", "crytobot.execution", "crytobot.portfolio",
+    "crytobot.risk", "crytobot.strategy", "crytobot.backtest", "crytobot.control",
+    "crytobot.dashboard", "crytobot.market_data",
+]
+allow_indirect_imports = true
+
 [[tool.importlinter.contracts]]
 name = "R-3d: no module imports another module's internal submodules"
 type = "no_foreign_submodule_imports"
