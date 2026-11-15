@@ -150,3 +150,20 @@ def test_binance_schema_strict(changes: dict[str, object]) -> None:
 def test_binance_missing_or_unreadable_release_is_unknown() -> None:
     assert parse_binance(_article(releaseDate=None))[0].published is None
     assert parse_binance(_article(releaseDate=10**30))[0].published is None
+
+
+def test_deep_nesting_is_bad_xml_not_a_crash() -> None:
+    """Review round 1 F-2: ~1000 seviye iç içe öğe toplayıcıyı durdurmaz, kaynak hatasıdır."""
+    deep = b"<a>" * 1200 + b"x" + b"</a>" * 1200
+    body = b'<rss version="2.0"><channel><item><guid>a</guid><title>' + deep
+    body += b"</title></item></channel></rss>"
+    with pytest.raises(ParseError) as error:
+        parse_feed(body)
+    assert error.value.name == "bad_xml"
+
+
+def test_rss_time_out_of_range_is_unknown() -> None:
+    """Review round 1 F-2: 9999 yılı batı ofsetiyle UTC'ye çevrilemez: yayın anı bilinmiyor."""
+    item = "<item><guid>a</guid><title>t</title><pubDate>Fri, 31 Dec 9999 23:59:59 -1200</pubDate>"
+    body = f'<rss version="2.0"><channel>{item}</item></channel></rss>'
+    assert parse_feed(body.encode())[0].published is None

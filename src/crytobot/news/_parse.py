@@ -121,7 +121,10 @@ def _rfc822(value: str | None) -> datetime | None:
         return None
     if moment.tzinfo is None:  # "-0000" and offsetless times are unreadable (plan Risk 8)
         return None
-    return moment.astimezone(UTC)
+    try:
+        return moment.astimezone(UTC)
+    except OverflowError:  # review round 1 F-2: year 9999 with a western offset
+        return None
 
 
 def _iso(value: str | None) -> datetime | None:
@@ -195,8 +198,12 @@ def _atom(feed: _Node) -> list[RawItem]:
 
 
 def parse_feed(body: bytes) -> list[RawItem]:
-    """RSS 2.0 ya da Atom akışının öğeleri, belge sırasıyla."""
-    return _feed(_tree(body))
+    """RSS 2.0 ya da Atom akışının öğeleri, belge sırasıyla. Çok derin iç içe öğe `bad_xml`'dir:
+    tek bir öğe toplayıcıyı durdurmaz (review round 1 F-2)."""
+    try:
+        return _feed(_tree(body))
+    except RecursionError:
+        raise ParseError("bad_xml") from None
 
 
 def _feed(root: _Node) -> list[RawItem]:
