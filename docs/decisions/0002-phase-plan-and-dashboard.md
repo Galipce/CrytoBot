@@ -1,6 +1,6 @@
 # ADR 0002 — Faz planı ve salt okunur pano
 
-- Status: Accepted
+- Status: Superseded by ADR-0003 (faz sırası; geri kalanı ADR 0003'te aynen geçerli)
 - Date: 2026-11-06
 
 ## Context
