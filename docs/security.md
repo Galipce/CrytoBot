@@ -22,6 +22,12 @@
   yalnızca şemalı bir skor (+ kaynak alıntısı) olabilir; şema dışı çıktı yok sayılır. LLM çıktısı hiçbir
   aksiyonu (emir, limit, mod, beyaz liste) doğrudan tetikleyemez.
 - Dış kaynaklardan indirilen dokümanlar boyut ve tür sınırlıdır; çalıştırılmaz, yalnızca metin olarak işlenir.
+- **Haber kaynakları (spec 0046):** yalnız `https`; en çok 3 yönlendirme, `http`'ye düşüş reddedilir; yanıt
+  `max_response_kb` ve türle sınırlı, kaynak başına turda toplam 30 s (ad çözümleme dahil, daemon iş parçacığı); XML
+  varlık bildirimi ve dış varlık reddedilir (`xml_entity`), Binance JSON'u katı şemayla; haber bağlantıları
+  izlenmez; metin 20 KB'a kesilip olduğu gibi saklanır, çalıştırılmaz. İstekler kişisel bilgi taşımayan genel
+  istemci adıyla gider. Hata yalnız adıyla kaydedilir: URL ve istisna metni (sorgu dizgesindeki sır) satıra ve
+  kayda girmez.
 - LLM harcaması günlük limitlidir (config); limit aşılınca LLM sinyali devre dışı kalır, bot teknik sinyalle devam eder.
 
 ## AuthN / AuthZ

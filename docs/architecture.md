@@ -16,7 +16,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | Module | Single responsibility | Owns |
 |---|---|---|
 | `market_data` | Mum, fiyat, emir defteri verisini borsadan çekmek ve saklamak | OHLCV geçmişi, ticker anlık görüntüleri, geçmiş veri dosyası (backtest girdisi, spec 0023); dönem boşlukları ve dönemde mum denetimi — saf, indirme özetinin `boşluk=` kuralıyla (spec 0044) |
-| `news` | Haber/duyuru kaynaklarını takip edip haber skoru üretmek | Haber kayıtları, haber skorları |
+| `news` | Haber/duyuru kaynaklarını takip edip haber skoru üretmek; spec 0046: ayardaki kaynaklardan (Binance duyuruları, RSS 2.0, Atom) ileriye dönük toplama — tur ve döngü kararları, HTTPS getirme sınırları, ayrıştırma, kesinti bildirimi kararı | Haber kaydı (kendi SQLite deposu: yalnız eklenen haberler — kaynak, kimlik ya da bağlantı, yayın anı, ilk görme anı — ve kaynak durumu), haber ayarı (`crytobot-news.toml`), haber skorları |
 | `research` | Whitepaper/proje dokümanlarını okuyup kaynak alıntılı araştırma skoru üretmek | Doküman önbelleği, araştırma skorları |
 | `llm` | Claude API'ye tek erişim noktası: şema doğrulama, harcama limiti | LLM çağrı günlüğü, günlük harcama |
 | `analysis` | Teknik analiz ve indikatör hesapları (saf fonksiyonlar) | — (durumsuz); spec 0045: stochastic, ADX/DI, Supertrend, Donchian |
@@ -32,7 +32,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | `dashboard` | Localhost'ta salt-okunur web panosu sunmak (HTML ve /api/status) | Pano şablonu, sunucu yaşam döngüsü, host doğrulama |
 | `app` | Bileşim kökü (composition root): modülleri bağlar, ayarları denetler, zamanlayıcı/döngü | — (depo hazırlığı ve başlatma kapıları; gerçek etkiler enjekte edilir) |
 
-**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard`, spec 0022, 0023, 0025, 0030, 0031, 0045) bir modül
+**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news`, spec 0022, 0023, 0025, 0030, 0031, 0045, 0046) bir modül
 değildir, paket olmadığı için tabloda yer almaz. Karar içermez: ayar dosyasını (`crytobot.toml`) okur,
 gerçek saati, ≤1 s'lik beklemeyi, sinyalleri, tek süreç kilidini (`<depo>.lock`), konsol ve kayıt
 dosyası yazıcısını ve piyasa okumasını `app`'e verir. Kararların, zamanlamanın ve depo kapılarının
@@ -56,6 +56,12 @@ verir. `app` veriyi denetler (aralık, sürüm 2 hacmi, çiftler, dönemlerde mu
 ölçümünü koşar ve çıktıları yazdırır; `calibrate --final` yalnız onaylı ayar setiyle (parmak izi,
 onaylayan, onay anı) koşar. Ağa çıkılmaz, kilit alınmaz, bot deposu, kayıt dosyası ve botun işlem
 davranışı değişmez.
+`news` (spec 0046) haber toplayıcısıdır ve `app` dışında koşar (işlem döngüsüyle hiçbir şey
+paylaşmaz): ayarı ayrı dosyadan (`crytobot-news.toml`) okunur; giriş noktası gerçek saati, ≤1 s'lik
+beklemeyi, sinyalleri, haber kaydının mutlak yolunun kilidini (bot kilidinden ayrı), konsol ve haberin
+kendi kayıt dosyasını, HTTPS getirmeyi ve `reporting`'in gönderimini `news`'e (`run_collection`)
+verir. Bot ayarından yalnız `[bot]` yolları (karşılaştırma için) ve `[reporting.telegram]` okunur;
+bot deposu açılmaz. `news status` ağa çıkmaz, kilit almaz.
 
 ## Communication rules
 - Modüller birbirini yalnızca **public arayüz** (`<module>/__init__.py` ile dışa açılanlar) üzerinden çağırır.
@@ -75,6 +81,9 @@ davranışı değişmez.
 - `analysis` hiçbir proje modülünü ve hiçbir I/O kütüphanesini import etmez (saf hesap).
 - `calibration` `analysis` dışında hiçbir proje modülünü import etmez; dosya, saat ve ağ kullanmaz. Yalnız `app` onu bağlar (spec 0045, R-3h).
 - `dashboard` hiçbir zaman `control` ve `execution`'ı import etmez (ADR 0002, spec 0031).
+- `news` ticaret modüllerini (`app`, `persistence`, `execution`, `portfolio`, `risk`, `strategy`, `backtest`,
+  `control`, `dashboard`, `market_data`) import etmez: haber toplama `app` dışında koşar, gerçek etkilerini giriş
+  noktası verir (spec 0046, R-3i).
 - `backtest` `app`'i ve `market_data`'yı import etmez: koşuyu `app` yapar, veri dosyasını giriş noktası okutur; `backtest` yalnız tur kayıtlarından metrik ve rapor üretir (spec 0025). `ccxt` kuralı onu da kapsar.
 - Hiçbir modül başka bir modülün iç alt modülünü (`<module>._*` / `<module>.internal`) import etmez.
 - Telegram kütüphanesi yalnızca `control` ve `reporting` tarafından import edilir.
