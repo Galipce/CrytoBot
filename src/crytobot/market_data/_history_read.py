@@ -14,6 +14,10 @@ Sonuç beş durumdan biridir:
 Önce dosyanın bütün yapısı denetlenir, sonra mumların değerleri; dönem dışı mum denetimi bunun
 istisnasıdır, o çiftin değer denetiminden sonra yapılır. Boşluk güvenilmezlik değildir
 (spec 0025 R-6). İstisna fırlatmaz; `BaseException` geçer.
+
+Sürüm 1 ve 2 okunur (spec 0045 plan Risk 1). Sürüm 2'nin mum satırında 7. sütun hacimdir
+(düz, negatif olmayan sayı; değilse güvenilmeyen veri, `bad_volume`); `HistoryPair.volumes`
+sürüm 1'de `None`dır. `MarketCandle` değişmez: backtest hacmi görmez.
 """
 
 import json
@@ -26,12 +30,15 @@ from pathlib import Path
 from typing import Final
 
 from crytobot.market_data._candles import parse_rows
-from crytobot.market_data._history_file import FORMAT, VERSION
+from crytobot.market_data._history_file import FORMAT
 from crytobot.market_data._numbers import exact_decimal
 from crytobot.market_data._types import CANDLE_INTERVALS, MarketCandle, MarketRules
 
 _INTERVALS_BY_TEXT: Final = {text: interval for interval, text in CANDLE_INTERVALS.items()}
-_CANDLE_COLUMNS: Final = 6
+# columns after the pair, by format version: open ms, four prices (and the volume in version 2)
+_COLUMNS: Final = {1: 6, 2: 7}
+_VOLUME: Final = 5  # in a candle row without its pair: open ms, open, high, low, close, volume
+BAD_VOLUME: Final = "bad_volume"
 
 
 class HistoryReadProblem(Enum):
@@ -46,12 +53,14 @@ class HistoryReadProblem(Enum):
 
 @dataclass(frozen=True, slots=True)
 class HistoryPair:
-    """Bir çiftin dosyadaki kuralları, fiyat adımı ve mumları (açılış sırasıyla)."""
+    """Bir çiftin dosyadaki kuralları, fiyat adımı ve mumları (açılış sırasıyla). `volumes`
+    mumlarla aynı sırada hacimdir; sürüm 1 dosyasında `None`."""
 
     pair: str
     tick: Decimal
     rules: MarketRules
     candles: tuple[MarketCandle, ...]
+    volumes: tuple[Decimal, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +110,7 @@ class _Header:
     warmup_start: datetime
     downloaded_at: datetime
     pairs: tuple[tuple[str, Decimal, MarketRules], ...]
+    version: int
 
 
 def _moment(value: object) -> datetime:
@@ -139,7 +149,8 @@ def _pair_header(item: object) -> tuple[str, Decimal, MarketRules]:
 def _header(value: object) -> _Header:
     if not isinstance(value, Mapping):
         raise _corrupt("header")
-    if value.get("format") != FORMAT or value.get("version") != VERSION:
+    version = value.get("version")
+    if value.get("format") != FORMAT or type(version) is not int or version not in _COLUMNS:
         raise _corrupt("header")
     exchange = value.get("exchange")
     interval = _INTERVALS_BY_TEXT.get(value.get("candle_interval"))  # type: ignore[arg-type]
@@ -156,7 +167,7 @@ def _header(value: object) -> _Header:
     pairs = tuple(_pair_header(item) for item in items)
     if len({pair for pair, _, _ in pairs}) != len(pairs):
         raise _corrupt("header")
-    return _Header(exchange, interval, start, end, warmup_start, downloaded_at, pairs)
+    return _Header(exchange, interval, start, end, warmup_start, downloaded_at, pairs, version)
 
 
 def _parse_line(text: str) -> object:
@@ -197,7 +208,7 @@ def _candle_rows(lines: list[str], header: _Header) -> dict[str, list[list[objec
                 raise _corrupt("after_complete")
             _check_complete(value, rows)
             return rows
-        if not (isinstance(value, list) and len(value) == _CANDLE_COLUMNS):
+        if not (isinstance(value, list) and len(value) == _COLUMNS[header.version]):
             raise _corrupt("candle_line")
         pair, open_ms = value[0], value[1]
         if type(pair) is not str or pair not in rows or type(open_ms) is not int:
@@ -208,6 +219,18 @@ def _candle_rows(lines: list[str], header: _Header) -> dict[str, list[list[objec
         position = current
         rows[pair].append(value[1:])
     raise _Refused(HistoryReadProblem.INCOMPLETE, "complete")
+
+
+def _volumes(pair: str, found: list[list[object]], header: _Header) -> tuple[Decimal, ...] | None:
+    if header.version == 1:
+        return None
+    volumes: list[Decimal] = []
+    for row in found:
+        volume = exact_decimal(row[_VOLUME])
+        if volume is None:
+            raise _Refused(HistoryReadProblem.UNTRUSTED, BAD_VOLUME, pair)
+        volumes.append(volume)
+    return tuple(volumes)
 
 
 def _candles(pair: str, found: list[list[object]], header: _Header) -> tuple[MarketCandle, ...]:
@@ -229,7 +252,13 @@ def _data(lines: list[str]) -> HistoryData:
     header = _header(_parse_line(lines[0]))
     rows = _candle_rows(lines[1:], header)
     pairs = tuple(
-        HistoryPair(pair, tick, rules, _candles(pair, rows[pair], header))
+        HistoryPair(
+            pair,
+            tick,
+            rules,
+            _candles(pair, rows[pair], header),
+            _volumes(pair, rows[pair], header),
+        )
         for pair, tick, rules in header.pairs
     )
     return HistoryData(

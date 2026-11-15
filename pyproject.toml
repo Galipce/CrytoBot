@@ -48,7 +48,10 @@ contract_types = ["no_foreign_submodule_imports: tools.import_contracts.NoForeig
 [[tool.importlinter.contracts]]
 name = "R-3a: strategy, analysis, news, research, llm never import execution"
 type = "forbidden"
-source_modules = ["crytobot.strategy", "crytobot.analysis", "crytobot.news", "crytobot.research", "crytobot.llm"]
+source_modules = [
+    "crytobot.strategy", "crytobot.analysis", "crytobot.news", "crytobot.research", "crytobot.llm",
+    "crytobot.calibration",  # spec 0045
+]
 forbidden_modules = ["crytobot.execution"]
 allow_indirect_imports = true
 
@@ -58,6 +61,7 @@ type = "forbidden"
 source_modules = [
     "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.analysis",
     "crytobot.strategy", "crytobot.portfolio", "crytobot.control", "crytobot.reporting", "crytobot.dashboard",
+    "crytobot.calibration",  # spec 0045
     # the entry point only wires real effects: the paper simulator comes from app (spec 0022)
     "crytobot.__main__",
 ]
@@ -71,7 +75,7 @@ source_modules = ["crytobot.analysis"]
 forbidden_modules = [
     "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.strategy",
     "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest", "crytobot.control",
-    "crytobot.reporting", "crytobot.app", "crytobot.persistence", "crytobot.dashboard",
+    "crytobot.reporting", "crytobot.app", "crytobot.persistence", "crytobot.dashboard",    "crytobot.calibration",
 ]
 allow_indirect_imports = true
 
@@ -81,7 +85,7 @@ type = "forbidden"
 source_modules = [
     "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.analysis",
     "crytobot.strategy", "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest",
-    "crytobot.control", "crytobot.reporting", "crytobot.dashboard",
+    "crytobot.control", "crytobot.reporting", "crytobot.dashboard", "crytobot.calibration",
     # the store is reached only through app's gates (spec 0022)
     "crytobot.__main__",
 ]
@@ -102,6 +106,19 @@ name = "R-3g: dashboard never imports control or execution"
 type = "forbidden"
 source_modules = ["crytobot.dashboard"]
 forbidden_modules = ["crytobot.control", "crytobot.execution"]
+allow_indirect_imports = true
+
+# Spec 0045 (plan Risk 2): the calibration is a pure leaf on top of analysis; data, files and the
+# clock are wired in app and the entry point.
+[[tool.importlinter.contracts]]
+name = "R-3h: calibration imports no project module but analysis"
+type = "forbidden"
+source_modules = ["crytobot.calibration"]
+forbidden_modules = [
+    "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.strategy",
+    "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest", "crytobot.control",
+    "crytobot.reporting", "crytobot.app", "crytobot.persistence", "crytobot.dashboard",
+]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]

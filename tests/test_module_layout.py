@@ -23,7 +23,7 @@ def package_modules() -> set[str]:
 
 def test_modules_match_architecture_table() -> None:
     documented = documented_modules()
-    assert len(documented) == 15
+    assert len(documented) == 16
     assert package_modules() == documented
 
 

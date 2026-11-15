@@ -174,8 +174,8 @@ def test_file_is_utf8_json_lines_with_header_candles_and_completion(tmp_path: Pa
     lines = raw.decode("utf-8").splitlines()
     assert all(json.loads(line) is not None for line in lines)
     data = read_file(path)
-    assert data.header["format"] == "crytobot-history" and data.header["version"] == 1
-    assert data.candles[0][0] == BTC and len(data.candles[0]) == 6
+    assert data.header["format"] == "crytobot-history" and data.header["version"] == 2
+    assert data.candles[0][0] == BTC and len(data.candles[0]) == 7
     assert data.complete == {"complete": True, "counts": {BTC: len(data.candles)}}
 
 

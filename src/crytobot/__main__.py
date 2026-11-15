@@ -1,4 +1,5 @@
-"""Giriş noktası: `python -m crytobot prepare|start|download|backtest` (spec 0022, 0023, 0025).
+"""Giriş noktası: `python -m crytobot prepare|start|download|backtest|calibrate` (spec 0022, 0023,
+0025, 0045).
 
 Karar içermez: kararların hepsi `app`'tedir. Burada yalnız gerçek etkiler bağlanır: ayar dosyası
 (`tomllib`, çalışma dizinindeki `crytobot.toml`), gerçek UTC saati, ≤1 s'lik parçalarla bekleme,
@@ -17,12 +18,19 @@ satırları zaman damgası taşımaz. Spec 0042: `backtest` yalnız örneklem i�
 orada hesaplanır; aynı çıkış kodları. Spec 0043 R-5 (plan Risk 1): `--final` `[backtest]
 final_data`'nın iki aralığını (1h, 4h) ve her aralıkta R-3 ızgarasını tek raporda sınar.
 
+`calibrate` (spec 0045) aynı ayar dosyasının `[calibration]` bölümüne göre beş veri dosyasıyla
+indikatör kalibrasyonunun 1. aşamasını (ayarlama, çapraz sınama → ayar seti, rapor, kayıtlar);
+`calibrate --final` onaylı ayar setiyle son ölçümü koşar. Ağa çıkılmaz, kilit alınmaz, bot deposu,
+kayıt dosyası ve çalışan ayar değişmez; yalnız ayardaki çıktı yolları yazılır (üzerine yazılmaz).
+Yollar çözülmüş hâlleriyle de birbirinden farklı olmalıdır. Çıkış kodları backtest'inkiyle aynıdır.
+
 Çıkış kodları: 0 temiz durma, hazırlık, indirme ya da backtest tamam, 1 başlatma, hazırlık, indirme
 ya da backtest reddi (ayarlar, veri dosyası, rapor dosyası var), 2 okuma reddiyle durma, 3 kayıt
 dosyası yazılamıyor, 4 indirme durdu, 5 backtest durdu, 6 backtest tamam ama rapor dosyası
 yazılamadı (rapor konsolda), 130 zorla durma.
 """
 
+import hashlib
 import signal
 import sys
 import tempfile
@@ -41,6 +49,9 @@ from crytobot.app import (
     BacktestOutcome,
     BacktestParts,
     BotConfig,
+    CalibrationConfig,
+    CalibrationOutcome,
+    CalibrationParts,
     DownloadConfig,
     DownloadParts,
     ExitReason,
@@ -60,6 +71,7 @@ from crytobot.app import (
     get_dashboard_status,
     line,
     load_backtest_config,
+    load_calibration_config,
     load_config,
     load_download_config,
     load_stage_config,
@@ -71,6 +83,8 @@ from crytobot.app import (
     request_stop,
     resume_operations,
     run_backtest,
+    run_calibration,
+    run_calibration_final,
     run_download,
     run_evaluation,
     run_loop,
@@ -104,7 +118,7 @@ from crytobot.reporting import ReportingService, load_reporting_config
 CONFIG_FILE = "crytobot.toml"
 USAGE = (
     "kullanım: python -m crytobot "
-    "prepare|start|download|backtest|status|kill-switch|resume|stop|dashboard"
+    "prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard"
     " [--live] [--trial] [--final]"
 )
 COMMANDS = (
@@ -116,6 +130,8 @@ COMMANDS = (
     ["download"],
     ["backtest"],
     ["backtest", "--final"],
+    ["calibrate"],
+    ["calibrate", "--final"],
     ["status"],
     ["kill-switch"],
     ["kill-switch", "on"],
@@ -144,7 +160,14 @@ _BACKTEST_EXIT_CODES = {
     BacktestOutcome.STOPPED: EXIT_BACKTEST_STOPPED,
     BacktestOutcome.REPORT_NOT_WRITTEN: EXIT_REPORT_NOT_WRITTEN,
 }
+_CALIBRATION_EXIT_CODES = {
+    CalibrationOutcome.COMPLETED: EXIT_OK,
+    CalibrationOutcome.REFUSED: EXIT_REFUSED,
+    CalibrationOutcome.STOPPED: EXIT_BACKTEST_STOPPED,
+    CalibrationOutcome.NOT_WRITTEN: EXIT_REPORT_NOT_WRITTEN,
+}
 _LOG_FAILED = "kayıt dosyası yazılamıyor: bot durdu"
+_DIGEST_CHUNK = 1 << 20
 _PIECE_S = 1.0
 
 Clock = Callable[[], datetime]
@@ -444,6 +467,70 @@ def _backtest(
     return _BACKTEST_EXIT_CODES[exit_.outcome]
 
 
+def file_digest(path: str) -> str | None:
+    """Dosyanın baytlarının SHA-256'sı, parça parça; okunamazsa `None`."""
+    digest = hashlib.sha256()
+    try:
+        with open(path, "rb") as file:
+            while chunk := file.read(_DIGEST_CHUNK):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
+
+
+def file_bytes(path: str) -> bytes | None:
+    try:
+        return Path(path).read_bytes()
+    except OSError:
+        return None
+
+
+def _calibration_config(path: Path, output: Output) -> CalibrationConfig | None:
+    """Spec 0045: ayarlar hiçbir dosya okunmadan önce; yollar çözülmüş hâlleriyle de farklı."""
+    document = _load_toml(path)
+    if isinstance(document, str):
+        output.say(f"kalibrasyon reddedildi: {document}")
+        return None
+    result = load_calibration_config(document)
+    config = result.config
+    if config is None:
+        output.say(f"kalibrasyon reddedildi: {result.message}")
+        return None
+    paths = [
+        *(data for _, data in config.data),
+        config.report_path,
+        config.settings_path,
+        config.records_path,
+        config.final_report_path,
+        config.final_records_path,
+    ]
+    resolved = [Path(each).resolve() for each in paths]
+    if len(set(resolved)) != len(resolved) or path.resolve() in resolved:
+        output.say(
+            "kalibrasyon reddedildi: ayar geçersiz: calibration (aynı dosyayı adlandıran yol)"
+        )
+        return None
+    return config
+
+
+def _calibrate(
+    config_path: Path, output: Output, stop: StopRequest, clock: Clock, *, final: bool
+) -> int:
+    """Ağ yok, kilit yok; bot deposu ve kayıt dosyası açılmaz (spec 0045 R-11)."""
+    config = _calibration_config(config_path, output)
+    if config is None:
+        return EXIT_REFUSED
+    parts = CalibrationParts(
+        read_history, file_digest, file_bytes, report_exists, write_report, output.say, stop, clock
+    )
+    try:
+        exit_ = run_calibration_final(config, parts) if final else run_calibration(config, parts)
+    except ForcedStop:
+        return EXIT_FORCED
+    return _CALIBRATION_EXIT_CODES[exit_.outcome]
+
+
 def _prepare(
     config: BotConfig,
     output: Output,
@@ -648,6 +735,8 @@ def run(
         return _download(config_path, output, clock, stop, download)
     if argv[0] == "backtest":
         return _backtest(config_path, output, stop, clock, final="--final" in argv)
+    if argv[0] == "calibrate":
+        return _calibrate(config_path, output, stop, clock, final="--final" in argv)
     config = _config(config_path, output, clock)
     if config is None:
         return EXIT_REFUSED

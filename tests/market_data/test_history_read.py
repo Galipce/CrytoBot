@@ -83,6 +83,34 @@ def test_reads_the_downloaded_file(data_file: Path) -> None:
     assert btc.candles[0].open == Decimal("107.10000000")  # 7th row of the history, its text
 
 
+def test_reads_volumes_in_candle_order(data_file: Path) -> None:
+    """Spec 0045 plan Risk 1: sürüm 2 hacmi mumlarla aynı sırada taşır."""
+    rewrite(data_file, _candle(1, lambda row: [*row[:6], "0"]))
+    read = read_history(str(data_file))
+    assert read.data is not None
+    btc = read.data.pairs[0]
+    assert btc.volumes is not None and len(btc.volumes) == len(btc.candles)
+    assert btc.volumes[0] == Decimal(0)
+    assert btc.volumes[1] == Decimal("12.5")
+
+
+def test_reads_version_1_without_volumes(data_file: Path) -> None:
+    """Spec 0045 plan Risk 1: sürüm 1 dosyası aynen okunur, `volumes` `None`."""
+    rewrite(
+        data_file,
+        lambda rows: [
+            {**rows[0], "version": 1},
+            *[row[:6] if isinstance(row, list) else row for row in rows[1:]],
+        ],
+    )
+    read = read_history(str(data_file))
+    assert read.problem is None and read.data is not None
+    btc = read.data.pairs[0]
+    assert btc.volumes is None
+    assert len(btc.candles) == WARMUP + 24
+    assert btc.candles[0].open == Decimal("107.10000000")
+
+
 def test_reading_writes_nothing(data_file: Path) -> None:
     before = data_file.read_bytes()
     read_history(str(data_file))
@@ -138,7 +166,10 @@ def _candle(index: int, value: Any) -> Callable[[Lines], Lines]:
 
 CORRUPT: dict[str, Callable[[Lines], Lines]] = {
     "format": _header(format="baska"),
-    "version": _header(version=2),
+    "version": _header(version=3),
+    "version not int": _header(version="2"),
+    "v1 header with v2 rows": _header(version=1),
+    "candle without volume": _candle(1, lambda row: row[:6]),
     "interval": _header(candle_interval="7m"),
     "exchange": _header(exchange=""),
     "start not UTC": _header(start="2026-01-01T03:00:00+03:00"),
@@ -184,7 +215,7 @@ def test_not_json_is_corrupt(tmp_path: Path, text: str) -> None:
 
 
 def _prices(index: int, open_: str, high: str, low: str, close: str) -> Callable[[Lines], Lines]:
-    return _candle(index, lambda row: [row[0], row[1], open_, high, low, close])
+    return _candle(index, lambda row: [row[0], row[1], open_, high, low, close, row[6]])
 
 
 def _time(index: int, delta_ms: int) -> Callable[[Lines], Lines]:
@@ -201,6 +232,9 @@ UNTRUSTED: dict[str, tuple[Callable[[Lines], Lines], str]] = {
     "out of order": (_time(3, -7_200_000), "time_out_of_order"),
     "off interval": (_time(3, 1_000), "time_off_interval"),
     "negative time": (_candle(2, lambda row: [row[0], -1, *row[2:]]), "not_a_number"),
+    "volume negative": (_candle(2, lambda row: [*row[:6], "-1"]), "bad_volume"),
+    "volume not text": (_candle(2, lambda row: [*row[:6], 12.5]), "bad_volume"),
+    "volume not plain": (_candle(2, lambda row: [*row[:6], "1e3"]), "bad_volume"),
 }
 
 
