@@ -1,6 +1,6 @@
 # Spec 0047 — Binance duyuru arşivi (geçmiş)
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0047-plan.md`
 - Self-critique: done
@@ -84,53 +84,53 @@ none — no user interface (yalnız CLI komutları ve konsol/log satırları).
   zamanlanmış yenilenmesi; kayıtların silinmesi ya da saklama süresi.
 
 ## Acceptance criteria
-- [ ] AC-1 — İki ya da daha fazla katalogdan, birkaç sayfa süren kayıtlı yanıtlarla tam bir çalıştırma her duyuruyu
+- [x] AC-1 — İki ya da daha fazla katalogdan, birkaç sayfa süren kayıtlı yanıtlarla tam bir çalıştırma her duyuruyu
   bir kez yazar; her kayıtta kaynak, katalog adı, kimlik, bağlantı, başlık, UTC yayın anı, UTC arşive alınma anı ve
   "arşivden" işareti bulunur, ilk görme anı bulunmaz. Kataloglar yanıttan okunur, her biri en eski sayfaya kadar
   okunur ve tamam olarak işaretlenir; çıkış 0 (R-1, R-2, R-9).
-- [ ] AC-2 — Yayın anı eksik, okunamayan ya da arşive alınma anından 5 dakikadan daha ileri olan duyuru "yayın anı
+- [x] AC-2 — Yayın anı eksik, okunamayan ya da arşive alınma anından 5 dakikadan daha ileri olan duyuru "yayın anı
   bilinmiyor" işaretiyle yazılır; tam 5 dakika ileri işaretlenmez. Başlığı boş ya da kimliği olmayan duyuru yazılmaz,
   geçersiz sayılır. 20 KB'ı aşan başlık kesilir ve "kesildi" işaretini taşır (R-2, R-6).
-- [ ] AC-3 — Aynı kimlik ikinci kez (aynı çalıştırmada başka sayfada ya da katalogda, ya da sonraki çalıştırmada)
+- [x] AC-3 — Aynı kimlik ikinci kez (aynı çalıştırmada başka sayfada ya da katalogda, ya da sonraki çalıştırmada)
   gelirse yazılmaz;
   ilk sürümün başlığı, kataloğu ve arşive alınma anı değişmez. Arşivde kayıt değiştirme ve silme reddedilir (R-3).
-- [ ] AC-4 — Çalıştırma bir sayfanın ortasında durdurulursa (Ctrl+C) ya da kaynak hatasıyla kesilirse yazılmış
+- [x] AC-4 — Çalıştırma bir sayfanın ortasında durdurulursa (Ctrl+C) ya da kaynak hatasıyla kesilirse yazılmış
   kayıtlar kalır, yarım kayıt kalmaz; sonraki çalıştırma kaldığı sayfadan sürer, önceden okunan sayfaları yeniden
   istemez; Ctrl+C ile durmada çıkış 4, ikinci Ctrl+C'de 130. Okuma sırasında başa yeni duyuru eklenmesi (sayfa
   kayması) hiçbir duyuruyu atlatmaz. Tamam kataloglu yeniden çalıştırma en yeniden başlar, arşivde bulunan bir kimliğe
   ulaşınca o kataloğu bırakır ve yalnız yeni duyuruları yazar (R-4).
-- [ ] AC-5 — İki istek arasında en az `archive_request_gap_s` saniye geçer ve aynı anda tek istek vardır; takılan bir
+- [x] AC-5 — İki istek arasında en az `archive_request_gap_s` saniye geçer ve aynı anda tek istek vardır; takılan bir
   istek (ad çözümleme dahil) en çok 30 saniyede (ölçüm payıyla) hata olur. Ağ hatası, zaman aşımı, HTTP hata cevabı,
   hız sınırı (429) ya da şemaya uymayan yanıtta komut hatanın adını veren satırla, çıkış 1 ile durur, aynı isteği
   yinelemez. Telegram bildirimi gitmez (R-5, R-7).
-- [ ] AC-6 — 0046 R-5'in kaynak kuralları geçerlidir: `http`'ye düşen ya da 3'ten fazla yönlendirme, sınırı aşan ya da
+- [x] AC-6 — 0046 R-5'in kaynak kuralları geçerlidir: `http`'ye düşen ya da 3'ten fazla yönlendirme, sınırı aşan ya da
   beklenmeyen türdeki yanıt, bozuk JSON kaynak hatasıdır; duyuru bağlantılarına istek gitmez; başlık olduğu gibi
   saklanır (R-6).
-- [ ] AC-7 — Özet satırları her katalog için doğru yeni/tekrar/geçersiz sayısını, en eski yayın anını ve tamam/eksik
+- [x] AC-7 — Özet satırları her katalog için doğru yeni/tekrar/geçersiz sayısını, en eski yayın anını ve tamam/eksik
   bilgisini, en sonda tüm arşivin tamam ya da eksik olduğunu gösterir; kayıtta ve satırlarda sır yoktur (R-7).
-- [ ] AC-8 — Durum komutu ağa istek göndermeden her katalog için kayıt sayısını, son bildirilen toplamı ve farkı, en
+- [x] AC-8 — Durum komutu ağa istek göndermeden her katalog için kayıt sayısını, son bildirilen toplamı ve farkı, en
   eski ve en yeni yayın anını, tamam/eksik bilgisini ve son çalıştırma anını; arşivin toplam boyutunu ve ileriye dönük
   haber kaydıyla örtüşen duyuru sayısını (ileriye dönük kayıt yoksa bunu) gösterir. Boş arşivde bunu söyler ve 0
   koduyla çıkar (R-8).
-- [ ] AC-9 — Komut çalışırken paper botunun bir turu ve ileriye dönük toplayıcının bir turu, komut hiç yokmuş gibi
+- [x] AC-9 — Komut çalışırken paper botunun bir turu ve ileriye dönük toplayıcının bir turu, komut hiç yokmuş gibi
   aynı sonucu verir; komut bot deposuna ve ileriye dönük haber kaydına yazmaz. Aynı arşive ikinci bir arşiv komutu
   açılmak istenirse anlaşılır bir mesajla reddedilir (R-1).
-- [ ] AC-10 — Geçersiz ayarda (arşiv kaydının yeri yok ya da ileriye dönük haber kaydı, bot deposu veya bir kayıt
+- [x] AC-10 — Geçersiz ayarda (arşiv kaydının yeri yok ya da ileriye dönük haber kaydı, bot deposu veya bir kayıt
   dosyasıyla aynı; `archive_request_gap_s` 1'den küçük; adres yok ya da `https` değil) komut ağa çıkmadan, hatanın
   adını veren bir mesajla başlamayı reddeder (R-9).
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed (`docs/architecture.md`, `docs/commands.md`, `docs/security.md`, `crytobot-news.example.toml`)
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 (Approved metin, onaydan sonra değişmedi; plan A-1…A-3) |
+| Fix rounds | 3 (fix-1: review round 1 M-1 Medium → A-3, I-1, I-2; fix-2: review round 2 L-1, N-1; fix-3: VERIFY F-1, F-2 Low test açıkları, F-3 Info — yalnız test ve tablo) |
+| Review findings: real / noise / deferred | 8 (M-1, I-1, I-2, L-1, N-1, VERIFY F-1, F-2, F-3) / 0 / 0 |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
