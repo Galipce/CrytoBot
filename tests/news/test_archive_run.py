@@ -425,6 +425,18 @@ def test_refresh_error_on_first_page_line_says_incomplete(two: Harness) -> None:
     ]
 
 
+def test_refresh_stopped_line_says_incomplete(two: Harness) -> None:
+    """Review round 2 L-1: durdurmayla biten katalog satırı da `eksik` yazar."""
+    two.run()
+    two.hook = lambda index, url: setattr(two, "stop", True) if index == 1 else None  # A p1
+    assert two.run() is ArchiveOutcome.STOPPED
+    assert two.lines[-2:] == [
+        "arşiv katalog=Listing yeni=0 tekrar=0 geçersiz=0 en_eski=yok eksik",
+        "arşiv: eksik (2 katalog)",
+    ]
+    assert two.state(A)[1] is True  # the stored state is untouched: the next run refreshes
+
+
 def test_interrupted_refresh_resumes_to_the_end(two: Harness) -> None:
     """Plan A-1: tamam katalogun yeniden okuması yarıda kalırsa katalog eksik olur ve sonraki
     çalıştırma o sayfadan sona kadar okur; yeni duyuru kaybolmaz."""

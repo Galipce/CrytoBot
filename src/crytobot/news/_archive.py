@@ -225,6 +225,7 @@ def run_archive(config: ArchiveConfig, store: ArchiveStore, parts: ArchiveParts)
         try:
             current.catalog(state, result)
         except _Stopped:
+            result.complete = False  # review L-1: a stopped catalog is not up to date either
             parts.say(result.line)
             parts.say(_final(states, done))
             return ArchiveOutcome.STOPPED
