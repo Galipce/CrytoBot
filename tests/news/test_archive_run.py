@@ -437,6 +437,18 @@ def test_refresh_stopped_line_says_incomplete(two: Harness) -> None:
     assert two.state(A)[1] is True  # the stored state is untouched: the next run refreshes
 
 
+def test_invalid_article_on_full_page_does_not_end_catalog(tmp_path: Path) -> None:
+    """VERIFY F-1: sayfa boyu geçersiz duyurularla sayılır; dolu sayfadaki tek geçersiz duyuru
+    kataloğu erken bitirmez (eski duyurular kaybolmaz)."""
+    raws = articles(1, 120)
+    raws[10] = dict(raws[10], title="")
+    harness = Harness(tmp_path, Binance({A: ("Listing", raws)}))
+    assert harness.run() is ArchiveOutcome.COMPLETE
+    assert harness.pages_of(A) == [1, 2, 3]
+    assert len(harness.archived()) == 119
+    assert harness.lines[1].startswith("arşiv katalog=Listing yeni=119 tekrar=0 geçersiz=1 ")
+
+
 def test_interrupted_refresh_resumes_to_the_end(two: Harness) -> None:
     """Plan A-1: tamam katalogun yeniden okuması yarıda kalırsa katalog eksik olur ve sonraki
     çalıştırma o sayfadan sona kadar okur; yeni duyuru kaybolmaz."""
