@@ -230,6 +230,7 @@ def run_archive(config: ArchiveConfig, store: ArchiveStore, parts: ArchiveParts)
             return ArchiveOutcome.STOPPED
         except ParseError as error:
             result.error = error.name
+            result.complete = False  # review I-1: a catalog that ends in an error is not up to date
             parts.say(result.line)
             parts.say(_final(states, done))
             return ArchiveOutcome.FAILED

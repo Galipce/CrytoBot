@@ -414,6 +414,17 @@ def test_cross_catalog_id_from_earlier_run_does_not_stop_early(two: Harness) -> 
     assert two.pages_of(B) == [1]
 
 
+def test_refresh_error_on_first_page_line_says_incomplete(two: Harness) -> None:
+    """Review round 1 I-1: hatayla biten katalog satırı `eksik` yazar (son satırla tutarlı)."""
+    two.run()
+    two.hook = lambda index, url: Fetched(error="http_503") if index == 1 else None  # A p1
+    assert two.run() is ArchiveOutcome.FAILED
+    assert two.lines[-2:] == [
+        "arşiv katalog=Listing yeni=0 tekrar=0 geçersiz=0 en_eski=yok eksik hata=http_503",
+        "arşiv: eksik (2 katalog)",
+    ]
+
+
 def test_interrupted_refresh_resumes_to_the_end(two: Harness) -> None:
     """Plan A-1: tamam katalogun yeniden okuması yarıda kalırsa katalog eksik olur ve sonraki
     çalıştırma o sayfadan sona kadar okur; yeni duyuru kaybolmaz."""
