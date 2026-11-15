@@ -1,6 +1,6 @@
 # Spec 0045 — Kriptoya ayarlı indikatörler ve isabet ölçümü
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0045-plan.md`
 - Self-critique: done
@@ -58,30 +58,30 @@ none — no user interface. Etkileşim CLI komutu, ayar dosyası, rapor dosyası
 - Kapsam dışı: ayarlı indikatörlerin stratejide ya da botta kullanılması; kendi indikatörümüzü tasarlamak (sonraki spec, R-10'un kayıtlarıyla); LLM, haber ve olağandışı hareketlerin nedenini bulmak (LLM fazı); kâr/zarar backtest'i; indikatör listesinin ya da ızgaraların genişlemesi; live ve testnet (live LLM fazından sonra gelir — sahip kararı, 2026-11-15; ADR 0002'nin faz sırası ayrıca revize edilir).
 
 ## Acceptance criteria
-- [ ] AC-1 — İsabet kuralı: hedef mesafesine 24. mumda ulaşan sinyal isabetlidir, 25. mumda ulaşan değildir; stop sınırına hedeften önce değen değildir; aynı mumda iki sınıra değen değildir; 2×ATR maliyetten küçükse hedef maliyet mesafesidir; penceresi dönem bitişini aşan sinyal sayılmaz; penceredeki eksik mumlar atlanır ve pencere 24 mevcut mumdur; üst üste binen sinyaller ayrı sayılır. "Sat" sinyali için aynı kural ters yönde uygulanır (R-9).
-- [ ] AC-2 — Her indikatörün "al" ve "sat" sinyali R-1'deki kuralla üretilir: kesişme yalnız kesiştiği mumda sinyal verir; Donchian'da eşitlik sinyal vermez; ısınma yetmeyen mumlarda sinyal yoktur. Varsayılan ayar ızgaranın içindedir.
-- [ ] AC-3 — Taban oran, dönemin her mumu sinyal sayılarak aynı isabet kuralıyla hesaplanır; isabet ve taban oranı bütün sinyallerle ve olağandışıya denk gelenler çıkarılmış halde raporlanır (R-3, R-8).
-- [ ] AC-4 — Olağandışı mum kuralları (a)–(d) tek tek işaretlenir; tam eşik değerindeki mum işaretlenmez, eşiği aşan işaretlenir; olağandışı mumlar ölçümden çıkarılmaz (R-8).
-- [ ] AC-5 — Ayarlama yalnız BTC'nin ayarlama dönemini kullanır; en az 30 sinyalli ayarlar arasından en yüksek isabet seçilir, eşitlikte ızgaradaki ilk ayar; 29 sinyalli ayar seçilemez; hiçbir ayar 30'a ulaşmazsa "ayar yok" nedeniyle yazılır; komşularının yarısından azı taban oranı geçen ayar "dayanıksız" işaretlenir, tam yarısı geçen işaretlenmez (R-4).
-- [ ] AC-6 — Çapraz sınama ayarları değiştirmez; dört çiftin üçünde taban oranı geçen ayar işaretsiz kalır, ikisinde geçen "çapraz sınamada geçmedi" işaretlenir (R-5).
-- [ ] AC-7 — Görülmemiş dönem yalnız ayar seti dosyasıyla koşar; dosya yoksa, parmak izi kayıtlı onayla tutmuyorsa ya da dönemlerden birinde bir çiftin aralıkta hiç mumu yoksa hiçbir ölçüm yapılmadan, nedeni adlandırılarak reddedilir, rapor yazılmaz, çıkış 1 (R-6, R-2).
-- [ ] AC-8 — Hüküm: R-7'nin koşullarından biri tutmayan indikatör × aralık "kullanılabilir" değildir ve rapor tutmayan değeri ve eşiği yazar (ör. `geçmedi: isabet taban oranı 5 puan geçmiyor (+3.2 < +5)`); taban oranı tam 5 puan geçen "kullanılabilir"dir.
-- [ ] AC-9 — Rapor her indikatör × aralık için varsayılan ve ayarlı ayarı, sinyal sayısını, isabet ve taban oranını üç dönemde ayrı ayrı; olağandışı mum sayılarını; veri boşluklarını; ayar seti parmak izini; görülmemiş dönemin sızıntı notunu yazar. Sinyal kayıt dosyası R-10'un bütün alanlarını taşır; aynı girdilerle iki koşu bayt bayt aynı rapor ve kayıt üretir (üretim anı satırı hariç).
-- [ ] AC-10 — Ölçüm boyunca çalışan `crytobot.toml` ve kökteki veri ve rapor dosyaları değişmez (öncesi/sonrası sha256); yeni dosyalar git'e girmez; paper, backtest ve aşama kapısı testleri değişmeden geçer (R-11).
-- [ ] AC-11 — Gerçek veriyle ölçüm koşulur ve kayda geçer: veri dosyalarının sha256'sı, indirme anı, ayar seti parmak izi ve onayı, her indikatör × aralığın hükmü, rapor parmak izi, tarih ve toplam süre planın `## Build evidence` bölümüne yazılır.
+- [x] AC-1 — İsabet kuralı: hedef mesafesine 24. mumda ulaşan sinyal isabetlidir, 25. mumda ulaşan değildir; stop sınırına hedeften önce değen değildir; aynı mumda iki sınıra değen değildir; 2×ATR maliyetten küçükse hedef maliyet mesafesidir; penceresi dönem bitişini aşan sinyal sayılmaz; penceredeki eksik mumlar atlanır ve pencere 24 mevcut mumdur; üst üste binen sinyaller ayrı sayılır. "Sat" sinyali için aynı kural ters yönde uygulanır (R-9).
+- [x] AC-2 — Her indikatörün "al" ve "sat" sinyali R-1'deki kuralla üretilir: kesişme yalnız kesiştiği mumda sinyal verir; Donchian'da eşitlik sinyal vermez; ısınma yetmeyen mumlarda sinyal yoktur. Varsayılan ayar ızgaranın içindedir.
+- [x] AC-3 — Taban oran, dönemin her mumu sinyal sayılarak aynı isabet kuralıyla hesaplanır; isabet ve taban oranı bütün sinyallerle ve olağandışıya denk gelenler çıkarılmış halde raporlanır (R-3, R-8).
+- [x] AC-4 — Olağandışı mum kuralları (a)–(d) tek tek işaretlenir; tam eşik değerindeki mum işaretlenmez, eşiği aşan işaretlenir; olağandışı mumlar ölçümden çıkarılmaz (R-8).
+- [x] AC-5 — Ayarlama yalnız BTC'nin ayarlama dönemini kullanır; en az 30 sinyalli ayarlar arasından en yüksek isabet seçilir, eşitlikte ızgaradaki ilk ayar; 29 sinyalli ayar seçilemez; hiçbir ayar 30'a ulaşmazsa "ayar yok" nedeniyle yazılır; komşularının yarısından azı taban oranı geçen ayar "dayanıksız" işaretlenir, tam yarısı geçen işaretlenmez (R-4).
+- [x] AC-6 — Çapraz sınama ayarları değiştirmez; dört çiftin üçünde taban oranı geçen ayar işaretsiz kalır, ikisinde geçen "çapraz sınamada geçmedi" işaretlenir (R-5).
+- [x] AC-7 — Görülmemiş dönem yalnız ayar seti dosyasıyla koşar; dosya yoksa, parmak izi kayıtlı onayla tutmuyorsa ya da dönemlerden birinde bir çiftin aralıkta hiç mumu yoksa hiçbir ölçüm yapılmadan, nedeni adlandırılarak reddedilir, rapor yazılmaz, çıkış 1 (R-6, R-2).
+- [x] AC-8 — Hüküm: R-7'nin koşullarından biri tutmayan indikatör × aralık "kullanılabilir" değildir ve rapor tutmayan değeri ve eşiği yazar (ör. `geçmedi: isabet taban oranı 5 puan geçmiyor (+3.2 < +5)`); taban oranı tam 5 puan geçen "kullanılabilir"dir.
+- [x] AC-9 — Rapor her indikatör × aralık için varsayılan ve ayarlı ayarı, sinyal sayısını, isabet ve taban oranını üç dönemde ayrı ayrı; olağandışı mum sayılarını; veri boşluklarını; ayar seti parmak izini; görülmemiş dönemin sızıntı notunu yazar. Sinyal kayıt dosyası R-10'un bütün alanlarını taşır; aynı girdilerle iki koşu bayt bayt aynı rapor ve kayıt üretir (üretim anı satırı hariç).
+- [x] AC-10 — Ölçüm boyunca çalışan `crytobot.toml` ve kökteki veri ve rapor dosyaları değişmez (öncesi/sonrası sha256); yeni dosyalar git'e girmez; paper, backtest ve aşama kapısı testleri değişmeden geçer (R-11).
+- [x] AC-11 — Gerçek veriyle ölçüm koşulur ve kayda geçer: veri dosyalarının sha256'sı, indirme anı, ayar seti parmak izi ve onayı, her indikatör × aralığın hükmü, rapor parmak izi, tarih ve toplam süre planın `## Build evidence` bölümüne yazılır.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed (`docs/commands.md`, `docs/architecture.md`, `docs/domain.md`, `crytobot.example.toml`)
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 (Approved metin, onaydan sonra değişmedi) |
+| Fix rounds | 1 (fix-1: F-1, F-3, F-4; Low/Info, yeniden review yok) |
+| Review findings: real / noise / deferred | 3 (F-1, F-3, F-4) / 1 (F-5a) / 2 (F-2 → B-87, F-5b → B-88); VERIFY Info V-1…V-3 (uygulanmadı) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
