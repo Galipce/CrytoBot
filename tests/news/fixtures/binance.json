@@ -1,0 +1,76 @@
+{
+ "code": "000000",
+ "message": null,
+ "messageDetail": null,
+ "data": {
+  "catalogs": [
+   {
+    "catalogId": 48,
+    "parentCatalogId": null,
+    "icon": "https://public.bnbstatic.com/image/cms/content/body/202505/d3201bf0be35bb246b65a767221410e0.png",
+    "catalogName": "New Cryptocurrency Listing",
+    "description": null,
+    "catalogType": 1,
+    "total": 2294,
+    "articles": [
+     {
+      "id": 289917,
+      "code": "e7a88ff576b541608d0845f3b666ec66",
+      "title": "Binance Futures Will Launch Multiple TradFi USDⓈ-Margined Perpetual Contracts (2026-11-12)",
+      "type": 1,
+      "releaseDate": 1794390318328
+     },
+     {
+      "id": 289715,
+      "code": "2d89a5966b174a2689ab2c2a15db1757",
+      "title": "Binance Futures Will Launch USDⓈ-Margined HYPEUSDC and TRXUSDC Perpetual Contracts (2026-11-16)",
+      "type": 1,
+      "releaseDate": 1794373231295
+     },
+     {
+      "id": 288627,
+      "code": "a259777ee4104befa3daba5c1eadc7b5",
+      "title": "Binance Will List Predict (PREDICT) with Seed Tag Applied",
+      "type": 1,
+      "releaseDate": 1793274532329
+     }
+    ],
+    "catalogs": []
+   },
+   {
+    "catalogId": 49,
+    "parentCatalogId": null,
+    "icon": "https://public.bnbstatic.com/image/cms/content/body/202505/1c644f6be4cad5a1c149e7318d85e9ff.png",
+    "catalogName": "Latest Binance News",
+    "description": null,
+    "catalogType": 1,
+    "total": 4502,
+    "articles": [
+     {
+      "id": 290202,
+      "code": "432646a7f7c34c2a85b69db99af32c16",
+      "title": "Recovery Update: Withdrawals Reopened for More Networks (2026-11-14)",
+      "type": 1,
+      "releaseDate": 1794628358811
+     },
+     {
+      "id": 290177,
+      "code": "d5d3474a9b054f23a1867aff5cdece3f",
+      "title": "Notice on Share Count Basis of USDⓈ-Margined ANTHROPICUSDT Pre-IPO Perp",
+      "type": 1,
+      "releaseDate": 1794569412447
+     },
+     {
+      "id": 290149,
+      "code": "0729ad59cde74700b4eaa96c33441e71",
+      "title": "Binance Completes Coverage of Assets Impacted in Security Incident; New Proof of Reserves Published",
+      "type": 1,
+      "releaseDate": 1794502450592
+     }
+    ],
+    "catalogs": []
+   }
+  ]
+ },
+ "success": true
+}

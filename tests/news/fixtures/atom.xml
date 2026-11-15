@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Örnek Atom akışı</title>
+  <id>urn:uuid:60a76c80-d399-11d9-b93c-0003939e0af6</id>
+  <updated>2026-11-15T09:00:00Z</updated>
+  <entry>
+    <title>Ethereum ağında yükseltme tarihi açıklandı</title>
+    <link rel="alternate" href="https://example.org/haber/ethereum-yukseltme"/>
+    <id>urn:uuid:1225c695-cfb8-4ebb-aaaa-80da344efa6a</id>
+    <published>2026-11-15T08:30:00+03:00</published>
+    <updated>2026-11-15T08:45:00+03:00</updated>
+    <summary>Kısa özet.</summary>
+    <content type="html">&lt;p&gt;Geliştiriciler &lt;b&gt;yükseltme&lt;/b&gt; tarihini duyurdu.&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <title>Yalnız güncellenme anı olan haber</title>
+    <link href="https://example.org/haber/guncel"/>
+    <id>urn:uuid:2225c695-cfb8-4ebb-aaaa-80da344efa6b</id>
+    <updated>2026-11-15T07:00:00Z</updated>
+    <summary>Yalnız özet var.</summary>
+  </entry>
+</feed>
