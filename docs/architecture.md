@@ -16,7 +16,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | Module | Single responsibility | Owns |
 |---|---|---|
 | `market_data` | Mum, fiyat, emir defteri verisini borsadan çekmek ve saklamak | OHLCV geçmişi, ticker anlık görüntüleri, geçmiş veri dosyası (backtest girdisi, spec 0023); dönem boşlukları ve dönemde mum denetimi — saf, indirme özetinin `boşluk=` kuralıyla (spec 0044) |
-| `news` | Haber/duyuru kaynaklarını takip edip haber skoru üretmek; spec 0046: ayardaki kaynaklardan (Binance duyuruları, RSS 2.0, Atom) ileriye dönük toplama — tur ve döngü kararları, HTTPS getirme sınırları, ayrıştırma, kesinti bildirimi kararı | Haber kaydı (kendi SQLite deposu: yalnız eklenen haberler — kaynak, kimlik ya da bağlantı, yayın anı, ilk görme anı — ve kaynak durumu), haber ayarı (`crytobot-news.toml`), haber skorları |
+| `news` | Haber/duyuru kaynaklarını takip edip haber skoru üretmek; spec 0046: ayardaki kaynaklardan (Binance duyuruları, RSS 2.0, Atom) ileriye dönük toplama — tur ve döngü kararları, HTTPS getirme sınırları, ayrıştırma, kesinti bildirimi kararı; spec 0047: geçmiş Binance duyuru arşivi — katalog keşfi, sayfalama, sürdürme, durma kuralı, istek aralığı | Haber kaydı (kendi SQLite deposu: yalnız eklenen haberler — kaynak, kimlik ya da bağlantı, yayın anı, ilk görme anı — ve kaynak durumu), arşiv (ayrı SQLite deposu: yalnız eklenen, "arşivden" işaretli geçmiş duyurular — katalog, kimlik, yayın anı, arşive alınma anı, ilk görme anı yok — ve katalog durumu), haber ayarı (`crytobot-news.toml`), haber skorları |
 | `research` | Whitepaper/proje dokümanlarını okuyup kaynak alıntılı araştırma skoru üretmek | Doküman önbelleği, araştırma skorları |
 | `llm` | Claude API'ye tek erişim noktası: şema doğrulama, harcama limiti | LLM çağrı günlüğü, günlük harcama |
 | `analysis` | Teknik analiz ve indikatör hesapları (saf fonksiyonlar) | — (durumsuz); spec 0045: stochastic, ADX/DI, Supertrend, Donchian |
@@ -32,7 +32,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | `dashboard` | Localhost'ta salt-okunur web panosu sunmak (HTML ve /api/status) | Pano şablonu, sunucu yaşam döngüsü, host doğrulama |
 | `app` | Bileşim kökü (composition root): modülleri bağlar, ayarları denetler, zamanlayıcı/döngü | — (depo hazırlığı ve başlatma kapıları; gerçek etkiler enjekte edilir) |
 
-**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news`, spec 0022, 0023, 0025, 0030, 0031, 0045, 0046) bir modül
+**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news`, spec 0022, 0023, 0025, 0030, 0031, 0045, 0046, 0047) bir modül
 değildir, paket olmadığı için tabloda yer almaz. Karar içermez: ayar dosyasını (`crytobot.toml`) okur,
 gerçek saati, ≤1 s'lik beklemeyi, sinyalleri, tek süreç kilidini (`<depo>.lock`), konsol ve kayıt
 dosyası yazıcısını ve piyasa okumasını `app`'e verir. Kararların, zamanlamanın ve depo kapılarının
@@ -62,6 +62,11 @@ beklemeyi, sinyalleri, haber kaydının mutlak yolunun kilidini (bot kilidinden 
 kendi kayıt dosyasını, HTTPS getirmeyi ve `reporting`'in gönderimini `news`'e (`run_collection`)
 verir. Bot ayarından yalnız `[bot]` yolları (karşılaştırma için) ve `[reporting.telegram]` okunur;
 bot deposu açılmaz. `news status` ağa çıkmaz, kilit almaz.
+`news archive` (spec 0047) aynı biçimde `app` dışında koşar: ayarı aynı dosyanın `archive_` anahtarlarıdır;
+giriş noktası gerçek ve monoton saati, ≤1 s'lik beklemeyi, sinyalleri, arşiv deposunun mutlak yolunun kilidini
+(toplayıcının ve botun kilidinden ayrı), arşivin kendi kayıt dosyasını ve HTTPS getirmeyi `news`'e
+(`run_archive`) verir. Telegram bağlanmaz; bot deposu ve ileriye dönük haber kaydı açılmaz. `news archive
+status` ağa çıkmaz, kilit almaz, arşivi ve ileriye dönük kaydı yalnız okur (örtüşme sayısı).
 
 ## Communication rules
 - Modüller birbirini yalnızca **public arayüz** (`<module>/__init__.py` ile dışa açılanlar) üzerinden çağırır.
