@@ -1,6 +1,6 @@
 # Spec 0046 — Haber toplama (ileriye dönük)
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0046-plan.md`
 - Self-critique: done
@@ -80,52 +80,52 @@ none — no user interface (yalnız CLI komutları ve konsol/log satırları; Te
 - Split: 0046 ileriye dönük toplama, 0047 geçmiş arşiv (Binance duyuruları) — Galip Badem, 2026-11-15 (S1).
 
 ## Acceptance criteria
-- [ ] AC-1 — Üç açık kaynaktan (bir `binance-duyuru`, bir RSS 2.0, bir Atom) gelen yeni haberler tek turda yazılır. Her
+- [x] AC-1 — Üç açık kaynaktan (bir `binance-duyuru`, bir RSS 2.0, bir Atom) gelen yeni haberler tek turda yazılır. Her
   kayıtta kaynak adı, kimlik ya da bağlantı, başlık, metin (HTML'si olduğu gibi), bağlantı, UTC yayın anı ve o kaynağın
   yanıtının alındığı UTC ilk görme anı bulunur. Kapalı kaynak sorgulanmaz. Kaynak başına özet satırı doğru
   yeni/tekrar/geçersiz sayılarını gösterir. Binance sayfasının bütün öğeleri yeniyse satır "olası kaçırma" uyarısı
   taşır, en az bir öğe tekrarsa taşımaz (R-2, R-7).
-- [ ] AC-2 — Aynı haber sonraki turda ve komut yeniden başlatıldıktan sonra yeniden görülünce yazılmaz. İlk görme anı
+- [x] AC-2 — Aynı haber sonraki turda ve komut yeniden başlatıldıktan sonra yeniden görülünce yazılmaz. İlk görme anı
   ve ilk sürümün başlığı ve metni değişmez. Kimliği olmayan RSS öğesinde tekrar bağlantıyla anlaşılır. Aynı kimlik iki
   farklı kaynakta görülürse iki ayrı kayıt olur (R-3).
-- [ ] AC-3 — Yayın anı eksik, okunamaz ya da ilk görme anından 5 dakikadan daha ileri olan haber "yayın anı bilinmiyor"
+- [x] AC-3 — Yayın anı eksik, okunamaz ya da ilk görme anından 5 dakikadan daha ileri olan haber "yayın anı bilinmiyor"
   işaretiyle yazılır. Tam 5 dakika ileri olan haber işaretlenmez. İlk görme anı her üç durumda da kaynak yanıtının
   alındığı andır (R-4).
-- [ ] AC-4 — Metni 20 KB'ı aşan haber 20 KB'a kesilir ve "kesildi" işaretini taşır; tam 20 KB işaretlenmez; çok baytlı karakter sınıra denk gelirse karakter bölünmez. Başlığı ve
+- [x] AC-4 — Metni 20 KB'ı aşan haber 20 KB'a kesilir ve "kesildi" işaretini taşır; tam 20 KB işaretlenmez; çok baytlı karakter sınıra denk gelirse karakter bölünmez. Başlığı ve
   metni boş olan haber yazılmaz, geçersiz sayılır. `max_response_kb`'ı aşan ya da beklenmeyen türdeki yanıt, dış varlık
   ya da varlık genişletmesi içeren XML bozuk XML/JSON, `http`'ye düşen ya da 3'ten fazla yönlendirme, o kaynak için kaynak hatası olur ve o kaynaktan o tur hiçbir
   kayıt yazılmaz. Haber bağlantılarına istek gitmez (R-5).
-- [ ] AC-5 — Bir kaynak ağ hatası, zaman aşımı, HTTP hata cevabı ya da takılan ad çözümleme yaşarken diğer kaynağın
+- [x] AC-5 — Bir kaynak ağ hatası, zaman aşımı, HTTP hata cevabı ya da takılan ad çözümleme yaşarken diğer kaynağın
   haberleri aynı turda yazılır. Takılan kaynak turu en çok 30 saniye (ölçüm payıyla) geciktirir. Hata adı ve anı
   kaydedilir. Kayıtta ve log satırlarında sır ya da yetki bilgisi yoktur. Hatalı kaynak sonraki turda yeniden denenir
   (R-6).
-- [ ] AC-6 — Durum komutu her kaynak için son başarılı anı, son hatayı ve toplam kayıt sayısını, ayrıca kaydın toplam
+- [x] AC-6 — Durum komutu her kaynak için son başarılı anı, son hatayı ve toplam kayıt sayısını, ayrıca kaydın toplam
   boyutunu gösterir. Hiç başarılı olmamış kaynak "hiç başarılı olmadı" diye görünür. Boş kayıtta bunu söyler ve 0 koduyla çıkar. Ağa istek göndermez
   (R-8).
-- [ ] AC-7 — `source_alert_hours`'tan uzun süre aralıksız hata veren kaynak için tek bir Telegram bildirimi gider;
+- [x] AC-7 — `source_alert_hours`'tan uzun süre aralıksız hata veren kaynak için tek bir Telegram bildirimi gider;
   eşiğe kadar gitmez, süren kesintide tekrar gitmez. Bildirim gittikten sonra komut yeniden başlatılırsa aynı kesinti için ikinci
   bildirim gitmez; eşiğe yaklaşmış bir kesintide yeniden başlatma sayacı sıfırlamaz. İlk başarıda tek bir çıkış
   bildirimi gider. Telegram kapalıyken
   bildirim yalnız konsol ve log satırı olur. Bildirim kaynak adını ve kesintinin başlangıç anını taşır (R-9).
-- [ ] AC-8 — Komut `interval_minutes` aralıkla turları sürdürür. Durdurma (Ctrl+C) turun ortasında gelse de yarım kayıt
+- [x] AC-8 — Komut `interval_minutes` aralıkla turları sürdürür. Durdurma (Ctrl+C) turun ortasında gelse de yarım kayıt
   bırakmadan çıkar. Aynı haber kaydına ikinci bir toplama komutu açılmak istenirse anlaşılır bir mesajla reddedilir.
   Komut çalışırken paper botunun bir turu, komut hiç yokmuş gibi aynı sonucu verir. Komut bot deposuna yazmaz (R-1).
-- [ ] AC-9 — Geçersiz config'te (kaynak yok, bilinmeyen tür, aynı ad iki kez, adres yok ya da `https` değil, `interval_minutes` < 5,
+- [x] AC-9 — Geçersiz config'te (kaynak yok, bilinmeyen tür, aynı ad iki kez, adres yok ya da `https` değil, `interval_minutes` < 5,
   sınırların sıfır ya da negatif olması) komut ağa çıkmadan, hatanın adını veren bir mesajla başlamayı reddeder. Config'ten
   çıkarılan kaynağın eski kayıtları kalır (R-10).
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed (`docs/architecture.md`, `docs/commands.md`, `docs/security.md`, `crytobot-news.example.toml`, ADR 0003)
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 (Approved metin, onaydan sonra değişmedi; plan A-1…A-4) |
+| Fix rounds | 1 (fix-1: F-1 Medium, F-2, F-3, F-4; review round 2 clean) |
+| Review findings: real / noise / deferred | 4 (F-1…F-4) / 8 (round 1 I-1, I-2, I-3, I-6; round 2 Info-1…Info-4) / 0; I-4 → A-4, I-5 kapandı (9c0d132), round 2 Info-5 işlem yok; VERIFY F-1 Info (AC-6 çıkış kodu `tests/main/test_news_entry.py::test_status_empty_store_exit_0`'da) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
