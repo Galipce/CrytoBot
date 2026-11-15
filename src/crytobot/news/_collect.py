@@ -147,6 +147,18 @@ class _Round:
         )
         self.parts.say(result.line)
 
+    def paused(self, source: NewsSource) -> None:
+        """Review round 1 F-3: kapalı kaynak sorgulanmaz, kesinti sayacı ilerlemez (plan Risk 13).
+        Süren kesinti kapatılınca sıfırlanır; bildirim gittiyse çıkış bildirimi gitmez, satır
+        kalır."""
+        previous = self.store.state(source.name)
+        if previous.outage_started_at is None:
+            return
+        self.store.write(
+            source.name, [], replace(previous, outage_started_at=None, alert_sent=False)
+        )
+        self.parts.say(f"kaynak={source.name} kapalı: kesinti sayacı sıfırlandı")
+
     def source(self, source: NewsSource) -> bool:
         """Kaynağı toplar; durdurma isteğiyle terk edildiyse `False`."""
         fetched = self.parts.fetch(source, self.config.max_response_bytes)
@@ -170,6 +182,7 @@ def run_round(config: NewsConfig, store: NewsStore, parts: CollectParts) -> bool
     current = _Round(config, store, parts)
     for source in config.sources:
         if not source.enabled:
+            current.paused(source)
             continue
         if parts.stopped() or not current.source(source):
             return False

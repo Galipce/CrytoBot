@@ -135,3 +135,26 @@ def test_failed_hand_over_retried_next_round(tmp_path: Path) -> None:
     rounds_at(harness, 7, 8, 9)
     assert len(attempts) == 2
     assert "kaynak=coindesk bildirim iletilemedi" in harness.lines
+
+
+def test_disabled_time_not_counted_as_outage(tmp_path: Path) -> None:
+    """Review round 1 F-3 (plan Risk 13): kapalı kaynağın sayacı ilerlemez; kapatılınca süren
+    kesinti sıfırlanır, yeniden açılınca kesinti ilk hatadan başlar."""
+    harness = failing(tmp_path)
+    rounds_at(harness, 0, 3)
+    paused = Harness(
+        tmp_path,
+        make_config(tmp_path, source_table("coindesk", enabled=False), source_alert_hours=6),
+    )
+    paused.clock.now = START + timedelta(hours=4)
+    paused.round()
+    assert paused.fetched == []
+    assert paused.lines == ["kaynak=coindesk kapalı: kesinti sayacı sıfırlandı"]
+    paused.round()
+    assert paused.lines == ["kaynak=coindesk kapalı: kesinti sayacı sıfırlandı"]  # once
+    resumed = failing(tmp_path)
+    rounds_at(resumed, 11, 16)
+    assert resumed.notices == []  # 11 → 16 is 5 h; the 3 h before the pause do not count
+    rounds_at(resumed, 17.5)
+    assert len(resumed.notices) == 1
+    assert f"Başlangıç: {(START + timedelta(hours=11)).isoformat()}" in resumed.notices[0]
