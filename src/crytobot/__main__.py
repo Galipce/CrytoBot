@@ -1,5 +1,5 @@
 """Giriş noktası: `python -m crytobot prepare|start|download|backtest|calibrate|news` (spec 0022,
-0023, 0025, 0045, 0046).
+0023, 0025, 0045, 0046, 0047).
 
 Karar içermez: kararların hepsi `app`'tedir. Burada yalnız gerçek etkiler bağlanır: ayar dosyası
 (`tomllib`, çalışma dizinindeki `crytobot.toml`), gerçek UTC saati, ≤1 s'lik parçalarla bekleme,
@@ -31,6 +31,14 @@ haber kaydının mutlak yolunun kilidi (`<haber kaydı>.lock`, bot kilidinden ay
 kendi kayıt dosyası, HTTPS getirme ve `reporting` bağlanır. Bot deposu açılmaz. `news status` ağa
 çıkmaz, kilit almaz; depo yoksa oluşturmaz. Çıkış: 0 temiz durma ya da durum, 1 ret (ayar, kilit,
 okunamayan ya da yazılamayan kayıt), 3 kayıt dosyası yazılamıyor, 130 zorla durma.
+
+`news archive` (spec 0047) geçmiş Binance duyurularını arşive doldurur; ayar aynı haber ayar
+dosyasının `archive_` anahtarlarıdır (plan Risk 1). Ayar → yol çakışması → arşiv deposunun mutlak
+yolunun kilidi (`<arşiv>.lock`; toplayıcının ve botun kilidinden ayrı) → depo sırası; arşivin kendi
+kayıt dosyası, gerçek saat, monoton saat, ≤1 s'lik bekleme ve HTTPS getirme bağlanır. Telegram
+bağlanmaz, bot deposu ve ileriye dönük haber kaydı açılmaz. `news archive status` ağa çıkmaz, kilit
+almaz, iki depoyu yalnız okur. Çıkış: 0 arşiv tamam ya da durum, 1 ret ya da kaynak hatası, 3 kayıt
+dosyası yazılamıyor, 4 durdurma isteğiyle durdu, 130 zorla durma.
 
 Çıkış kodları: 0 temiz durma, hazırlık, indirme ya da backtest tamam, 1 başlatma, hazırlık, indirme
 ya da backtest reddi (ayarlar, veri dosyası, rapor dosyası var), 2 okuma reddiyle durma, 3 kayıt
@@ -122,6 +130,11 @@ from crytobot.market_data import (
     read_market_data,
 )
 from crytobot.news import (
+    ArchiveConfig,
+    ArchiveOutcome,
+    ArchiveParts,
+    ArchiveStore,
+    ArchiveStoreError,
     CollectionExit,
     CollectParts,
     Fetched,
@@ -129,9 +142,12 @@ from crytobot.news import (
     NewsSource,
     NewsStore,
     StoreError,
+    archive_status_lines,
     fetch_source,
+    load_archive_config,
     load_news_config,
     read_snapshot,
+    run_archive,
     run_collection,
     status_lines,
 )
@@ -142,7 +158,7 @@ NEWS_CONFIG_FILE = "crytobot-news.toml"
 USAGE = (
     "kullanım: python -m crytobot "
     "prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news"
-    " [--live] [--trial] [--final] [status]"
+    " [--live] [--trial] [--final] [archive] [status]"
 )
 COMMANDS = (
     ["prepare"],
@@ -163,6 +179,8 @@ COMMANDS = (
     ["dashboard"],
     ["news"],
     ["news", "status"],
+    ["news", "archive"],
+    ["news", "archive", "status"],
 )
 EXIT_OK = 0
 EXIT_REFUSED = 1
@@ -200,6 +218,13 @@ Read = Callable[[tuple[str, ...], ReadSettings], MarketRead]
 Download = Callable[[HistoryRequest, Clock, Callable[[], bool]], HistoryResult]
 NewsFetch = Callable[[NewsSource, int, Callable[[], bool]], Fetched]
 NEWS_BUSY = "haber kaydı başka bir toplama komutunda açık"
+ArchiveFetch = Callable[[str, int, Callable[[], bool]], Fetched]
+ARCHIVE_BUSY = "arşiv başka bir arşiv komutunda açık"
+_ARCHIVE_EXIT_CODES = {
+    ArchiveOutcome.COMPLETE: EXIT_OK,
+    ArchiveOutcome.FAILED: EXIT_REFUSED,
+    ArchiveOutcome.STOPPED: EXIT_DOWNLOAD_STOPPED,  # 4: stopped on request (R-7)
+}
 
 
 def utc_now() -> datetime:
@@ -676,6 +701,94 @@ def _news(
     return EXIT_OK if exit_ is CollectionExit.STOPPED else EXIT_REFUSED
 
 
+def real_archive_fetch(url: str, max_bytes: int, stopped: Callable[[], bool]) -> Fetched:
+    return fetch_source(url, "binance-duyuru", max_bytes, stopped=stopped)
+
+
+def _archive_config(news_path: Path, bot_path: Path, output: Output) -> ArchiveConfig | None:
+    """Spec 0047 AC-10: ağa çıkmadan ve hiçbir dosyaya dokunmadan önce, ilk sorun adıyla. Arşiv ve
+    kayıt dosyası ileriye dönük haber kaydı, onun kaydı, bot deposu ya da bot kaydı olamaz,
+    birbirleri de olamaz: başka yazımla da (plan Risk 2)."""
+    document = _load_toml(news_path)
+    if isinstance(document, str):
+        output.say(f"news archive: reddedildi: {document}")
+        return None
+    result = load_archive_config(document)
+    config = result.config
+    if config is None:
+        output.say(f"news archive: reddedildi: {result.message}")
+        return None
+    others = (*_bot_paths(bot_path), config.news.store_path, config.news.log_path)
+    if any(_same_file(config.store_path, other) for other in others):
+        output.say("news archive: reddedildi: ayar geçersiz: news.archive_store_path")
+        return None
+    if any(_same_file(config.log_path, other) for other in (*others, config.store_path)):
+        output.say("news archive: reddedildi: ayar geçersiz: news.archive_log_path")
+        return None
+    return config
+
+
+def _news_archive(
+    argv: Sequence[str],
+    news_path: Path,
+    bot_path: Path,
+    console: TextIO,
+    clock: Clock,
+    stop: StopRequest,
+    wait: Callable[[float], None] | None,
+    fetch: ArchiveFetch,
+) -> int:
+    """Spec 0047: `news archive` doldurur, `news archive status` gösterir (AC-8, AC-9, AC-10)."""
+    output = Output(console)
+    config = _archive_config(news_path, bot_path, output)
+    if config is None:
+        return EXIT_REFUSED
+    if list(argv[2:]) == ["status"]:
+        try:
+            rows = archive_status_lines(config)
+        except ArchiveStoreError as error:
+            output.say(f"news archive: reddedildi: {error}")
+            return EXIT_REFUSED
+        for row in rows:
+            output.say(row)
+        return EXIT_OK
+    lock = StoreLock(str(Path(config.store_path).resolve()))
+    refused = lock.acquire()
+    if refused is not None:
+        output.say(f"news archive: reddedildi: {ARCHIVE_BUSY if refused == LOCK_BUSY else refused}")
+        return EXIT_REFUSED
+    output = Output(console, config.log_path)
+    try:
+        try:
+            store = ArchiveStore.open(config.store_path)
+        except ArchiveStoreError as error:
+            output(line(clock(), "arşiv", f"reddedildi: {error}"))
+            return EXIT_REFUSED
+        try:
+            parts = ArchiveParts(
+                clock,
+                time.monotonic,
+                make_wait(stop) if wait is None else wait,
+                lambda: stop.requested,
+                lambda url, max_bytes: fetch(url, max_bytes, lambda: stop.requested),
+                lambda text: output(line(clock(), "arşiv", text)),
+            )
+            outcome = run_archive(config, store, parts)
+        except ArchiveStoreError as error:
+            output(line(clock(), "arşiv", f"durdu: {error}"))
+            return EXIT_REFUSED
+        finally:
+            store.close()
+    except ForcedStop:
+        return EXIT_FORCED
+    except LogWriteError:
+        output.say(line(clock(), "arşiv", "kayıt dosyası yazılamıyor: arşiv durdu"))
+        return EXIT_LOG_FAILED
+    finally:
+        lock.release()
+    return _ARCHIVE_EXIT_CODES[outcome]
+
+
 def _prepare(
     config: BotConfig,
     output: Output,
@@ -870,6 +983,7 @@ def run(
     live_client: object = None,
     news_config_path: Path = Path(NEWS_CONFIG_FILE),
     news_fetch: NewsFetch = real_news_fetch,
+    archive_fetch: ArchiveFetch = real_archive_fetch,
 ) -> int:
     """Komutu çalıştırır, çıkış kodunu döndürür. Ayar, kilit, depo sırası: borsaya ve depoya
     ayarlar denetlenmeden dokunulmaz (R-2); kilit depodan önce alınır (R-6)."""
@@ -884,6 +998,10 @@ def run(
         return _backtest(config_path, output, stop, clock, final="--final" in argv)
     if argv[0] == "calibrate":
         return _calibrate(config_path, output, stop, clock, final="--final" in argv)
+    if list(argv[:2]) == ["news", "archive"]:
+        return _news_archive(
+            argv, news_config_path, config_path, console, clock, stop, wait, archive_fetch
+        )
     if argv[0] == "news":
         return _news(
             argv, news_config_path, config_path, console, clock, stop, wait, news_fetch, reporter
