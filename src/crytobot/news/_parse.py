@@ -7,6 +7,11 @@ kaçırılmış HTML); karışık içerik (Atom `type="xhtml"`, satır içi öğ
 işaretlemesiyle yeniden yazılır (review round 1 F-1). Binance duyuru listesi katı şemayla okunur:
 sapma `bad_schema`, bozuk JSON ya da UTF-8 `bad_json`. İçerik hiçbir biçimde çalıştırılmaz;
 bağlantılar izlenmez.
+
+Spec 0047 (plan Risk 4, 5): arşivin sayfası `parse_binance_page` ile okunur. Katalog düzeyindeki
+sapma `bad_schema`'dır (sessiz boşluk yok); duyuru düzeyinde gevşektir: nesne olmayan duyuru
+`bad_schema`, kimliği tamsayı olmayan ya da başlığı dizgi olmayan duyuru geçersizdir (`None`),
+`code` ASCII harf-rakam değilse bağlantı yoktur, `releaseDate` okunamıyorsa yayın anı bilinmiyor.
 """
 
 import html
@@ -17,7 +22,7 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from xml.parsers import expat
 
-from crytobot.news._items import RawItem
+from crytobot.news._items import RawItem, clean
 
 BINANCE_LINK = "https://www.binance.com/en/support/announcement/"
 _SEP = " "
@@ -271,3 +276,94 @@ PARSERS: dict[str, Callable[[bytes], list[RawItem]]] = {
     "rss": parse_feed,
     "binance-duyuru": parse_binance,
 }
+
+
+_CATALOG_NAME_LIMIT = 128
+
+
+@dataclass(frozen=True)
+class CatalogPage:
+    """Spec 0047: bir kataloğun yanıttaki hâli. `articles`: yanıt sırasıyla; geçersiz duyuru
+    `None`."""
+
+    catalog_id: int
+    name: str
+    total: int
+    articles: list[RawItem | None]
+
+
+def _count(value: object) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise _bad_schema()
+    return value
+
+
+def _catalog_name(value: object) -> str:
+    if not isinstance(value, str):
+        raise _bad_schema()
+    name = clean(value).strip()
+    if not name or len(name) > _CATALOG_NAME_LIMIT or not name.isprintable():
+        raise _bad_schema()  # the name reaches every summary line
+    return name
+
+
+def _loose_release(value: object) -> datetime | None:
+    if not isinstance(value, int) or isinstance(value, bool):
+        return None  # missing or unreadable: written with the time unknown (R-2)
+    try:
+        return datetime.fromtimestamp(value / 1000, UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _archive_article(raw: object) -> RawItem | None:
+    if not isinstance(raw, dict):
+        raise _bad_schema()
+    article_id, code, title = raw.get("id"), raw.get("code"), raw.get("title")
+    if not isinstance(article_id, int) or isinstance(article_id, bool):
+        return None  # no id: duplicates cannot be told, invalid (R-6)
+    if not isinstance(title, str):
+        return None
+    # the code becomes part of the link: ASCII letters and digits only reach a URL
+    link = (
+        f"{BINANCE_LINK}{code}"
+        if isinstance(code, str) and code.isascii() and code.isalnum()
+        else None
+    )
+    return RawItem(str(article_id), link, title, "", _loose_release(raw.get("releaseDate")))
+
+
+def _catalog(raw: object) -> CatalogPage:
+    if not isinstance(raw, dict):
+        raise _bad_schema()
+    catalog_id = raw.get("catalogId")
+    if not isinstance(catalog_id, int) or isinstance(catalog_id, bool):
+        raise _bad_schema()
+    nested = raw.get("catalogs")
+    if nested is not None and (not isinstance(nested, list) or nested):
+        raise _bad_schema()  # a sub-catalog would be a silent gap (plan Risk 4)
+    articles = raw.get("articles")
+    if not isinstance(articles, list):
+        raise _bad_schema()
+    return CatalogPage(
+        catalog_id,
+        _catalog_name(raw.get("catalogName")),
+        _count(raw.get("total")),
+        [_archive_article(article) for article in articles],
+    )
+
+
+def parse_binance_page(body: bytes) -> list[CatalogPage]:
+    """Spec 0047: `data.catalogs[]`, yanıt sırasıyla; son sayfadan sonrası boş liste."""
+    try:
+        document = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError, RecursionError):
+        raise ParseError("bad_json") from None
+    data = document.get("data") if isinstance(document, dict) else None
+    catalogs = data.get("catalogs") if isinstance(data, dict) else None
+    if not isinstance(catalogs, list):
+        raise _bad_schema()
+    pages = [_catalog(catalog) for catalog in catalogs]
+    if len({page.catalog_id for page in pages}) != len(pages):
+        raise _bad_schema()
+    return pages

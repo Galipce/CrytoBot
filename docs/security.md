@@ -27,7 +27,8 @@
   varlık bildirimi ve dış varlık reddedilir (`xml_entity`), Binance JSON'u katı şemayla; haber bağlantıları
   izlenmez; metin 20 KB'a kesilip olduğu gibi saklanır, çalıştırılmaz. İstekler kişisel bilgi taşımayan genel
   istemci adıyla gider. Hata yalnız adıyla kaydedilir: URL ve istisna metni (sorgu dizgesindeki sır) satıra ve
-  kayda girmez.
+  kayda girmez. Geçmiş duyuru arşivi (`news archive`, spec 0047) aynı getiriciyle aynı kurallara tabidir; ek olarak
+  aynı anda tek istek, iki istek arasında en az `archive_request_gap_s` saniye, hata yinelenmez ve Telegram'a gitmez.
 - LLM harcaması günlük limitlidir (config); limit aşılınca LLM sinyali devre dışı kalır, bot teknik sinyalle devam eder.
 
 ## AuthN / AuthZ

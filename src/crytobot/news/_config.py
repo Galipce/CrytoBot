@@ -4,6 +4,10 @@ AC-9; plan Risk 12, 13, A-2).
 Yollar zorunludur, varsayılansızdır; diğerlerinin varsayılanı vardır. İlk sorun adıyla söylenir,
 ham değer mesaja yazılmaz. Ağa çıkılmaz, dosya açılmaz: bot deposu ve kayıt yolu karşılaştırması
 çözülmüş yollarla giriş noktasındadır.
+
+Spec 0047 (plan Risk 1): `[news]`'in `archive_` önekli dört anahtarı arşiv komutunundur. Toplayıcı
+onları tanır ama kullanmaz ve denetlemez; `load_archive_config` önce dosyanın tamamını
+`load_news_config` ile, sonra arşiv anahtarlarını doğrular.
 """
 
 from collections.abc import Mapping
@@ -18,6 +22,9 @@ _URL_LIMIT = 2048
 _DEFAULTS = {"interval_minutes": 15, "max_response_kb": 2048, "source_alert_hours": 6}
 _PATHS = ("store_path", "log_path")
 _SOURCE_KEYS = ("name", "type", "url", "enabled")
+ARCHIVE_KEYS = ("archive_store_path", "archive_log_path", "archive_url", "archive_request_gap_s")
+MIN_ARCHIVE_GAP_S = 1
+_ARCHIVE_GAP_DEFAULT = 1
 
 
 @dataclass(frozen=True)
@@ -120,7 +127,7 @@ def _load(document: Mapping[str, object]) -> NewsConfig:
     if not isinstance(table, Mapping):
         raise _invalid(SECTION)
     for key in table:
-        if key not in (*_PATHS, *_DEFAULTS, "sources"):
+        if key not in (*_PATHS, *_DEFAULTS, *ARCHIVE_KEYS, "sources"):
             raise _Problem(f"bilinmeyen ayar: {SECTION}.{key}")
     paths = []
     for key in _PATHS:
@@ -154,3 +161,59 @@ def load_news_config(document: Mapping[str, object]) -> NewsConfigResult:
     except _Problem as problem:
         return NewsConfigResult(None, problem.message)
     return NewsConfigResult(config, "")
+
+
+@dataclass(frozen=True)
+class ArchiveConfig:
+    """Spec 0047 R-9: arşiv komutunun ayarı; `news` aynı dosyanın toplayıcı ayarıdır."""
+
+    news: NewsConfig
+    store_path: str
+    log_path: str
+    url: str
+    request_gap_s: int
+
+    @property
+    def max_response_bytes(self) -> int:
+        return self.news.max_response_bytes  # plan Risk 1: one page limit for both commands
+
+
+@dataclass(frozen=True)
+class ArchiveConfigResult:
+    config: ArchiveConfig | None
+    message: str
+
+
+def _archive(document: Mapping[str, object], news: NewsConfig) -> ArchiveConfig:
+    table = document[SECTION]
+    assert isinstance(table, Mapping)  # load_news_config accepted it
+    paths = []
+    for key in ("archive_store_path", "archive_log_path"):
+        if key not in table:
+            raise _missing(f"{SECTION}.{key}")
+        paths.append(_text(table[key], f"{SECTION}.{key}", _URL_LIMIT))
+    if "archive_url" not in table:
+        raise _missing(f"{SECTION}.archive_url")
+    url = _https(table["archive_url"], f"{SECTION}.archive_url")
+    gap = table.get("archive_request_gap_s", _ARCHIVE_GAP_DEFAULT)
+    if not isinstance(gap, int) or isinstance(gap, bool) or gap < MIN_ARCHIVE_GAP_S:
+        raise _invalid(f"{SECTION}.archive_request_gap_s")
+    store_path, log_path = paths
+    # other spellings of one file are caught resolved, in __main__ (plan Risk 2)
+    if store_path in (news.store_path, news.log_path):
+        raise _invalid(f"{SECTION}.archive_store_path")
+    if log_path in (news.store_path, news.log_path, store_path):
+        raise _invalid(f"{SECTION}.archive_log_path")
+    return ArchiveConfig(news, store_path, log_path, url, gap)
+
+
+def load_archive_config(document: Mapping[str, object]) -> ArchiveConfigResult:
+    """Spec 0047 AC-10: dosyanın tamamı geçerli olmalı; ilk sorunun adıyla ret."""
+    news = load_news_config(document)
+    if news.config is None:
+        return ArchiveConfigResult(None, news.message)
+    try:
+        config = _archive(document, news.config)
+    except _Problem as problem:
+        return ArchiveConfigResult(None, problem.message)
+    return ArchiveConfigResult(config, "")

@@ -11,6 +11,16 @@ interval_minutes = 15             # iki turun başlangıcı arası, dakika; en a
 max_response_kb = 2048            # bir kaynağın yanıtı en çok bu kadar KB (1 KB = 1024 bayt)
 source_alert_hours = 6            # bu süreden uzun aralıksız hata veren kaynak için tek bildirim
 
+# Geçmiş Binance duyuru arşivi (spec 0047): `python -m crytobot news archive` bütün katalogları en
+# eski duyuruya kadar okur, yeniden çalıştırılınca yalnız eksikleri ekler, yarıda kalırsa kaldığı
+# sayfadan sürer; `python -m crytobot news archive status` ağa çıkmadan durumu gösterir. Kataloglar
+# yanıttan okunur (ayarda liste yok). Arşiv ileriye dönük kayıttan ayrıdır: kayıtları "arşivden"
+# işaretlidir, ilk görme anı taşımaz. Yanıt sınırı max_response_kb'dır. Telegram bildirimi gitmez.
+archive_store_path = "crytobot-news-archive.db"  # arşiv deposu; haber kaydı ya da bot deposu olamaz
+archive_log_path = "crytobot-news-archive.log"   # arşivin kayıt dosyası; diğer kayıtlardan ayrı
+archive_url = "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query"  # yalnız https
+archive_request_gap_s = 1                         # iki istek arası en az saniye (tamsayı, en az 1)
+
 # Kaynaklar: `type` "binance-duyuru" (JSON) ya da "rss" (RSS 2.0 ve Atom); yalnız https.
 # `enabled = false` olan kaynak sorgulanmaz. Kaynak çıkarılınca eski kayıtları kalır.
 # Binance duyuru ucu belgelenmiş değildir ve değişebilir: değişirse kaynak hatası olur.
