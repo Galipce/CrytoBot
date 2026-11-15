@@ -660,6 +660,8 @@ def _news(
                 lambda text: output(line(clock(), "haber", text)),
                 None if service is None else service.dispatch,
                 None if service is None else service.drain_queue,
+                None if service is None else service.take_dropped,
+                None if service is None else service.take_disabled_reason,
             )
             exit_ = run_collection(config, store, parts)
         finally:

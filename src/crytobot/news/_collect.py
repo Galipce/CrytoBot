@@ -26,15 +26,20 @@ POSSIBLE_MISS = "uyarı=olası kaçırma"
 @dataclass(frozen=True)
 class CollectParts:
     """Toplamanın gerçek etkileri. `notify` yoksa Telegram kapalıdır: bildirim yalnız satırdır.
-    `drain` her tur başında `reporting` kuyruğunu iletmeyi dener."""
+    `notify` iletilemeyip kuyruğa alınan mesajın hata adını döndürür; `drain` her tur başında
+    `reporting` kuyruğunu iletmeyi dener, iletilemeyenlerin hata adlarını döndürür; `dropped`
+    kuyruktan atılanların, `disabled_reason` Telegram kalıcı kapandıysa gerekçesinin adını bir kez
+    verir (review round 1 F-4)."""
 
     clock: Callable[[], datetime]
     wait: Callable[[float], None]
     stopped: Callable[[], bool]
     fetch: Callable[[NewsSource, int], Fetched]
     say: Callable[[str], None]
-    notify: Callable[[str], object] | None = None
-    drain: Callable[[], object] | None = None
+    notify: Callable[[str], str | None] | None = None
+    drain: Callable[[], list[str]] | None = None
+    dropped: Callable[[], list[str]] | None = None
+    disabled_reason: Callable[[], str | None] | None = None
 
 
 class CollectionExit(Enum):
@@ -95,15 +100,20 @@ class _Round:
         self.parts = parts
 
     def _notify(self, text: str, line: str) -> bool:
-        """Satır her zaman; Telegram açıksa `reporting`'e verilir. Verildi mi (ya da kapalı mı)."""
+        """Satır her zaman; Telegram açıksa `reporting`'e verilir (kuyruk dahil). Verildi mi (ya da
+        kapalı mı). İletim sorunları satıra yazılır (F-4); işaretleme kuralı değişmez."""
         self.parts.say(line)
         if self.parts.notify is None:
             return True
+        prefix = line.split(" ", 1)[0]
         try:
-            self.parts.notify(text)
+            error = self.parts.notify(text)
         except Exception:  # reporting never stops the collection; the next round retries
-            self.parts.say(f"{line.split(' ', 1)[0]} bildirim iletilemedi")
+            self.parts.say(f"{prefix} bildirim iletilemedi")
             return False
+        if error is not None:
+            self.parts.say(f"{prefix} bildirim kuyrukta ({error})")
+        telegram_lines(self.parts)
         return True
 
     def _failed(self, source: NewsSource, previous: SourceState, error: str, at: datetime) -> None:
@@ -175,10 +185,21 @@ class _Round:
         return True
 
 
+def telegram_lines(parts: CollectParts) -> None:
+    """Kuyruktan atılan mesajlar ve Telegram'ın kalıcı kapanması, bot döngüsünün satırlarıyla."""
+    for error in [] if parts.dropped is None else parts.dropped():
+        parts.say(f"telegram bildirimi iletilemedi ({error})")
+    reason = None if parts.disabled_reason is None else parts.disabled_reason()
+    if reason:
+        parts.say(f"telegram devre dışı ({reason})")
+
+
 def run_round(config: NewsConfig, store: NewsStore, parts: CollectParts) -> bool:
     """Açık kaynakların her biri bir kez; tur durdurmayla kesildiyse `False` (R-2, AC-8)."""
     if parts.drain is not None:
-        parts.drain()
+        for error in parts.drain():
+            parts.say(f"telegram bildirimi iletilemedi ({error})")
+        telegram_lines(parts)
     current = _Round(config, store, parts)
     for source in config.sources:
         if not source.enabled:

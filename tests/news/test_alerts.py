@@ -158,3 +158,37 @@ def test_disabled_time_not_counted_as_outage(tmp_path: Path) -> None:
     rounds_at(resumed, 17.5)
     assert len(resumed.notices) == 1
     assert f"Başlangıç: {(START + timedelta(hours=11)).isoformat()}" in resumed.notices[0]
+
+
+def test_telegram_issues_written_as_lines(tmp_path: Path) -> None:
+    """Review round 1 F-4: kuyruğa alınan bildirim, kuyruktan atılan mesaj, iletilemeyen kuyruk ve
+    Telegram'ın kalıcı kapanması satıra yazılır; bildirim yine verilmiş sayılır (kuyruk dahil)."""
+    from dataclasses import replace
+
+    harness = failing(tmp_path)
+    dropped = ["telegram_format"]
+    reasons: list[str | None] = ["unauthorized"]
+
+    def take_dropped() -> list[str]:
+        taken = list(dropped)
+        dropped.clear()
+        return taken
+
+    def take_reason() -> str | None:
+        return reasons.pop() if reasons else None
+
+    original = harness.parts
+    harness.parts = lambda: replace(  # type: ignore[method-assign]
+        original(),
+        notify=lambda text: "http_429",
+        drain=lambda: ["timeout"],
+        dropped=take_dropped,
+        disabled_reason=take_reason,
+    )
+    rounds_at(harness, 0, 7)
+    assert "telegram bildirimi iletilemedi (timeout)" in harness.lines
+    assert "kaynak=coindesk bildirim kuyrukta (http_429)" in harness.lines
+    assert harness.lines.count("telegram bildirimi iletilemedi (telegram_format)") == 1
+    assert harness.lines.count("telegram devre dışı (unauthorized)") == 1
+    for store in harness.store():
+        assert store.state("coindesk").alert_sent

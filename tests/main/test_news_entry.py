@@ -329,3 +329,36 @@ def test_log_unwritable_exit_3(collector: Collector) -> None:
     code, console = collector.run("news")
     assert code == EXIT_LOG_FAILED
     assert "kayıt dosyası yazılamıyor: toplama durdu" in console
+
+
+def test_telegram_shutdown_reason_in_news_log(collector: Collector) -> None:
+    """Review round 1 F-4: gerçek `ReportingService`; kalıcı hata (401) Telegram'ı kapatır, neden
+    haber kaydı satırındadır, token hiçbir satırda yoktur."""
+    from crytobot.reporting import ReportingService, TelegramConfig
+
+    service = ReportingService(
+        TelegramConfig(enabled=True, bot_token="123:SECRETTOKEN", chat_id="42"),
+        transport=lambda _url, _payload: (401, '{"ok":false,"description":"Unauthorized"}'),
+    )
+    text = news_text(collector.root, source_alert_hours="1")
+    collector.write(text.replace("interval_minutes = 15", "interval_minutes = 30"))
+    collector.responses["coindesk"] = Fetched(error="http_503")
+    collector.stop_after_rounds = 4
+    out = io.StringIO()
+    collector.stop = StopRequest()
+    code = run(
+        ["news"],
+        config_path=collector.bot_config,
+        news_config_path=collector.news_config,
+        console=out,
+        clock=collector.clock,
+        stop=collector.stop,
+        wait=collector.wait,
+        news_fetch=collector.fetch,
+        reporter=service,
+    )
+    assert code == EXIT_OK
+    log = (collector.root / "news.log").read_text(encoding="utf-8")
+    assert "bildirim=giriş" in log
+    assert "telegram devre dışı (" in log
+    assert "SECRETTOKEN" not in log and "SECRETTOKEN" not in out.getvalue()
