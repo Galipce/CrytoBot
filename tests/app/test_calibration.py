@@ -261,7 +261,9 @@ def test_settings_accept_approval(tmp_path: Path) -> None:
 # --- data checks (AC-7) ---------------------------------------------------------------------------
 def _stage(folder: Path, **changes: object) -> tuple[CalibrationOutcome, Console]:
     console = Console()
-    exit_ = run_calibration(config_of(folder, **changes), parts(console), periods=PERIODS)
+    exit_ = run_calibration(
+        config_of(folder, **changes), parts(console), periods=PERIODS, data_start=D0
+    )
     return exit_.outcome, console
 
 
@@ -302,9 +304,28 @@ def test_refused_data_named(folder: Path, make: Callable[[Path], object], messag
 def test_refused_data_not_covering_the_periods(folder: Path) -> None:
     later = (PERIODS[0], PERIODS[1], replace(PERIODS[2], end=D0 + 5 * DAY))
     console = Console()
-    exit_ = run_calibration(config_of(folder), parts(console), periods=later)
+    exit_ = run_calibration(config_of(folder), parts(console), periods=later, data_start=D0)
     assert exit_.outcome is CalibrationOutcome.REFUSED
     assert "dönemleri kapsamıyor" in console[-1]
+
+
+def test_refused_data_starting_after_warmup_start(folder: Path) -> None:
+    # review round 1 F-1: data_start (R-2 ısınma başı) is checked at its boundary
+    console = Console()
+    later = D0 - timedelta(seconds=1)  # the files start at D0: one second short
+    exit_ = run_calibration(config_of(folder), parts(console), periods=PERIODS, data_start=later)
+    assert exit_.outcome is CalibrationOutcome.REFUSED
+    assert "veri dosyası uyumsuz: dönemleri kapsamıyor" in console[-1]
+    assert leftovers(folder) == []
+
+
+def test_default_warmup_start_is_2023(folder: Path) -> None:
+    # the files start 2024-01-01; without the test-only data_start R-2's 2023-01-01 applies
+    console = Console()
+    exit_ = run_calibration(config_of(folder), parts(console), periods=PERIODS)
+    assert exit_.outcome is CalibrationOutcome.REFUSED
+    assert "veri dosyası uyumsuz: dönemleri kapsamıyor" in console[-1]
+    assert leftovers(folder) == []
 
 
 def test_refused_when_an_output_exists(folder: Path) -> None:
@@ -318,7 +339,7 @@ def test_refused_when_an_output_exists(folder: Path) -> None:
 def test_refused_when_digest_fails(folder: Path) -> None:
     console = Console()
     exit_ = run_calibration(
-        config_of(folder), parts(console, digest=lambda _: None), periods=PERIODS
+        config_of(folder), parts(console, digest=lambda _: None), periods=PERIODS, data_start=D0
     )
     assert exit_.outcome is CalibrationOutcome.REFUSED
     assert "veri dosyası okunamıyor" in console[-1]
@@ -332,7 +353,7 @@ def prepared(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Console]:
     for interval in STEPS:
         write_data(where / f"data-{interval}.jsonl", interval)
     console = Console()
-    exit_ = run_calibration(config_of(where), parts(console), periods=PERIODS)
+    exit_ = run_calibration(config_of(where), parts(console), periods=PERIODS, data_start=D0)
     assert exit_.outcome is CalibrationOutcome.COMPLETED, console
     return where, console
 
@@ -369,11 +390,23 @@ def _approve(
     return config_of(folder, settings_sha256=sha or real, approved_by="Galip", approved_at=at)
 
 
-def test_final_measures_three_periods_and_verdicts(stage_one: tuple[Path, Console]) -> None:
+def test_final_refused_data_starting_after_warmup_start(stage_one: tuple[Path, Console]) -> None:
+    # review round 1 F-1: the final measurement checks the same boundary (default 2023-01-01)
     folder, _ = stage_one
     console = Console()
     exit_ = run_calibration_final(
         _approve(folder), parts(console, clock=lambda: NOW), periods=PERIODS
+    )
+    assert exit_.outcome is CalibrationOutcome.REFUSED
+    assert "veri dosyası uyumsuz: dönemleri kapsamıyor" in console[-1]
+    assert not (folder / "rapor-son.txt").exists()
+
+
+def test_final_measures_three_periods_and_verdicts(stage_one: tuple[Path, Console]) -> None:
+    folder, _ = stage_one
+    console = Console()
+    exit_ = run_calibration_final(
+        _approve(folder), parts(console, clock=lambda: NOW), periods=PERIODS, data_start=D0
     )
     assert exit_.outcome is CalibrationOutcome.COMPLETED, console
     report = (folder / "rapor-son.txt").read_text(encoding="utf-8")
@@ -388,7 +421,7 @@ def test_final_refused_missing_settings_file(stage_one: tuple[Path, Console]) ->
     config = _approve(folder)
     (folder / "ayar-seti.json").unlink()
     console = Console()
-    exit_ = run_calibration_final(config, parts(console), periods=PERIODS)
+    exit_ = run_calibration_final(config, parts(console), periods=PERIODS, data_start=D0)
     assert exit_.outcome is CalibrationOutcome.REFUSED
     assert console[-1].startswith("kalibrasyon reddedildi: ayar seti dosyası yok: ")
     assert not (folder / "rapor-son.txt").exists()
@@ -397,7 +430,7 @@ def test_final_refused_missing_settings_file(stage_one: tuple[Path, Console]) ->
 def test_final_refused_without_approval(stage_one: tuple[Path, Console]) -> None:
     folder, _ = stage_one
     console = Console()
-    exit_ = run_calibration_final(config_of(folder), parts(console), periods=PERIODS)
+    exit_ = run_calibration_final(config_of(folder), parts(console), periods=PERIODS, data_start=D0)
     assert exit_.outcome is CalibrationOutcome.REFUSED
     assert console[-1] == "kalibrasyon reddedildi: ayar eksik: calibration.settings_sha256"
 
@@ -405,7 +438,9 @@ def test_final_refused_without_approval(stage_one: tuple[Path, Console]) -> None
 def test_final_refused_fingerprint_mismatch(stage_one: tuple[Path, Console]) -> None:
     folder, _ = stage_one
     console = Console()
-    exit_ = run_calibration_final(_approve(folder, sha="0" * 64), parts(console), periods=PERIODS)
+    exit_ = run_calibration_final(
+        _approve(folder, sha="0" * 64), parts(console), periods=PERIODS, data_start=D0
+    )
     assert exit_.outcome is CalibrationOutcome.REFUSED
     assert "ayar seti parmak izi onayla tutmuyor" in console[-1]
     assert not (folder / "rapor-son.txt").exists() and not (folder / "kayit-son.jsonl").exists()
@@ -416,7 +451,9 @@ def test_final_refused_approval_moment(stage_one: tuple[Path, Console]) -> None:
     for at in ("2026-11-15T11:59:59+00:00", "2026-11-15T12:00:01+00:00"):
         console = Console()
         # the settings were generated at NOW; the clock reads NOW: before and after are refused
-        exit_ = run_calibration_final(_approve(folder, at=at), parts(console), periods=PERIODS)
+        exit_ = run_calibration_final(
+            _approve(folder, at=at), parts(console), periods=PERIODS, data_start=D0
+        )
         assert exit_.outcome is CalibrationOutcome.REFUSED
         assert "onay anı geçersiz" in console[-1]
     assert not (folder / "rapor-son.txt").exists()
@@ -426,17 +463,17 @@ def test_final_refused_changed_costs_or_data(stage_one: tuple[Path, Console]) ->
     folder, _ = stage_one
     console = Console()
     changed = replace(_approve(folder), costs=replace(_approve(folder).costs, spread=Decimal(0)))
-    assert run_calibration_final(changed, parts(console), periods=PERIODS).outcome is (
-        CalibrationOutcome.REFUSED
-    )
+    assert run_calibration_final(
+        changed, parts(console), periods=PERIODS, data_start=D0
+    ).outcome is (CalibrationOutcome.REFUSED)
     assert "maliyet ayar setinden farklı" in console[-1]
     write_data(
         folder / "data-1d.jsonl", "1d", skip=lambda pair: {0} if pair == "BTC/USDT" else set()
     )
     console = Console()
-    assert run_calibration_final(_approve(folder), parts(console), periods=PERIODS).outcome is (
-        CalibrationOutcome.REFUSED
-    )
+    assert run_calibration_final(
+        _approve(folder), parts(console), periods=PERIODS, data_start=D0
+    ).outcome is (CalibrationOutcome.REFUSED)
     assert "veri dosyası ayar setinden farklı: 1d" in console[-1]
 
 
@@ -445,7 +482,9 @@ def test_final_refused_corrupt_settings(stage_one: tuple[Path, Console]) -> None
     (folder / "ayar-seti.json").write_bytes(b"\xff{")
     sha = hashlib.sha256(b"\xff{").hexdigest()
     console = Console()
-    exit_ = run_calibration_final(_approve(folder, sha=sha), parts(console), periods=PERIODS)
+    exit_ = run_calibration_final(
+        _approve(folder, sha=sha), parts(console), periods=PERIODS, data_start=D0
+    )
     assert exit_.outcome is CalibrationOutcome.REFUSED
     assert "ayar seti dosyası bozuk (json)" in console[-1]
 
@@ -464,7 +503,9 @@ def test_two_runs_byte_identical_except_generated_at(
     for where, moment in ((folder, NOW), (other, later)):
         console = Console()
         config = replace(config_of(where), data=config_of(folder).data)  # the very same data files
-        exit_ = run_calibration(config, parts(console, clock=fixed(moment)), periods=PERIODS)
+        exit_ = run_calibration(
+            config, parts(console, clock=fixed(moment)), periods=PERIODS, data_start=D0
+        )
         assert exit_.outcome is CalibrationOutcome.COMPLETED
         results.append(
             (
@@ -483,7 +524,7 @@ def test_stop_request_stops_before_the_next_interval(folder: Path) -> None:
     console = Console()
     made = parts(console)
     made.stop.request()
-    exit_ = run_calibration(config_of(folder), made, periods=PERIODS)
+    exit_ = run_calibration(config_of(folder), made, periods=PERIODS, data_start=D0)
     assert exit_.outcome is CalibrationOutcome.STOPPED
     assert console[-1] == "kalibrasyon durdu: durdurma isteği"
     assert leftovers(folder) == []
@@ -492,7 +533,10 @@ def test_stop_request_stops_before_the_next_interval(folder: Path) -> None:
 def test_write_failure_named(folder: Path) -> None:
     console = Console()
     exit_ = run_calibration(
-        config_of(folder), parts(console, write_file=lambda *_: False), periods=PERIODS
+        config_of(folder),
+        parts(console, write_file=lambda *_: False),
+        periods=PERIODS,
+        data_start=D0,
     )
     assert exit_.outcome is CalibrationOutcome.NOT_WRITTEN
     assert console[-1].startswith("kalibrasyon durdu: ayar seti yazılamadı: ")
@@ -503,6 +547,8 @@ def test_unexpected_error_named_by_type(folder: Path) -> None:
         raise KeyError("sır")
 
     console = Console()
-    exit_ = run_calibration(config_of(folder), parts(console, read=broken), periods=PERIODS)
+    exit_ = run_calibration(
+        config_of(folder), parts(console, read=broken), periods=PERIODS, data_start=D0
+    )
     assert exit_.outcome is CalibrationOutcome.STOPPED
     assert console[-1] == "kalibrasyon durdu: beklenmeyen hata: KeyError"

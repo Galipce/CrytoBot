@@ -9,6 +9,7 @@ from pathlib import Path
 
 from crytobot.app import CalibrationOutcome, run_calibration, run_calibration_final
 from tests.app.test_calibration import (
+    D0,
     NOW,
     PERIODS,
     STEPS,
@@ -46,16 +47,16 @@ def test_no_bot_files_touched(tmp_path: Path) -> None:
     before = digests(tmp_path)
 
     console = Console()
-    assert run_calibration(config_of(work), parts(console), periods=PERIODS).outcome is (
-        CalibrationOutcome.COMPLETED
-    )
+    assert run_calibration(
+        config_of(work), parts(console), periods=PERIODS, data_start=D0
+    ).outcome is (CalibrationOutcome.COMPLETED)
     settings = hashlib.sha256((work / "ayar-seti.json").read_bytes()).hexdigest()
     approved = config_of(
         work, settings_sha256=settings, approved_by="Galip", approved_at=NOW.isoformat()
     )
-    assert run_calibration_final(approved, parts(console), periods=PERIODS).outcome is (
-        CalibrationOutcome.COMPLETED
-    )
+    assert run_calibration_final(
+        approved, parts(console), periods=PERIODS, data_start=D0
+    ).outcome is (CalibrationOutcome.COMPLETED)
 
     after = digests(tmp_path)
     assert {name: after[name] for name in before} == before  # nothing changed

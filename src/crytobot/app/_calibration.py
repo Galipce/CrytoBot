@@ -37,6 +37,7 @@ from crytobot.app._config import _Bad, _number
 from crytobot.app._loop import ForcedStop, StopRequest
 from crytobot.app._session import AppError
 from crytobot.calibration import (
+    DATA_START,
     INTERVALS,
     PAIRS,
     PERIODS,
@@ -297,7 +298,7 @@ def _series(data: HistoryData, interval: timedelta) -> dict[str, PairSeries]:
 
 
 def _read_one(
-    interval: str, path: str, parts: CalibrationParts, periods: Periods
+    interval: str, path: str, parts: CalibrationParts, periods: Periods, data_start: datetime
 ) -> tuple[IntervalData, DataFacts, list[GapRow]]:
     read = parts.read(path)
     if read.problem is not None or read.data is None:
@@ -314,7 +315,7 @@ def _read_one(
         raise _refused(f"veri dosyası uyumsuz: çift yok ({', '.join(missing)}): {path}")
     if any(pairs[pair].volumes is None for pair in PAIRS):
         raise _refused(f"veri dosyası uyumsuz: hacim yok (sürüm 1): {path}")
-    first = min(period.start for period in periods)
+    first = min(data_start, *(period.start for period in periods))
     last = max(period.end for period in periods)
     if not (data.start <= first and last <= data.end):
         raise _refused(f"veri dosyası uyumsuz: dönemleri kapsamıyor: {path}")
@@ -332,12 +333,14 @@ def _read_one(
     return IntervalData(interval, _series(data, step)), facts, gaps
 
 
-def _inputs(config: CalibrationConfig, parts: CalibrationParts, periods: Periods) -> _Inputs:
+def _inputs(
+    config: CalibrationConfig, parts: CalibrationParts, periods: Periods, data_start: datetime
+) -> _Inputs:
     data: list[IntervalData] = []
     facts: list[DataFacts] = []
     gaps: list[GapRow] = []
     for interval, path in config.data:
-        item, fact, found = _read_one(interval, path, parts, periods)
+        item, fact, found = _read_one(interval, path, parts, periods, data_start)
         data.append(item)
         facts.append(fact)
         gaps.extend(found)
@@ -372,9 +375,11 @@ def _publish(
     _write(parts, "kayıt", records_path, records)
 
 
-def _stage_one(config: CalibrationConfig, parts: CalibrationParts, periods: Periods) -> str:
+def _stage_one(
+    config: CalibrationConfig, parts: CalibrationParts, periods: Periods, data_start: datetime
+) -> str:
     _outputs_free((config.settings_path, config.report_path, config.records_path), parts)
-    inputs = _inputs(config, parts, periods)
+    inputs = _inputs(config, parts, periods, data_start)
     _say(parts, "başladı: 1. aşama (ayarlama ve çapraz sınama)")
     measured = stage_one(inputs.data, config.costs, _progress(parts), periods_of=periods)
     generated_at = parts.clock()
@@ -415,12 +420,14 @@ def _approved_settings(
     return parsed
 
 
-def _final(config: CalibrationConfig, parts: CalibrationParts, periods: Periods) -> str:
+def _final(
+    config: CalibrationConfig, parts: CalibrationParts, periods: Periods, data_start: datetime
+) -> str:
     _outputs_free((config.final_report_path, config.final_records_path), parts)
     approval = config.approval
     settings = _approved_settings(config, parts, parts.clock())
     assert approval is not None  # checked above
-    inputs = _inputs(config, parts, periods)
+    inputs = _inputs(config, parts, periods, data_start)
     expected = dict(settings.data)
     for fact in inputs.facts:
         if expected.get(fact.interval) != fact.sha256:
@@ -464,14 +471,22 @@ def _guarded(parts: CalibrationParts, body: Callable[[], str]) -> CalibrationExi
 
 
 def run_calibration(
-    config: CalibrationConfig, parts: CalibrationParts, *, periods: Periods = PERIODS
+    config: CalibrationConfig,
+    parts: CalibrationParts,
+    *,
+    periods: Periods = PERIODS,
+    data_start: datetime = DATA_START,
 ) -> CalibrationExit:
-    """1. aşama; `periods` yalnız testlerde verilir (spec'in dönemleri varsayılandır)."""
-    return _guarded(parts, lambda: _stage_one(config, parts, periods))
+    """1. aşama; `periods` ve `data_start` (ısınma başı, R-2) yalnız testlerde verilir."""
+    return _guarded(parts, lambda: _stage_one(config, parts, periods, data_start))
 
 
 def run_calibration_final(
-    config: CalibrationConfig, parts: CalibrationParts, *, periods: Periods = PERIODS
+    config: CalibrationConfig,
+    parts: CalibrationParts,
+    *,
+    periods: Periods = PERIODS,
+    data_start: datetime = DATA_START,
 ) -> CalibrationExit:
-    """Son ölçüm: onaylı ayar setiyle, bir kez; `periods` yalnız testlerde verilir."""
-    return _guarded(parts, lambda: _final(config, parts, periods))
+    """Son ölçüm: onaylı ayar setiyle, bir kez; `periods` ve `data_start` yalnız testlerde."""
+    return _guarded(parts, lambda: _final(config, parts, periods, data_start))
