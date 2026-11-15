@@ -284,7 +284,7 @@ class ArchiveSnapshot:
     last_run_at: datetime | None
 
 
-def read_only(path: str) -> sqlite3.Connection:
+def open_existing(path: str) -> sqlite3.Connection:
     """Durum komutu yalnız SELECT yapar; var olan dosyayı `mode=rw` açar (plan A-2): dosya
     oluşturmaz, `mode=ro` gibi WAL yan dosyalarını bırakmaz, öldürülmüş sürecin WAL'ını kurtarır
     (conventions, spec 0011)."""
@@ -296,7 +296,7 @@ def read_archive(path: str) -> ArchiveSnapshot | None:
     if not Path(path).is_file():
         return None
     try:
-        with closing(read_only(path)) as connection:
+        with closing(open_existing(path)) as connection:
             row = connection.execute("SELECT value FROM meta WHERE name = 'format'").fetchone()
             if row is None or row[0] != FORMAT_VERSION:
                 raise ArchiveStoreError("arşivin biçimi tanınmıyor")
@@ -337,7 +337,7 @@ def forward_binance_ids(path: str, sources: Sequence[str]) -> frozenset[str] | N
         return frozenset()
     marks = ", ".join("?" for _ in sources)
     try:
-        with closing(read_only(path)) as connection:
+        with closing(open_existing(path)) as connection:
             rows = connection.execute(
                 f"SELECT key FROM news WHERE source IN ({marks}) AND key LIKE 'id:%'",
                 tuple(sources),
