@@ -26,6 +26,7 @@ __pycache__/
 htmlcov/
 
 # Local bot data (SQLite, caches) — never commit
+crytobot-news.toml
 *.sqlite
 *.sqlite3
 *.db

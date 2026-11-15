@@ -1,5 +1,5 @@
-"""Giriş noktası: `python -m crytobot prepare|start|download|backtest|calibrate` (spec 0022, 0023,
-0025, 0045).
+"""Giriş noktası: `python -m crytobot prepare|start|download|backtest|calibrate|news` (spec 0022,
+0023, 0025, 0045, 0046).
 
 Karar içermez: kararların hepsi `app`'tedir. Burada yalnız gerçek etkiler bağlanır: ayar dosyası
 (`tomllib`, çalışma dizinindeki `crytobot.toml`), gerçek UTC saati, ≤1 s'lik parçalarla bekleme,
@@ -23,6 +23,14 @@ indikatör kalibrasyonunun 1. aşamasını (ayarlama, çapraz sınama → ayar s
 `calibrate --final` onaylı ayar setiyle son ölçümü koşar. Ağa çıkılmaz, kilit alınmaz, bot deposu,
 kayıt dosyası ve çalışan ayar değişmez; yalnız ayardaki çıktı yolları yazılır (üzerine yazılmaz).
 Yollar çözülmüş hâlleriyle de birbirinden farklı olmalıdır. Çıkış kodları backtest'inkiyle aynıdır.
+
+`news` (spec 0046) haber toplayıcısıdır: ayar ayrı dosyadadır (`crytobot-news.toml`, plan A-2), bot
+ayarı yalnız `[bot]` yollarının karşılaştırması ve Telegram ayarı için okunur. Kararlar `news`'tedir
+(`run_collection`; `app` aracısız, plan Risk 1); burada gerçek saat, ≤1 s'lik bekleme, sinyaller,
+haber kaydının mutlak yolunun kilidi (`<haber kaydı>.lock`, bot kilidinden ayrı), konsol ve haberin
+kendi kayıt dosyası, HTTPS getirme ve `reporting` bağlanır. Bot deposu açılmaz. `news status` ağa
+çıkmaz, kilit almaz; depo yoksa oluşturmaz. Çıkış: 0 temiz durma ya da durum, 1 ret (ayar, kilit,
+okunamayan ya da yazılamayan kayıt), 3 kayıt dosyası yazılamıyor, 130 zorla durma.
 
 Çıkış kodları: 0 temiz durma, hazırlık, indirme ya da backtest tamam, 1 başlatma, hazırlık, indirme
 ya da backtest reddi (ayarlar, veri dosyası, rapor dosyası var), 2 okuma reddiyle durma, 3 kayıt
@@ -113,13 +121,28 @@ from crytobot.market_data import (
     read_history,
     read_market_data,
 )
+from crytobot.news import (
+    CollectionExit,
+    CollectParts,
+    Fetched,
+    NewsConfig,
+    NewsSource,
+    NewsStore,
+    StoreError,
+    fetch_source,
+    load_news_config,
+    read_snapshot,
+    run_collection,
+    status_lines,
+)
 from crytobot.reporting import ReportingService, load_reporting_config
 
 CONFIG_FILE = "crytobot.toml"
+NEWS_CONFIG_FILE = "crytobot-news.toml"
 USAGE = (
     "kullanım: python -m crytobot "
-    "prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard"
-    " [--live] [--trial] [--final]"
+    "prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news"
+    " [--live] [--trial] [--final] [status]"
 )
 COMMANDS = (
     ["prepare"],
@@ -138,6 +161,8 @@ COMMANDS = (
     ["resume"],
     ["stop"],
     ["dashboard"],
+    ["news"],
+    ["news", "status"],
 )
 EXIT_OK = 0
 EXIT_REFUSED = 1
@@ -173,6 +198,8 @@ _PIECE_S = 1.0
 Clock = Callable[[], datetime]
 Read = Callable[[tuple[str, ...], ReadSettings], MarketRead]
 Download = Callable[[HistoryRequest, Clock, Callable[[], bool]], HistoryResult]
+NewsFetch = Callable[[NewsSource, int, Callable[[], bool]], Fetched]
+NEWS_BUSY = "haber kaydı başka bir toplama komutunda açık"
 
 
 def utc_now() -> datetime:
@@ -531,6 +558,122 @@ def _calibrate(
     return _CALIBRATION_EXIT_CODES[exit_.outcome]
 
 
+def real_news_fetch(source: NewsSource, max_bytes: int, stopped: Callable[[], bool]) -> Fetched:
+    return fetch_source(source.url, source.kind, max_bytes, stopped=stopped)
+
+
+def _bot_paths(path: Path) -> tuple[str, ...]:
+    """Bot ayarının `[bot]` yolları, doğrulamasız (plan A-2): dosya yoksa ya da okunamıyorsa boş."""
+    document = _load_toml(path)
+    bot = document.get("bot") if isinstance(document, dict) else None
+    if not isinstance(bot, Mapping):
+        return ()
+    return tuple(
+        value for key in ("store_path", "log_path") if isinstance(value := bot.get(key), str)
+    )
+
+
+def _news_config(news_path: Path, bot_path: Path, output: Output) -> NewsConfig | None:
+    """Spec 0046 AC-9: ağa çıkmadan ve hiçbir dosyaya dokunmadan önce, ilk sorun adıyla. Haber
+    kaydı ve kayıt dosyası bot deposu ya da bot kaydı olamaz, birbirleri de olamaz: başka yazımla
+    da (plan Risk 2, 13)."""
+    document = _load_toml(news_path)
+    if isinstance(document, str):
+        output.say(f"news: reddedildi: {document}")
+        return None
+    result = load_news_config(document)
+    config = result.config
+    if config is None:
+        output.say(f"news: reddedildi: {result.message}")
+        return None
+    bot = _bot_paths(bot_path)
+    if any(_same_file(config.store_path, other) for other in bot):
+        output.say("news: reddedildi: ayar geçersiz: news.store_path")
+        return None
+    if any(_same_file(config.log_path, other) for other in (*bot, config.store_path)):
+        output.say("news: reddedildi: ayar geçersiz: news.log_path")
+        return None
+    return config
+
+
+def _news_status(config: NewsConfig, output: Output) -> int:
+    """R-8: ağsız, kilitsiz; depo yoksa oluşturulmaz."""
+    try:
+        snapshot = read_snapshot(config.store_path)
+    except StoreError as error:
+        output.say(f"news: reddedildi: {error}")
+        return EXIT_REFUSED
+    for row in status_lines(config, snapshot):
+        output.say(row)
+    return EXIT_OK
+
+
+def _news_reporter(bot_path: Path, reporter: ReportingService | None) -> ReportingService | None:
+    if reporter is not None:
+        return reporter
+    document = _load_toml(bot_path)
+    if not isinstance(document, Mapping):
+        return None
+    config = load_reporting_config(document)
+    return ReportingService(config) if config.is_active else None
+
+
+def _news(
+    argv: Sequence[str],
+    news_path: Path,
+    bot_path: Path,
+    console: TextIO,
+    clock: Clock,
+    stop: StopRequest,
+    wait: Callable[[float], None] | None,
+    fetch: NewsFetch,
+    reporter: ReportingService | None,
+) -> int:
+    """Spec 0046: `news` toplar, `news status` gösterir. Ayar → kilit → depo sırası (AC-8, AC-9)."""
+    output = Output(console)
+    config = _news_config(news_path, bot_path, output)
+    if config is None:
+        return EXIT_REFUSED
+    if list(argv[1:]) == ["status"]:
+        return _news_status(config, output)
+    # one lock per file, however the path is spelled (plan Risk 3)
+    lock = StoreLock(str(Path(config.store_path).resolve()))
+    refused = lock.acquire()
+    if refused is not None:
+        why = NEWS_BUSY if refused == LOCK_BUSY else refused
+        output.say(f"news: reddedildi: {why}")
+        return EXIT_REFUSED
+    output = Output(console, config.log_path)
+    try:
+        try:
+            store = NewsStore.open(config.store_path)
+        except StoreError as error:
+            output(line(clock(), "haber", f"reddedildi: {error}"))
+            return EXIT_REFUSED
+        try:
+            service = _news_reporter(bot_path, reporter)
+            parts = CollectParts(
+                clock,
+                make_wait(stop) if wait is None else wait,
+                lambda: stop.requested,
+                lambda source, max_bytes: fetch(source, max_bytes, lambda: stop.requested),
+                lambda text: output(line(clock(), "haber", text)),
+                None if service is None else service.dispatch,
+                None if service is None else service.drain_queue,
+            )
+            exit_ = run_collection(config, store, parts)
+        finally:
+            store.close()
+    except ForcedStop:
+        return EXIT_FORCED
+    except LogWriteError:
+        output.say(line(clock(), "haber", "kayıt dosyası yazılamıyor: toplama durdu"))
+        return EXIT_LOG_FAILED
+    finally:
+        lock.release()
+    return EXIT_OK if exit_ is CollectionExit.STOPPED else EXIT_REFUSED
+
+
 def _prepare(
     config: BotConfig,
     output: Output,
@@ -723,6 +866,8 @@ def run(
     download: Download = download_history,
     reporter: ReportingService | None = None,
     live_client: object = None,
+    news_config_path: Path = Path(NEWS_CONFIG_FILE),
+    news_fetch: NewsFetch = real_news_fetch,
 ) -> int:
     """Komutu çalıştırır, çıkış kodunu döndürür. Ayar, kilit, depo sırası: borsaya ve depoya
     ayarlar denetlenmeden dokunulmaz (R-2); kilit depodan önce alınır (R-6)."""
@@ -737,6 +882,10 @@ def run(
         return _backtest(config_path, output, stop, clock, final="--final" in argv)
     if argv[0] == "calibrate":
         return _calibrate(config_path, output, stop, clock, final="--final" in argv)
+    if argv[0] == "news":
+        return _news(
+            argv, news_config_path, config_path, console, clock, stop, wait, news_fetch, reporter
+        )
     config = _config(config_path, output, clock)
     if config is None:
         return EXIT_REFUSED
