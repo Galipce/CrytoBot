@@ -15,12 +15,12 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 
 | Module | Single responsibility | Owns |
 |---|---|---|
-| `market_data` | Mum, fiyat, emir defteri verisini borsadan çekmek ve saklamak | OHLCV geçmişi, ticker anlık görüntüleri, geçmiş veri dosyası (backtest girdisi, spec 0023); dönem boşlukları ve dönemde mum denetimi — saf, indirme özetinin `boşluk=` kuralıyla (spec 0044) |
-| `news` | Haber/duyuru kaynaklarını takip edip haber skoru üretmek; spec 0046: ayardaki kaynaklardan (Binance duyuruları, RSS 2.0, Atom) ileriye dönük toplama — tur ve döngü kararları, HTTPS getirme sınırları, ayrıştırma, kesinti bildirimi kararı; spec 0047: geçmiş Binance duyuru arşivi — katalog keşfi, sayfalama, sürdürme, durma kuralı, istek aralığı | Haber kaydı (kendi SQLite deposu: yalnız eklenen haberler — kaynak, kimlik ya da bağlantı, yayın anı, ilk görme anı — ve kaynak durumu), arşiv (ayrı SQLite deposu: yalnız eklenen, "arşivden" işaretli geçmiş duyurular — katalog, kimlik, yayın anı, arşive alınma anı, ilk görme anı yok — ve katalog durumu), haber ayarı (`crytobot-news.toml`), haber skorları |
+| `market_data` | Mum, fiyat, emir defteri verisini borsadan çekmek ve saklamak | OHLCV geçmişi, ticker anlık görüntüleri, geçmiş veri dosyası (backtest girdisi, spec 0023); dönem boşlukları ve dönemde mum denetimi — saf, indirme özetinin `boşluk=` kuralıyla (spec 0044); olay fiyatları (spec 0048): genel piyasa verisinden, vermezse herkese açık geçmiş veri arşivinden (`data.binance.vision`) indirme adımı ve kendi SQLite deposu (borsa bilgisi anlık görüntüsü, 1h mumlar, indirilmiş aralıklar, koşu süresi) |
+| `news` | Haber/duyuru kaynaklarını takip edip haber skoru üretmek; spec 0046: ayardaki kaynaklardan (Binance duyuruları, RSS 2.0, Atom) ileriye dönük toplama — tur ve döngü kararları, HTTPS getirme sınırları, ayrıştırma, kesinti bildirimi kararı; spec 0047: geçmiş Binance duyuru arşivi — katalog keşfi, sayfalama, sürdürme, durma kuralı, istek aralığı; spec 0048: duyuru başlığının sabit etiket kuralları (olay türü, beklenen yön, coinler; kural seti parmak izi) ve örnek kütüphanesinin kaynaklarını (arşiv + ileriye dönük `binance-duyuru` kayıtları) yalnız okuyup kimliğe göre birleştirme | Haber kaydı (kendi SQLite deposu: yalnız eklenen haberler — kaynak, kimlik ya da bağlantı, yayın anı, ilk görme anı — ve kaynak durumu), arşiv (ayrı SQLite deposu: yalnız eklenen, "arşivden" işaretli geçmiş duyurular — katalog, kimlik, yayın anı, arşive alınma anı, ilk görme anı yok — ve katalog durumu), haber ayarı (`crytobot-news.toml`), haber skorları |
 | `research` | Whitepaper/proje dokümanlarını okuyup kaynak alıntılı araştırma skoru üretmek | Doküman önbelleği, araştırma skorları |
 | `llm` | Claude API'ye tek erişim noktası: şema doğrulama, harcama limiti | LLM çağrı günlüğü, günlük harcama |
 | `analysis` | Teknik analiz ve indikatör hesapları (saf fonksiyonlar) | — (durumsuz); spec 0045: stochastic, ADX/DI, Supertrend, Donchian |
-| `calibration` | İndikatör sinyallerinin isabet ölçümü ve kalibrasyonu (saf): sekiz indikatörün sabit "al"/"sat" kuralları ve ızgaraları, isabet kuralı ve taban oran, olağandışı mumlar, BTC'de ayarlama, çapraz sınama, görülmemiş dönemde hüküm (spec 0045) | Ayar seti metni (kanonik JSON, parmak izi), kalibrasyon raporu metni, sinyal kayıtları metni (JSON Lines); dosyaları giriş noktası yazar |
+| `calibration` | İndikatör sinyallerinin isabet ölçümü ve kalibrasyonu (saf): sekiz indikatörün sabit "al"/"sat" kuralları ve ızgaraları, isabet kuralı ve taban oran, olağandışı mumlar, BTC'de ayarlama, çapraz sınama, görülmemiş dönemde hüküm (spec 0045); geçmiş olay örnekleri (spec 0048): duyuru × coin örnekleri, giriş mumu, 0045'in isabet kuralıyla isabet ve taban oran, ölçülemeyen nedenleri, model kesim dönemi, çakışma, betimleyici kalibrasyon tablosu | Ayar seti metni (kanonik JSON, parmak izi), kalibrasyon raporu metni, sinyal kayıtları metni (JSON Lines); olay kalibrasyon tablosu ve örnek kütüphanesi metni (JSON Lines); dosyaları giriş noktası yazar |
 | `strategy` | Sinyalleri birleştirip işlem önerisi (yön, giriş, stop, hedef) üretmek; sabit aday kümesi S0…S3, ayarın tipi adayı seçer (spec 0043) | Strateji konfigürasyonu |
 | `risk` | Her işlem önerisini BR-3…BR-11'e göre onaylamak/reddetmek, pozisyon boyutlamak | Risk limitleri, sabit üst sınırlar, kill switch durumu |
 | `execution` | Onaylı emirleri borsaya (live) / simülatöre (paper, backtest) iletmek, emir durumunu izlemek | Emir kayıtları, clientOrderId'ler |
@@ -32,7 +32,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | `dashboard` | Localhost'ta salt-okunur web panosu sunmak (HTML ve /api/status) | Pano şablonu, sunucu yaşam döngüsü, host doğrulama |
 | `app` | Bileşim kökü (composition root): modülleri bağlar, ayarları denetler, zamanlayıcı/döngü | — (depo hazırlığı ve başlatma kapıları; gerçek etkiler enjekte edilir) |
 
-**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news`, spec 0022, 0023, 0025, 0030, 0031, 0045, 0046, 0047) bir modül
+**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news|events`, spec 0022, 0023, 0025, 0030, 0031, 0045, 0046, 0047, 0048) bir modül
 değildir, paket olmadığı için tabloda yer almaz. Karar içermez: ayar dosyasını (`crytobot.toml`) okur,
 gerçek saati, ≤1 s'lik beklemeyi, sinyalleri, tek süreç kilidini (`<depo>.lock`), konsol ve kayıt
 dosyası yazıcısını ve piyasa okumasını `app`'e verir. Kararların, zamanlamanın ve depo kapılarının
@@ -67,6 +67,14 @@ giriş noktası gerçek ve monoton saati, ≤1 s'lik beklemeyi, sinyalleri, arş
 (toplayıcının ve botun kilidinden ayrı), arşivin kendi kayıt dosyasını ve HTTPS getirmeyi `news`'e
 (`run_archive`) verir. Telegram bağlanmaz; bot deposu ve ileriye dönük haber kaydı açılmaz. `news archive
 status` ağa çıkmaz, kilit almaz, arşivi ve ileriye dönük kaydı yalnız okur (örtüşme sayısı).
+`events download` ve `events measure` (spec 0048) ayarı ayrı dosyadan (`crytobot-events.toml`) okur; kaynak
+kayıtların yolları haber ayarından, bot yolları bot ayarından yalnız karşılaştırma için okunur. Giriş noktası kaynak
+kayıtları `news`'le (`read_library_sources`: okuma ve etiket) okutur ve `calibration`'ın tipine çevirir — `app`
+`news`'i import etmez. `app` (`run_events_download`, `run_events_measure`) örnekleri ve fiyat aralıklarını
+`calibration`'dan alır, indirmeyi `market_data`'nın adımına (`download_event_prices`; borsa, arşiv, monoton saat,
+bekleme ve durdurma giriş noktasından) verir, ölçümde fiyat deposunu ağsız okutur, `calibration`'ın saf ölçümünü
+koşar ve üzerine yazmayan yazıcıyla (`backtest`'in rapor yazıcısı) kütüphaneyi ve raporu yazdırır. Fiyat deposunun
+mutlak yolu kilitlenir (iki komuta tek). Bot deposu, kayıt dosyası, çalışan ayarlar ve kaynak kayıtlar değişmez.
 
 ## Communication rules
 - Modüller birbirini yalnızca **public arayüz** (`<module>/__init__.py` ile dışa açılanlar) üzerinden çağırır.

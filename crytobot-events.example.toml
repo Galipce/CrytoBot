@@ -1,0 +1,28 @@
+# CrytoBot geçmiş olay örnek kütüphanesi ayarı örneği (spec 0048). Kopyala: crytobot-events.toml
+# (çalışma dizininde, git'e girmez). Botun ayarından ve haber ayarından ayrıdır; ikisi de değişmez.
+# Kaynak kayıtların yerleri ve türleri crytobot-news.toml'dan (arşiv, ileriye dönük kayıt), bot
+# deposu ve kayıt yolu crytobot.toml'dan yalnız okunur.
+#
+# `python -m crytobot events download` örneklerin 1h mumlarını Binance'in genel piyasa verisinden,
+# vermezse herkese açık geçmiş veri arşivinden (data.binance.vision) anahtarsız indirir; yeniden
+# çalıştırılınca yalnız eksikleri ister. `python -m crytobot events measure` ağa çıkmadan ölçer,
+# kütüphane dosyasını ve raporu yazar (var olanın üzerine yazılmaz). Tablo betimleyicidir: işlem
+# davranışına, aşama kapısına ve stratejiye girmez. Başlıklar güvenilmeyen girdidir: olduğu gibi
+# yazılır, çalıştırılmaz.
+#
+# Çıktı yolları deponun (botun çalışma ağacının) dışında olmalıdır; kaynak kayıtlar, kayıt
+# dosyaları, bot deposu ve ayar dosyaları olamaz, birbirlerinden de farklıdır.
+
+[events]
+price_store_path = "C:/CrytoBot-data/events-prices.db"      # fiyat verisi (kendi SQLite deposu)
+report_path = "C:/CrytoBot-data/events-report.txt"          # kalibrasyon tablosu (metin)
+library_path = "C:/CrytoBot-data/events-library.jsonl"      # kütüphane (JSON Lines)
+request_gap_s = 1             # iki istek arası en az saniye (tamsayı, en az 1)
+# Model kesim tarihi: varsayılanı yoktur. LLM spec'inde seçilecek modelin yayıncısının bildirdiği
+# eğitim kesimine göre koşudan önce yazılır (G-8). Bu andan önceki olaylar modelin eğitim verisinde
+# sonucuyla birlikte bulunabilir; tam kesim anı "sonra" dönemindedir.
+model_cutoff = "YYYY-MM-DD"
+# Ölçüm maliyetleri (0045'in ölçüm ayarındaki değerler; oran, metin): hedef mesafesinin alt sınırı.
+fee = "0.001"
+slippage = "0.001"
+spread = "0.0005"

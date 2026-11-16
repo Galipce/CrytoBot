@@ -29,6 +29,14 @@
   istemci adıyla gider. Hata yalnız adıyla kaydedilir: URL ve istisna metni (sorgu dizgesindeki sır) satıra ve
   kayda girmez. Geçmiş duyuru arşivi (`news archive`, spec 0047) aynı getiriciyle aynı kurallara tabidir; ek olarak
   aynı anda tek istek, iki istek arasında en az `archive_request_gap_s` saniye, hata yinelenmez ve Telegram'a gitmez.
+- **Olay fiyatları (`events download`, spec 0048):** yeni dış uç `https://data.binance.vision` (herkese açık geçmiş
+  veri arşivi, aylık zip) ve Binance'in genel piyasa verisi (`exchangeInfo`, `klines`; ccxt, anahtarsız). Arşivde yalnız
+  `https`, en çok 3 yönlendirme, yanıt en çok 8 MB, tür `application/zip` ya da `application/octet-stream`, tek CSV;
+  istek başına 30 s (ad çözümleme dahil, daemon iş parçacığı); genel istemci adı, API anahtarı ya da kişisel bilgi yok.
+  Aynı anda tek istek, aralık en az `request_gap_s`; hata adıyla durur, yinelenmez. `events measure` ağa çıkmaz.
+  **Duyuru başlığı güvenilmeyen girdidir:** etiket kuralları yalnız düzenli ifadeyle okur; başlık rapora JSON
+  dizgisi olarak (denetim karakterleri kaçışlı), kütüphaneye JSON olarak olduğu gibi yazılır; çalıştırılmaz,
+  yorumlanmaz, LLM'e gitmez. Çıktılar deponun dışında durur.
 - LLM harcaması günlük limitlidir (config); limit aşılınca LLM sinyali devre dışı kalır, bot teknik sinyalle devam eder.
 
 ## AuthN / AuthZ
