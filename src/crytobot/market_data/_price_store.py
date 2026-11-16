@@ -247,6 +247,12 @@ class PriceStore:
         at: datetime,
     ) -> None:
         with self._transaction():
+            # a span re-fetched over provisional rows replaces them: only a missing part is
+            # fetched, so a row inside it is never a final one (review round 2 R2-1)
+            self._connection.execute(
+                "DELETE FROM spans WHERE symbol = ? AND start_ms >= ? AND end_ms <= ?",
+                (symbol, ms_from_utc(start), ms_from_utc(end)),
+            )
             for candle in candles:
                 # a closed candle never changes: a re-fetched provisional span keeps the stored one
                 self._connection.execute(

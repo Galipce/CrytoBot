@@ -325,6 +325,8 @@ def test_unpublished_archive_month_fetched_again(tmp_path: Path) -> None:
     assert second.vision_urls == [november]
     data = read_prices(str(tmp_path / "prices.db"))
     assert data is not None and len(data.candles["EOSUSDT"]) == 48
+    # the provisional empty row is replaced, not kept beside the new one (review round 2 R2-1)
+    assert [(s.found, s.source) for s in data.spans["EOSUSDT"]] == [(True, "arşiv")]
 
     # fetched in February: November is settled, nothing is asked again
     third, asked = client({})
