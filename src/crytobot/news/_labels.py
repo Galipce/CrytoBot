@@ -2,8 +2,9 @@
 3, 4). Saf: ağ, dosya ve LLM kullanmaz.
 
 Tür kuralları büyük/küçük harf duyarsızdır; başlık tablodaki sırayla ilk eşleşen türü alır, hiçbiri
-eşleşmezse "diğer"dir. Spot listeleme yalnız başlıkta `futures|perpetual|margin|options` geçmezse
-sayılır.
+eşleşmezse "diğer"dir. Spot listeleme ve listeden çıkarma yalnız başlıkta
+`futures|perpetual|margin|options` geçmezse, vadeli / marjin yalnız `delist|remov` geçmezse sayılır
+(A-3).
 
 Coin adayları başlıkta ayrı duran belirteçlerdir (`[A-Za-z0-9Ⓢ]` dizileri): tamamı büyük harf ve
 rakam, 2-10 karakter, en az bir harf. `XYZ/USDT`'de iki belirteç vardır (`USDT` dışlanır), `XYZUSDT`
@@ -39,11 +40,11 @@ class EventRule:
 
 RULES: Final = (
     EventRule("spot listeleme", POSITIVE, r"will list", r"futures|perpetual|margin|options"),
-    EventRule("listeden çıkarma", NEGATIVE, r"delist"),
+    EventRule("listeden çıkarma", NEGATIVE, r"delist", r"futures|perpetual|margin|options"),
     EventRule("işlem çifti kaldırma", NEGATIVE, r"remov\w* .*trading pairs"),
     EventRule("izleme etiketi", NEGATIVE, r"monitoring tag"),
     EventRule("launchpool / launchpad / HODLer", POSITIVE, r"launchpool|launchpad|hodler"),
-    EventRule("vadeli / marjin listeleme", POSITIVE, r"futures|perpetual|margin"),
+    EventRule("vadeli / marjin listeleme", POSITIVE, r"futures|perpetual|margin", r"delist|remov"),
     EventRule("askıya alma ve bakım", NEUTRAL, r"suspen|maintenance"),
     EventRule("ağ yükseltmesi", NEUTRAL, r"upgrade|hard ?fork"),
     EventRule(OTHER, NEUTRAL, None),

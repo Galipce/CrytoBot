@@ -102,3 +102,15 @@ def test_title_pattern_hides_coins_and_digits() -> None:
         "Binance Will Delist X, X on ####-##-##"
     )
     assert title_pattern("Removal of DEFUSDT") == "Removal of X"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Binance Futures Will Delist USDⓈ-M ABCUSDT and DEFUSDT Perpetual Contracts",
+        "Binance Margin Will Delist XYZ/BTC, XYZ/ETH Cross Margin Pairs",
+    ],
+)
+def test_futures_and_margin_delist_not_delisting(title: str) -> None:
+    # review round 1 F-2 (A-3): neither a spot delisting nor a futures/margin listing
+    assert label(title).event_type == "diğer"
