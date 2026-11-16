@@ -52,8 +52,47 @@ def test_first_type_in_table_order_wins() -> None:
 def test_three_coins_three_samples() -> None:
     assert label("Binance Will Delist ANT, MULTI & VAI").coins == ("ANT", "MULTI", "VAI")
     # pairs: XYZ/USDT and XYZUSDT name the coin once, in title order, without repeats
-    title = "Notice of Removal of Trading Pairs: ABC/USDT, DEFUSDT, ABC/USDT (GHI)"
+    title = "Notice of Removal of Trading Pairs: ABC/USDT, DEFUSDT, GHI/BTC, ABC/USDT"
     assert label(title).coins == ("ABC", "DEF", "GHI")
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        # parentheses decide: the staked quote asset is not a sample (review round 1 F-1)
+        (
+            "Introducing Renzo (REZ) on Binance Launchpool! Farm REZ by Staking BNB and FDUSD",
+            ("REZ",),
+        ),
+        # a stable coin alone in parentheses decides: no coin, BTC of the pair is not a sample
+        (
+            "Binance Will List First Digital USD (FDUSD) and Enable Zero Maker Fees for BTC/FDUSD",
+            (),
+        ),
+        # pairs: only the base asset
+        ("Binance Adds ARB/BTC, OP/ETH & More on Cross Margin", ("ARB", "OP")),
+        ("Binance Will Open Trading for BTC/EUR, ETH/TRY Spot Trading Pairs", ("BTC", "ETH")),
+        # a single letter alone in parentheses is a coin (F-7), not elsewhere
+        ("Binance Will List Wormhole (W) in the Launchpool", ("W",)),
+        ("Binance Futures Will Launch USDⓈ-M (USDⓈ-M) ABCUSDT Perpetual", ("ABC",)),
+        # a network in parentheses does not decide: the next tier names the coin
+        ("Binance Will Support the XYZ Network Upgrade (BEP20)", ("XYZ",)),
+    ],
+)
+def test_coin_tiers(title: str, expected: tuple[str, ...]) -> None:
+    assert label(title).coins == expected
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Binance Futures Will Delist USDⓈ-M ABCUSDT and DEFUSDT Perpetual Contracts",
+        "Binance Margin Will Delist XYZ/BTC, XYZ/ETH Cross Margin Pairs",
+    ],
+)
+def test_futures_and_margin_delist_not_delisting(title: str) -> None:
+    # review round 1 F-2 (A-3): neither a spot delisting nor a futures/margin listing
+    assert label(title).event_type == "diğer"
 
 
 def test_no_coin_single_sample() -> None:
@@ -102,15 +141,3 @@ def test_title_pattern_hides_coins_and_digits() -> None:
         "Binance Will Delist X, X on ####-##-##"
     )
     assert title_pattern("Removal of DEFUSDT") == "Removal of X"
-
-
-@pytest.mark.parametrize(
-    "title",
-    [
-        "Binance Futures Will Delist USDⓈ-M ABCUSDT and DEFUSDT Perpetual Contracts",
-        "Binance Margin Will Delist XYZ/BTC, XYZ/ETH Cross Margin Pairs",
-    ],
-)
-def test_futures_and_margin_delist_not_delisting(title: str) -> None:
-    # review round 1 F-2 (A-3): neither a spot delisting nor a futures/margin listing
-    assert label(title).event_type == "diğer"
