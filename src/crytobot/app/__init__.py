@@ -44,6 +44,11 @@ Kalibrasyon (spec 0045): `load_calibration_config` `[calibration]` bölümünü 
 (varsayılan ölçüm, ayarlama, çapraz sınama → ayar seti, rapor, kayıtlar), `run_calibration_final`
 onaylı ayar setiyle son ölçümü (üç dönem, hüküm) `CalibrationParts` ile verilen okuma, yazma,
 konsol ve saatle koşar. Botun işlem davranışına, deposuna ve ayarına dokunmaz.
+
+Olay örnekleri (spec 0048): `load_events_config` `crytobot-events.toml`'un `[events]` bölümünü
+denetler; `run_events_download` örneklerin fiyat aralıklarını `market_data`'nın indirme adımına
+verir, `run_events_measure` ağsız ölçer ve kütüphane ile kalibrasyon tablosunu yazar. Kaynak
+kayıtları giriş noktası okur ve etiketler (`EventInputs`); işlem davranışı değişmez.
 """
 
 from crytobot.app._backtest import BacktestExit, BacktestOutcome, BacktestParts, run_backtest
@@ -83,6 +88,18 @@ from crytobot.app._download import (
     run_download,
 )
 from crytobot.app._evaluation import run_evaluation
+from crytobot.app._event_samples import (
+    EventDownloadParts,
+    EventInputs,
+    EventMeasureParts,
+    EventsConfig,
+    EventsConfigResult,
+    EventsExit,
+    EventsOutcome,
+    load_events_config,
+    run_events_download,
+    run_events_measure,
+)
 from crytobot.app._events import TRIAL_MARK, line
 from crytobot.app._grid import CANDIDATE_GRIDS
 from crytobot.app._inputs import PairMarket, TurnSettings
@@ -148,6 +165,13 @@ __all__: list[str] = [
     "DownloadConfigResult",
     "DownloadExit",
     "DownloadParts",
+    "EventDownloadParts",
+    "EventInputs",
+    "EventMeasureParts",
+    "EventsConfig",
+    "EventsConfigResult",
+    "EventsExit",
+    "EventsOutcome",
     "ExitReason",
     "FinalConfigsResult",
     "ForcedStop",
@@ -185,6 +209,7 @@ __all__: list[str] = [
     "load_calibration_config",
     "load_config",
     "load_download_config",
+    "load_events_config",
     "load_stage_config",
     "open_for_start",
     "prepare_live_store",
@@ -199,6 +224,8 @@ __all__: list[str] = [
     "run_calibration_final",
     "run_download",
     "run_evaluation",
+    "run_events_download",
+    "run_events_measure",
     "run_loop",
     "run_turn",
     "to_turn_market",
