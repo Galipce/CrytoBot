@@ -263,6 +263,37 @@ def test_downloaded_kept_rerun_fetches_missing(tmp_path: Path) -> None:
     assert data is not None and len(data.candles["ETHUSDT"]) == 48 and len(data.runs) == 2
 
 
+def test_exchange_info_refreshed_for_a_coin_not_in_snapshot(tmp_path: Path) -> None:
+    """Review round 1 F-4: a coin listed after the first download is found on a later run with one
+    more exchange-information request; a snapshot holding every needed coin is not re-requested."""
+    store = PriceStore.open(str(tmp_path / "prices.db"))
+    try:
+        store.save_pairs([], NOW - 30 * 24 * H)  # an old snapshot without BTC
+    finally:
+        store.close()
+    exchange, session = client({"klines?symbol=BTCUSDT": json_response(rows(T0, 48))})
+    fake = Fake(tmp_path)
+    assert fake.run([need("BTC")], lambda: exchange) is DownloadOutcome.COMPLETE
+    infos = [r["url"] for r in session.requests if "exchangeInfo" in r["url"]]
+    assert len(infos) == 1
+    assert any(
+        line.startswith("borsa bilgisi yenilendi: görüntüde olmayan 1 coin") for line in fake.lines
+    )
+    data = read_prices(str(tmp_path / "prices.db"))
+    assert data is not None and data.pairs is not None and "BTC" in data.pairs
+    assert len(data.candles["BTCUSDT"]) == 48 and data.exchange_info_at == NOW
+
+    again, second = client({})
+    assert Fake(tmp_path).run([need("BTC")], lambda: again) is DownloadOutcome.COMPLETE
+    assert second.requests == []  # every coin in the snapshot, every span stored
+
+    # a coin missing from the snapshot whose spans all end before it: not re-requested
+    third, asked = client({})
+    old = PriceNeed("XYZ", T0 - 100 * H, T0 - 50 * H)
+    assert Fake(tmp_path).run([old], lambda: third) is DownloadOutcome.COMPLETE
+    assert asked.requests == []
+
+
 def test_no_key_no_personal_data(tmp_path: Path) -> None:
     exchange, session = client(
         {"klines?symbol=EOSUSDT": json_response(fixture("error_bad_symbol"), 400)}

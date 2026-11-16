@@ -200,6 +200,16 @@ class PriceStore:
         except sqlite3.Error:
             raise PriceStoreError("fiyat deposu okunamıyor") from None
 
+    def pairs_at(self) -> datetime | None:
+        """Borsa bilgisi anlık görüntüsünün anı; görüntü yoksa `None`."""
+        try:
+            row = self._connection.execute(
+                "SELECT value FROM meta WHERE name = 'exchange_info_at'"
+            ).fetchone()
+            return None if row is None else datetime.fromisoformat(str(row[0]))
+        except (sqlite3.Error, ValueError):
+            raise PriceStoreError("fiyat deposu okunamıyor") from None
+
     def save_pairs(self, pairs: Sequence[PairInfo], at: datetime) -> None:
         with self._transaction():
             for pair in pairs:

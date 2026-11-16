@@ -1,12 +1,13 @@
 """Olay fiyat verisinin indirme adımı (spec 0048 R-3, G-1, G-6, AC-9; plan Risk 7, 10).
 
-Sıra: borsa bilgisi (depoda anlık görüntü yoksa bir istek; USDT çiftleri, kapanmış ya da kaldırılmış
-olanlar dahil) → coin sırasıyla, coinin birleşik aralıklarından depoda olmayan parçalar. Her eksik
-parça önce Binance'in genel piyasa verisinden (`klines`, 1000'lik sayfalar, bitişten geriye), o
-parçada hiç mum gelmezse ya da sembol geçersizse (-1121) herkese açık geçmiş veri arşivinden (aylık
-zip; 404 o ay yok) alınır. İkisi de mum vermezse parça "fiyat verisi yok" olarak kaydedilir. USDT
-çifti olmayan coin için "fiyat verisi yok" yazılır ve adım sürer. Yalnız kapanmış mumlar alınır:
-koşunun başındaki saatin tavanından sonrası istenmez.
+Sıra: borsa bilgisi (depoda anlık görüntü yoksa, ya da görüntüde olmayan bir coinin aralığı
+görüntünün anından sonraya uzanıyorsa bir istek; USDT çiftleri, kapanmış ya da kaldırılmış olanlar
+dahil; review round 1 F-4) → coin sırasıyla, coinin birleşik aralıklarından depoda olmayan
+parçalar. Her eksik parça önce Binance'in genel piyasa verisinden (`klines`, 1000'lik sayfalar,
+bitişten geriye), o parçada hiç mum gelmezse ya da sembol geçersizse (-1121) herkese açık geçmiş
+veri arşivinden (aylık zip; 404 o ay yok) alınır. İkisi de mum vermezse parça "fiyat verisi yok"
+olarak kaydedilir. USDT çifti olmayan coin için "fiyat verisi yok" yazılır ve adım sürer. Yalnız
+kapanmış mumlar alınır: koşunun başındaki saatin tavanından sonrası istenmez.
 
 Aynı anda tek istek; bir yanıtın bitişinden sonrakinin başlangıcına en az `gap_s` saniye, monoton
 saatle; istek başına en çok `timeout_s` (30 s). Ağ hatası, HTTP hata cevabı, hız sınırı (429),
@@ -331,15 +332,32 @@ def download_event_prices(
     gate = _Gate(parts, max(gap_s, MIN_GAP_S))
     outcome = DownloadOutcome.COMPLETE
     try:
-        pairs = store.pairs()
-        if pairs is None:
-            listed = _pairs(gate.api(lambda ex, timeout: ex.markets(timeout)))
-            store.save_pairs(listed, parts.clock())
-            pairs = {pair.base: pair for pair in listed}
-            parts.say(f"borsa bilgisi: {len(listed)} USDT çifti")
         by_coin: dict[str, list[PriceNeed]] = {}
         for need in needs:
             by_coin.setdefault(need.coin, []).append(need)
+        pairs = store.pairs()
+        taken = store.pairs_at()
+        # a coin missing from the snapshot may have been listed after it: only when one of its
+        # spans reaches past the snapshot moment (review round 1 F-4)
+        unknown = (
+            0
+            if pairs is None or taken is None
+            else sum(
+                coin not in pairs and any(need.end > taken for need in items)
+                for coin, items in by_coin.items()
+            )
+        )
+        if pairs is None or unknown:
+            listed = _pairs(gate.api(lambda ex, timeout: ex.markets(timeout)))
+            store.save_pairs(listed, parts.clock())
+            pairs = {**(pairs or {}), **{pair.base: pair for pair in listed}}
+            if unknown:
+                parts.say(
+                    f"borsa bilgisi yenilendi: görüntüde olmayan {unknown} coin;"
+                    f" {len(listed)} USDT çifti"
+                )
+            else:
+                parts.say(f"borsa bilgisi: {len(listed)} USDT çifti")
         for coin in sorted(by_coin):
             pair = pairs.get(coin)
             if pair is None:
