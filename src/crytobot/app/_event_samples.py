@@ -384,6 +384,11 @@ def _measure(config: EventsConfig, parts: EventMeasureParts) -> str:
         prices.seconds,
         inputs.rules_fingerprint,
         digest,
+        price_pairs=len(prices.pairs or {}),
+        price_symbols=sum(bool(items) for items in prices.candles.values()),
+        price_candles=sum(len(items) for items in prices.candles.values()),
+        price_spans=sum(len(items) for items in prices.spans.values()),
+        price_empty_spans=sum(not s.found for items in prices.spans.values() for s in items),
     )
     _write(parts, "rapor", config.report_path, event_report_text(measured, facts))
     _summary(parts, measured)

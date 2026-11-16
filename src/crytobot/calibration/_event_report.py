@@ -62,6 +62,12 @@ class EventReportFacts:
     download_seconds: float
     rules_fingerprint: str
     library_fingerprint: str
+    # the price data's record counts (R-9; review round 1 F-6)
+    price_pairs: int = 0
+    price_symbols: int = 0
+    price_candles: int = 0
+    price_spans: int = 0
+    price_empty_spans: int = 0
 
 
 def _iso(moment: datetime | None) -> str:
@@ -111,7 +117,10 @@ def _header(measured: EventMeasured, facts: EventReportFacts) -> list[str]:
         forward,
         f"fiyat verisi: {facts.price_path} borsa bilgisi={_iso(facts.exchange_info_at)} "
         f"indirme: ilk={_iso(facts.downloaded_first)} son={_iso(facts.downloaded_last)} "
-        f"toplam süre={facts.download_seconds:.1f} s",
+        f"toplam süre={facts.download_seconds:.1f} s "
+        f"kayıt: USDT çifti={facts.price_pairs} mumlu çift={facts.price_symbols} "
+        f"mum={facts.price_candles} aralık={facts.price_spans} "
+        f"boş aralık={facts.price_empty_spans}",
         f"kural seti parmak izi: {facts.rules_fingerprint}",
         f"kütüphane dosyası parmak izi: {facts.library_fingerprint}",
         f"model kesim anı: {_iso(measured.cutoff)} (bu andan önceki olaylar modelin eğitim "

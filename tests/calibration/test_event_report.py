@@ -234,3 +234,19 @@ def test_generated_line_is_the_only_changing_line() -> None:
 def test_no_forward_store_said() -> None:
     text = event_report_text(measure(announcement()), replace(FACTS, forward_records=None))
     assert "ileriye dönük kayıt yok: C:/data/news.db (yalnız arşivle)" in text
+
+
+def test_input_record_counts() -> None:
+    """R-9 (review round 1 F-6): the record counts of all three inputs, the price data included."""
+    facts = replace(
+        FACTS,
+        price_pairs=420,
+        price_symbols=37,
+        price_candles=28_000,
+        price_spans=41,
+        price_empty_spans=4,
+    )
+    text = event_report_text(measure(announcement()), facts)
+    assert "arşiv: C:/data/archive.db kayıt=12" in text
+    assert "binance-duyuru kaydı=3" in text
+    assert "kayıt: USDT çifti=420 mumlu çift=37 mum=28000 aralık=41 boş aralık=4" in text

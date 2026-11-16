@@ -6,6 +6,7 @@ gerçek `download_event_prices`'tır, yalnız borsa, arşiv, monoton saat ve bek
 """
 
 import io
+import re
 import socket
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
@@ -254,6 +255,13 @@ def test_end_to_end_reasons_and_marks(tmp_path: Path) -> None:
     )
     report = world.report.read_text("utf-8")
     assert "  çift yok: 1\n" in report and "  yayın anı bilinmiyor: 1\n" in report
+    # the price data's record counts from the store (review round 1 F-6)
+    counted = re.search(
+        r"kayıt: USDT çifti=[1-9]\d* mumlu çift=[1-9]\d* mum=[1-9]\d* aralık=[1-9]\d* "
+        r"boş aralık=\d+",
+        report,
+    )
+    assert counted is not None, report
     assert "events measure: rapor parmak izi:" in world.text
     assert "events measure: ölçülemeyen: yayın anı bilinmiyor=1 coin yok=1 çift yok=1" in world.text
 
