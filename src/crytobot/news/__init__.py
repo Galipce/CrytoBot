@@ -9,6 +9,10 @@ işidir.
 Spec 0047: geçmiş Binance duyuru arşivi — `run_archive` bütün katalogları en eski sayfaya kadar
 kendi SQLite deposuna (`ArchiveStore`) yalnız ekleyerek yazar; kayıtlar "arşivden" işaretlidir, ilk
 görme anı taşımaz. Durum `archive_status_lines` ile ağsız okunur.
+
+Spec 0048: örnek kütüphanesinin girdisi — `label` başlığa sabit kurallarla olay türü, beklenen yön
+ve coinler atar (`EVENT_TYPES`, `RULES_FINGERPRINT`); `read_library_sources` arşivi ve ileriye dönük
+kaydın `binance-duyuru` kayıtlarını yalnız okur, kimliğe göre birleştirir ve etiketler.
 """
 
 from crytobot.news._archive import (
@@ -52,6 +56,21 @@ from crytobot.news._config import (
 )
 from crytobot.news._fetch import USER_AGENT, Fetched, Hop, fetch_source
 from crytobot.news._items import TEXT_LIMIT_BYTES, NewsItem, RawItem
+from crytobot.news._labels import (
+    EVENT_TYPES,
+    RULES_FINGERPRINT,
+    Label,
+    label,
+    title_pattern,
+)
+from crytobot.news._library_sources import (
+    FROM_ARCHIVE,
+    FROM_BOTH,
+    FROM_FORWARD,
+    LibraryAnnouncement,
+    LibrarySources,
+    read_library_sources,
+)
 from crytobot.news._parse import CatalogPage, ParseError, parse_binance_page
 from crytobot.news._status import EMPTY, NEVER, status_lines
 from crytobot.news._store import (
@@ -65,6 +84,10 @@ from crytobot.news._store import (
 __all__: list[str] = [
     "ARCHIVE_EMPTY",
     "EMPTY",
+    "EVENT_TYPES",
+    "FROM_ARCHIVE",
+    "FROM_BOTH",
+    "FROM_FORWARD",
     "MIN_ARCHIVE_GAP_S",
     "MIN_INTERVAL_MINUTES",
     "NEVER",
@@ -72,6 +95,7 @@ __all__: list[str] = [
     "ORIGIN",
     "PAGE_SIZE",
     "POSSIBLE_MISS",
+    "RULES_FINGERPRINT",
     "TEXT_LIMIT_BYTES",
     "USER_AGENT",
     "ArchiveConfig",
@@ -88,6 +112,9 @@ __all__: list[str] = [
     "CollectionExit",
     "Fetched",
     "Hop",
+    "Label",
+    "LibraryAnnouncement",
+    "LibrarySources",
     "NewsConfig",
     "NewsConfigResult",
     "NewsItem",
@@ -101,6 +128,7 @@ __all__: list[str] = [
     "StoreSnapshot",
     "archive_status_lines",
     "fetch_source",
+    "label",
     "load_archive_config",
     "load_news_config",
     "outage_notice",
@@ -108,10 +136,12 @@ __all__: list[str] = [
     "parse_binance_page",
     "prepare_archive",
     "read_archive",
+    "read_library_sources",
     "read_snapshot",
     "recovery_notice",
     "run_archive",
     "run_collection",
     "run_round",
     "status_lines",
+    "title_pattern",
 ]
