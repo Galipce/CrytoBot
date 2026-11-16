@@ -482,6 +482,27 @@ def test_measure_written_and_not_written() -> None:
     )
 
 
+def test_report_not_written_names_the_library_left() -> None:
+    """Review round 1 F-8: the library is written first; a report write failure names the file
+    left behind, which refuses the next run until deleted."""
+
+    @dataclass
+    class ReportFails(Parts):
+        def write_file(self, path: str, text: str) -> bool:
+            if path == "r":
+                return False
+            self.written[path] = text
+            return True
+
+    parts = ReportFails()
+    result = run_events_measure(config(), parts.measure())
+    assert (result.outcome, result.message) == (
+        EventsOutcome.NOT_WRITTEN,
+        "rapor yazılamadı: r; kütüphane yazıldı: l, silinmeden yeniden koşulamaz",
+    )
+    assert set(parts.written) == {"l"}
+
+
 def test_unexpected_error_named_and_forced_stop_raised() -> None:
     parts = Parts()
 

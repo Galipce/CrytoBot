@@ -327,9 +327,18 @@ def _coin_prices(needs: Mapping[str, tuple[Span, ...]], prices: PriceData) -> di
     return found
 
 
-def _write(parts: EventMeasureParts, label: str, path: str, text: str) -> str:
+def _write(
+    parts: EventMeasureParts, label: str, path: str, text: str, written: str | None = None
+) -> str:
+    """`written`: bu koşuda önceden yazılmış dosya; yazma hatasında adlandırılır (review round 1
+    F-8: kalan dosya sonraki koşuyu `dosya var` diye reddettirir)."""
     if not parts.write_file(path, text):
-        raise _Halt(EventsOutcome.NOT_WRITTEN, f"{label} yazılamadı: {path}")
+        left = (
+            ""
+            if written is None
+            else f"; kütüphane yazıldı: {written}, silinmeden yeniden koşulamaz"
+        )
+        raise _Halt(EventsOutcome.NOT_WRITTEN, f"{label} yazılamadı: {path}{left}")
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     parts.write(f"{EVENT} measure: {label} parmak izi: {digest} ({path})")
     return digest
@@ -390,7 +399,13 @@ def _measure(config: EventsConfig, parts: EventMeasureParts) -> str:
         price_spans=sum(len(items) for items in prices.spans.values()),
         price_empty_spans=sum(not s.found for items in prices.spans.values() for s in items),
     )
-    _write(parts, "rapor", config.report_path, event_report_text(measured, facts))
+    _write(
+        parts,
+        "rapor",
+        config.report_path,
+        event_report_text(measured, facts),
+        written=config.library_path,
+    )
     _summary(parts, measured)
     return f"tamam: rapor dosyası {config.report_path}"
 
