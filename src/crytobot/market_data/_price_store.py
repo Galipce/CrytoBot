@@ -86,12 +86,13 @@ class StoredCandle:
 
 @dataclass(frozen=True)
 class StoredSpan:
-    """İndirilmiş aralık `[start, end)`: mum bulundu mu ve kaynağı."""
+    """İndirilmiş aralık `[start, end)`: mum bulundu mu, kaynağı ve indirme anı."""
 
     start: datetime
     end: datetime
     found: bool
     source: str
+    fetched_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -225,11 +226,14 @@ class PriceStore:
     def spans(self, symbol: str) -> tuple[StoredSpan, ...]:
         try:
             rows = self._connection.execute(
-                "SELECT start_ms, end_ms, found, source FROM spans WHERE symbol = ?"
+                "SELECT start_ms, end_ms, found, source, fetched_at FROM spans WHERE symbol = ?"
                 " ORDER BY start_ms, end_ms",
                 (symbol,),
             ).fetchall()
-            return tuple(StoredSpan(_at(a), _at(b), bool(c), str(d)) for a, b, c, d in rows)
+            return tuple(
+                StoredSpan(_at(a), _at(b), bool(c), str(d), datetime.fromisoformat(str(e)))
+                for a, b, c, d, e in rows
+            )
         except (sqlite3.Error, ValueError):
             raise PriceStoreError("fiyat deposu okunamıyor") from None
 
@@ -244,10 +248,12 @@ class PriceStore:
     ) -> None:
         with self._transaction():
             for candle in candles:
+                # a closed candle never changes: a re-fetched provisional span keeps the stored one
                 self._connection.execute(
                     "INSERT INTO candles"
                     " (symbol, open_ms, open, high, low, close, source)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    " VALUES (?, ?, ?, ?, ?, ?, ?)"
+                    " ON CONFLICT (symbol, open_ms) DO NOTHING",
                     (
                         symbol,
                         candle.open_ms,
@@ -318,12 +324,18 @@ def read_prices(path: str) -> PriceData | None:
                     StoredCandle(int(open_ms), str(open_), str(high), str(low), str(close))
                 )
             spans: dict[str, list[StoredSpan]] = {}
-            for symbol, start, end, found, source in connection.execute(
-                "SELECT symbol, start_ms, end_ms, found, source FROM spans"
+            for symbol, start, end, found, source, fetched in connection.execute(
+                "SELECT symbol, start_ms, end_ms, found, source, fetched_at FROM spans"
                 " ORDER BY symbol, start_ms, end_ms"
             ):
                 spans.setdefault(str(symbol), []).append(
-                    StoredSpan(_at(start), _at(end), bool(found), str(source))
+                    StoredSpan(
+                        _at(start),
+                        _at(end),
+                        bool(found),
+                        str(source),
+                        datetime.fromisoformat(str(fetched)),
+                    )
                 )
             runs = tuple(
                 DownloadRun(

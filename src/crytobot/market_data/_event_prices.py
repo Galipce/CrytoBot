@@ -12,7 +12,9 @@ kapanmış mumlar alınır: koşunun başındaki saatin tavanından sonrası ist
 Aynı anda tek istek; bir yanıtın bitişinden sonrakinin başlangıcına en az `gap_s` saniye, monoton
 saatle; istek başına en çok `timeout_s` (30 s). Ağ hatası, HTTP hata cevabı, hız sınırı (429),
 borsa yasağı (418) ya da beklenmeyen yanıt adım durur: hatanın adı yazılır, istek yinelenmez,
-indirilmiş parçalar kalır, yeniden çalıştırma yalnız eksikleri ister. Durdurma isteğine her istekten
+indirilmiş parçalar kalır, yeniden çalıştırma yalnız eksikleri ister. Arşivden gelen ya da boş
+parça, arşivi henüz yayımlanmamış olabilecek bir aya (indirme ayı ve bir önceki ay) uzanıyorsa eksik
+sayılır ve yeniden istenir (`final_span`, review round 1 F-5). Durdurma isteğine her istekten
 önce ve bekleme sırasında bakılır. API anahtarı ve kişisel bilgi taşınmaz. Toplam süre ve istek
 sayısı koşu kaydına yazılır.
 """
@@ -302,6 +304,23 @@ def _ceiling(now: datetime) -> datetime:
     return now.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
 
 
+def _settled(fetched_at: datetime) -> datetime:
+    """Arşivin kesin yayımlanmış olduğu sınır: indirme ayından önceki ayın başı. Aylık dosya ay
+    bitince yayımlanır; indirme ayının ve bir önceki ayın dosyası o an henüz olmayabilir."""
+    moment = fetched_at.astimezone(UTC)
+    year, month = (moment.year - 1, 12) if moment.month == 1 else (moment.year, moment.month - 1)
+    return datetime(year, month, 1, tzinfo=UTC)
+
+
+def final_span(span: StoredSpan) -> bool:
+    """Kalıcı mı (review round 1 F-5): genel piyasa verisinden gelen parça kalıcıdır; arşivden gelen
+    ya da boş parça, arşivi henüz yayımlanmamış olabilecek bir aya uzanıyorsa kalıcı değildir ve
+    yeniden çalıştırmada yeniden istenir."""
+    if span.source == SOURCE_API or span.fetched_at is None:
+        return True
+    return span.end <= _settled(span.fetched_at)
+
+
 def _coin(
     gate: _Gate,
     store: PriceStore,
@@ -311,7 +330,8 @@ def _coin(
     ceiling: datetime,
 ) -> None:
     wanted = [(need.start, min(need.end, ceiling)) for need in needs if need.start < ceiling]
-    for start, end in missing_spans(wanted, store.spans(pair.symbol)):
+    stored = [span for span in store.spans(pair.symbol) if final_span(span)]
+    for start, end in missing_spans(wanted, stored):
         candles = _api_span(gate, pair.symbol, ms_from_utc(start), ms_from_utc(end))
         source = SOURCE_API
         if not candles:

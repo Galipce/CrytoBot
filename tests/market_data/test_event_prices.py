@@ -5,9 +5,11 @@ eşlemesinden üretilir (conventions, spec 0036 F-1): `recorded_client` yalnız 
 değiştirir. Aralık ve tek istek kuralı sahte monoton saatle sınanır.
 """
 
+import io
 import json
 import threading
 import time
+import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -292,6 +294,43 @@ def test_exchange_info_refreshed_for_a_coin_not_in_snapshot(tmp_path: Path) -> N
     old = PriceNeed("XYZ", T0 - 100 * H, T0 - 50 * H)
     assert Fake(tmp_path).run([old], lambda: third) is DownloadOutcome.COMPLETE
     assert asked.requests == []
+
+
+def month_zip(start: datetime, count: int) -> bytes:
+    lines = [
+        f"{ms_from_utc(start + index * H)},1.0,1.1,0.9,1.0,10,0,0,0,0,0,0" for index in range(count)
+    ]
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("EOSUSDT-1h.csv", "\n".join(lines) + "\n")
+    return buffer.getvalue()
+
+
+def test_unpublished_archive_month_fetched_again(tmp_path: Path) -> None:
+    """Review round 1 F-5: a span with no candles because the month's archive was not yet out is
+    fetched again on a later run; a span from a long-settled month is not."""
+    bad = {"klines?symbol=EOSUSDT": json_response(fixture("error_bad_symbol"), 400)}
+    november = month_url("EOSUSDT", 2026, 11)
+    exchange, _ = client(bad)
+    first = Fake(tmp_path)  # 2026-11-16: November's file is not out
+    assert first.run([need("EOS")], lambda: exchange) is DownloadOutcome.COMPLETE
+    assert first.vision_urls == [november]
+    data = read_prices(str(tmp_path / "prices.db"))
+    assert data is not None and [s.source for s in data.spans["EOSUSDT"]] == ["yok"]
+
+    later = datetime(2027, 2, 3, tzinfo=UTC)
+    again, _ = client(bad)
+    second = Fake(tmp_path, vision={november: VisionFetched(body=month_zip(T0, 48))})
+    assert second.run([need("EOS")], lambda: again, clock=lambda: later) is DownloadOutcome.COMPLETE
+    assert second.vision_urls == [november]
+    data = read_prices(str(tmp_path / "prices.db"))
+    assert data is not None and len(data.candles["EOSUSDT"]) == 48
+
+    # fetched in February: November is settled, nothing is asked again
+    third, asked = client({})
+    final = Fake(tmp_path)
+    assert final.run([need("EOS")], lambda: third, clock=lambda: later) is DownloadOutcome.COMPLETE
+    assert asked.requests == [] and final.vision_urls == []
 
 
 def test_no_key_no_personal_data(tmp_path: Path) -> None:
