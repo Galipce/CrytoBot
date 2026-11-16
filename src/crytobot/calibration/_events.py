@@ -9,6 +9,8 @@
 - Taban oran: açılışı `[ref - 720 h, ref)` içindeki her mum sinyaldir; 24. pencere mumunun kapanışı
   ref'i aşan sayılmaz. O aralıkta 720'den az mum varsa (boşluk dahil) ya da ATR yoksa "mum
   yetmiyor".
+- Seri her örneğin kendi aralığındaki (`sample_span`) mumlardan hesaplanır: aynı coinin başka
+  örnekleri ATR'yi, isabeti ve taban oranı değiştirmez.
 - Nedenlerin sabit sırası (`Reason`): ilk uyan neden yazılır.
 - Dönem: model kesim anından önce ya da sonra; tam kesim anı "sonra"dır.
 - Çakışma: aynı coinde (türden bağımsız) 24 mumluk penceresi başka bir ölçülen örnekle kesişen
@@ -25,7 +27,7 @@ from enum import Enum
 from fractions import Fraction
 from typing import Final
 
-from crytobot.analysis import Candle, atr
+from crytobot.analysis import Candle
 from crytobot.calibration._outcome import ATR_PERIOD, WINDOW, Costs, PairSeries, outcomes
 
 HOUR: Final = timedelta(hours=1)
@@ -218,23 +220,26 @@ def price_needs(samples: Iterable[EventSample]) -> dict[str, tuple[Span, ...]]:
 
 @dataclass(frozen=True)
 class _Coin:
+    """Bir örneğin kendi aralığındaki seri (review round 1 F-3): ATR ve sonuçlar yalnız o
+    aralığın mumlarından; başka örneklerin aralıkları sonucu değiştirmez."""
+
     opens: tuple[datetime, ...]
-    averages: tuple[float | None, ...]
     buy: tuple[bool | None, ...]
     sell: tuple[bool | None, ...]
     entry: tuple[float | None, ...]
     last_open: tuple[datetime | None, ...]
 
 
-def _prepare(candles: tuple[Candle, ...], costs: Costs) -> _Coin:
+# Wilder ATR's first value sits at `period - 1` (analysis.atr); before it there is no ATR
+FIRST_ATR: Final = ATR_PERIOD - 1
+
+
+def _prepare(candles: Sequence[Candle], costs: Costs) -> _Coin:
     if not candles:
-        return _Coin((), (), (), (), (), ())
-    series = PairSeries("", HOUR, candles, ())
+        return _Coin((), (), (), (), ())
+    series = PairSeries("", HOUR, tuple(candles), ())
     results = outcomes(series, costs, [""] * len(candles))
-    averages = tuple(atr(candles, period=ATR_PERIOD))
-    return _Coin(
-        results.opens, averages, results.buy, results.sell, results.entry, results.last_open
-    )
+    return _Coin(results.opens, results.buy, results.sell, results.entry, results.last_open)
 
 
 def _base(coin: _Coin, low: int, high: int, reference: datetime) -> tuple[Fraction, Fraction]:
@@ -264,8 +269,7 @@ def _measure(sample: EventSample, coin: _Coin | None, has_pair: bool) -> SampleR
     if not has_pair or coin is None:
         raise _Unmeasured(Reason.NO_PAIR)
     opens = coin.opens
-    span = sample_span(reference)
-    if bisect_left(opens, span.start) == bisect_left(opens, span.end):
+    if not opens:
         raise _Unmeasured(Reason.NO_PRICES)
     entry = bisect_right(opens, reference)
     if entry >= len(opens) or opens[entry] - reference > LATEST_ENTRY:
@@ -273,12 +277,7 @@ def _measure(sample: EventSample, coin: _Coin | None, has_pair: bool) -> SampleR
     signal = entry - 1
     low = bisect_left(opens, reference - BASE_CANDLES * HOUR)
     high = bisect_left(opens, reference)
-    if (
-        signal < 0
-        or high - low < BASE_CANDLES
-        or coin.averages[signal] is None
-        or coin.averages[low] is None
-    ):
+    if signal < FIRST_ATR or high - low < BASE_CANDLES or low < FIRST_ATR:
         raise _Unmeasured(Reason.FEW_CANDLES)
     up, down, last = coin.buy[signal], coin.sell[signal], coin.last_open[signal]
     if up is None or last is None:
@@ -331,10 +330,26 @@ def measure_events(
     cutoff: datetime,
     types: Sequence[tuple[str, str]],
 ) -> EventMeasured:
-    """Her örneğin sonucu, örnek sırasıyla; coin başına seri bir kez hesaplanır."""
-    prepared = {
-        coin: _prepare(item.candles, costs) for coin, item in prices.items() if item.has_pair
+    """Her örneğin sonucu, örnek sırasıyla. Seri her örneğin kendi aralığında (`sample_span`)
+    hesaplanır; aynı coin ve aynı aralık bir kez (review round 1 F-3)."""
+    opens = {
+        coin: tuple(candle.open_time for candle in item.candles)
+        for coin, item in prices.items()
+        if item.has_pair
     }
+    prepared: dict[tuple[str, datetime], _Coin] = {}
+
+    def own(coin: str, reference: datetime) -> _Coin | None:
+        if coin not in opens:
+            return None
+        span = sample_span(reference)
+        key = (coin, span.start)
+        if key not in prepared:
+            times = opens[coin]
+            low, high = bisect_left(times, span.start), bisect_left(times, span.end)
+            prepared[key] = _prepare(prices[coin].candles[low:high], costs)
+        return prepared[key]
+
     results: list[SampleResult] = []
     for sample in samples:
         period = _period(sample.reference, cutoff)
@@ -347,7 +362,7 @@ def measure_events(
         known = prices.get(sample.coin)
         try:
             result = _measure(
-                sample, prepared.get(sample.coin), known is not None and known.has_pair
+                sample, own(sample.coin, sample.reference), known is not None and known.has_pair
             )
         except _Unmeasured as unmeasured:
             results.append(SampleResult(sample, unmeasured.reason, period))

@@ -295,6 +295,29 @@ def test_type_base_is_mean_of_samples() -> None:
     assert row.difference == Fraction(-12, 696)
 
 
+def test_another_sample_does_not_change_a_result() -> None:
+    """Review round 1 F-3: an earlier, distant sample of the same coin (a separate price span with
+    another volatility) changes neither the ATR nor the base rate of a later sample."""
+    later = 3000
+    early = candles(900, half=5.0)
+    own = candles(
+        later + 100, first=2200, bounds={later - 715 + 7 * k: (104.0, 99.0) for k in range(3)}
+    )
+    alone = only(measure(announcement("2", published=at(later)), series=own))
+    together = measure(
+        announcement("1", published=at(R)),
+        announcement("2", published=at(later)),
+        series=early + own,
+    ).results[1]
+    assert alone.reason is None and alone.base_up > 0
+    assert (together.up, together.down, together.base_up, together.base_down) == (
+        alone.up,
+        alone.down,
+        alone.base_up,
+        alone.base_down,
+    )
+
+
 # --- AC-6: the unmeasured --------------------------------------------------------------------
 
 
