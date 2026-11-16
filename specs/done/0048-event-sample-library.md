@@ -1,6 +1,6 @@
 # Spec 0048 — Geçmiş olaylardan örnek kütüphanesi ve kalibrasyon tablosu
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0048-plan.md`
 - Self-critique: done
@@ -122,7 +122,7 @@ none — no user interface. Etkileşim CLI komutları, ayar, rapor ve kütüphan
 - Yeni çalışma bağımlılığı eklenmez; onaylı tek çalışma bağımlılığı `ccxt` kalır (spec 0018).
 - `scripts/check` ağa çıkmaz; kaynak kayıtlar ve fiyat yanıtları kayıtlı örneklerle sınanır (`docs/testing.md`).
 - Gerçek veri koşusunun ön koşulu, sahibin 0047 arşivini (`news archive`) doldurmasıdır. 2026-11-16 itibarıyla arşiv
-  deposu yoktur.
+  deposu yoktur; gerçek koşu ölçütü ship'te çıkarıldı (B-91).
 - Binance'in genel piyasa verisi listeden çıkarılmış çiftlerin geçmişini vermeyebilir; bu yüzden herkese açık geçmiş
   veri arşivi ikinci kaynaktır (G-1). İkisi de vermezse örnek "fiyat verisi yok" sayılır ve sayısı görünür; sessiz
   boşluk oluşmaz. İki kaynağın da biçimi değişirse kaynak hatası olur.
@@ -134,68 +134,68 @@ none — no user interface. Etkileşim CLI komutları, ayar, rapor ve kütüphan
   zamanlanmış yenilenmesi; kaynak kayıtların değiştirilmesi.
 
 ## Acceptance criteria
-- [ ] AC-1 — Etiketleme: her olay türü için en az bir kayıtlı başlık doğru türü alır. Hiçbir kurala uymayan başlık
+- [x] AC-1 — Etiketleme: her olay türü için en az bir kayıtlı başlık doğru türü alır. Hiçbir kurala uymayan başlık
   "diğer" olur. İki türe uyan başlık tablodaki sıraya göre ilk türü alır. Üç coin geçen duyuru üç örnek verir. Coin
   geçmeyen duyuru tek "coin yok" örneğidir. `(BEP20)`, `(USDT)` ve tarih gibi dışlama listesindeki parantezler coin
   sayılmaz. Kaldırılmış ama borsa bilgisinde bulunan çiftin coini "çift var" sayılır; hiç USDT spot çifti olmayan coin
   "çift yok" nedeniyle ölçülmez. Kural seti parmak izi rapordadır (R-1, R-4).
-- [ ] AC-2 — Kaynaklar: arşivde ve ileriye dönük kayıtta aynı kimlikle bulunan duyuru tek duyuru sayılır, kaynak
+- [x] AC-2 — Kaynaklar: arşivde ve ileriye dönük kayıtta aynı kimlikle bulunan duyuru tek duyuru sayılır, kaynak
   işareti "ikisi"dir ve ilk görme anını taşır. RSS kayıtları kütüphaneye girmez. Koşudan önce ve sonra kaynak
   kayıtların içeriği aynıdır. Toplayıcı kaydı açıkken okuma çalışır. İleriye dönük kayıt yoksa rapor bunu yazar ve
   arşivle sürer (R-2, R-10).
-- [ ] AC-3 — Giriş ve isabet: giriş mumu, açılışı referans andan kesin sonra olan ilk mumdur. Açılışı tam referans
+- [x] AC-3 — Giriş ve isabet: giriş mumu, açılışı referans andan kesin sonra olan ilk mumdur. Açılışı tam referans
   anında olan mum giriş değildir. Açılışı referans andan tam 1 saat sonra olan mum giriştir, 1 saatten sonra olan
   ölçülmez. Hedefe 24. mumda ulaşan isabetlidir, 25. mumda ulaşan değildir. Stopa önce değen ve aynı mumda iki sınıra
   değen isabetli değildir. 2×ATR maliyetten küçükse hedef maliyet mesafesidir. Yükseliş ve düşüş kuralları
   simetriktir. Yayın anı bilinmeyen ama ilk görme anı olan örnek ilk görme anıyla ölçülür ve "ilk görme anı
   kullanıldı" işaretini taşır; ikisi de yoksa "yayın anı bilinmiyor" nedeniyle ölçülmez. Hedef mesafesindeki maliyet
   ayardaki ücret, slippage ve spread'den hesaplanır ve rapordadır (R-5, G-2, G-4).
-- [ ] AC-4 — Ana sonuç: olumlu türde ana sonuç yükseliş, olumsuz türde düşüştür. Öteki yön ayrı tabloda raporlanır.
+- [x] AC-4 — Ana sonuç: olumlu türde ana sonuç yükseliş, olumsuz türde düşüştür. Öteki yön ayrı tabloda raporlanır.
   Nötr türde iki yön de ayrı raporlanır, ana sonuç yoktur. Üst üste binen pencereler ayrı sayılır, ayıklanmaz ve
   tablo satırında penceresi çakışan örnek sayısı görünür (R-5, R-6).
-- [ ] AC-5 — Taban oran: referans andan önceki 720 mumun her kapanışı sinyal sayılarak aynı kural ve yönle hesaplanır.
+- [x] AC-5 — Taban oran: referans andan önceki 720 mumun her kapanışı sinyal sayılarak aynı kural ve yönle hesaplanır.
   Penceresi referans anı aşan mum sayılmaz. 720 mumdan azı varsa örnek "mum yetmiyor" nedeniyle ölçülmez. Türün taban
   oranı örnek taban oranlarının ortalamasıdır (R-4).
-- [ ] AC-6 — Ölçülemeyen örnekler: yayın anı bilinmiyor, coin yok, çift yok, giriş mumu yok ya da geç, mum yetmiyor ve
+- [x] AC-6 — Ölçülemeyen örnekler: yayın anı bilinmiyor, coin yok, çift yok, giriş mumu yok ya da geç, mum yetmiyor ve
   pencere veri sonunu aşıyor durumlarının her biri kütüphanede nedeniyle durur, ölçülmez ve raporda ayrı sayılır
   (R-4).
-- [ ] AC-7 — Tablo: her olay türü × yön × dönem satırı duyuru, örnek ve ölçülen örnek sayısını, isabet oranını, taban
+- [x] AC-7 — Tablo: her olay türü × yön × dönem satırı duyuru, örnek ve ölçülen örnek sayısını, isabet oranını, taban
   oranı ve farkını taşır. Tam kesim anındaki olay "sonra" dönemindedir. 29 ölçülen örnekli satır "yetersiz örnek"
   işaretlidir, 30 örnekli değildir. Hiçbir satır hüküm taşımaz. Rapor tür başına en çok 20 örnek başlığı ve "diğer"in
   sayısı ile en sık 20 kalıbını yazar (R-6, R-8).
-- [ ] AC-8 — Kütüphane dosyası R-7'nin bütün alanlarını taşır. Kod ya da biçim karakteri içeren başlık olduğu gibi
+- [x] AC-8 — Kütüphane dosyası R-7'nin bütün alanlarını taşır. Kod ya da biçim karakteri içeren başlık olduğu gibi
   yazılır ve hiçbir şeyi tetiklemez. Aynı girdilerle iki ölçüm koşusu, üretim anı satırı dışında bayt bayt aynı rapor
   ve kütüphane dosyası üretir. Ölçüm adımı ağa istek göndermez (R-7, R-9).
-- [ ] AC-9 — İndirme adımı: iki istek arasında en az ayardaki süre geçer ve aynı anda tek istek vardır. Takılan istek
+- [x] AC-9 — İndirme adımı: iki istek arasında en az ayardaki süre geçer ve aynı anda tek istek vardır. Takılan istek
   en çok 30 saniyede (ölçüm payıyla) hata olur. Ağ hatası, HTTP hata cevabı, hız sınırı (429) ya da beklenmeyen
   yanıtta adım hatanın adını veren satırla, çıkış 1 ile durur ve aynı isteği yinelemez. İndirilmiş olanlar kalır.
   Yeniden çalıştırma yalnız eksikleri ister. İstekler API anahtarı ya da kişisel bilgi taşımaz. Çifti olmayan coin için
   "fiyat verisi yok" yazılır ve adım sürer. Normal piyasa verisi bir çiftin mumunu vermezse herkese açık geçmiş veri
   arşivi denenir; ikisi de vermezse örnek "fiyat verisi yok" olur. Aynı coinin çakışan aralıkları bir kez istenir.
   Toplam süre kaydedilir (R-3, G-1, G-6).
-- [ ] AC-10 — Geçersiz ayarda komut ağa çıkmadan ve hiçbir dosya yazmadan, hatanın adını veren bir mesajla, çıkış 1 ile
+- [x] AC-10 — Geçersiz ayarda komut ağa çıkmadan ve hiçbir dosya yazmadan, hatanın adını veren bir mesajla, çıkış 1 ile
   başlamayı reddeder. Geçersiz ayar şunlardır: model kesim tarihi yok ya da okunamıyor; arşiv yok; bir çıktı yeri
   kaynak kayıtlardan, bot deposundan ya da bir kayıt dosyasından biri; istek aralığı 1 saniyeden küçük. Aynı çıktı
   yerine ikinci bir koşu açılmak istenirse anlaşılır bir mesajla reddedilir (R-10, G-5).
-- [ ] AC-11 — İşlem davranışı değişmez: koşudan önce ve sonra `crytobot.toml`, `crytobot-news.toml`, kaynak kayıtlar ve
+- [x] AC-11 — İşlem davranışı değişmez: koşudan önce ve sonra `crytobot.toml`, `crytobot-news.toml`, kaynak kayıtlar ve
   bot deposu aynıdır (sha256). Paper, backtest, kalibrasyon, aşama kapısı ve haber testleri değişmeden geçer (R-11).
-- [ ] AC-12 — Gerçek veriyle koşu yapılır ve kayda geçer: sahibin doldurduğu arşivle ve ileriye dönük kayıtla indirme
-  ve ölçüm koşulur. Girdilerin kayıt sayıları ve okunma anı, fiyat verisinin indirme anı, kural seti parmak izi, model
-  kesim tarihi, tür başına ölçülen örnek sayısı ve ana sonuç farkı, ölçülemeyenlerin nedene göre sayısı, rapor parmak
-  izi ve toplam süre planın `## Build evidence` bölümüne yazılır (R-6, R-9).
+
+Ship kapısında çıkarılan ölçüt (R-08, Galip Badem, 2026-11-16; plan A-5): eski AC-12 — sahibin doldurduğu arşivle
+gerçek indirme ve ölçüm koşusu ve sayılarının kayda geçmesi. 2026-11-16 itibarıyla arşiv deposu yok; kanıtı
+olmadığından işaretlenmedi, backlog'a taşındı (B-91).
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed (`docs/architecture.md`, `docs/commands.md`, `docs/security.md`, `crytobot-events.example.toml`)
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 1 (R-08, ship kapısı: AC-12 gerçek koşu ölçütü çıkarıldı → B-91, plan A-5; plan A-1…A-4) |
+| Fix rounds | 2 (fix-1: review round 1 F-1 High, F-2…F-6 Medium, F-7, F-8, F-10 → A-2, A-3; fix-2: review round 2 R2-1, R2-2 → A-4, R2-4) |
+| Review findings: real / noise / deferred | 13 (F-1…F-8, F-10, R2-1, R2-2, R2-4; R2-3 kabul) / 0 / 1 (F-9 → B-90); VERIFY: bulgu yok |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
