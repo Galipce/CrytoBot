@@ -1,5 +1,5 @@
-"""Giriş noktası: `python -m crytobot prepare|start|download|backtest|calibrate|news` (spec 0022,
-0023, 0025, 0045, 0046, 0047).
+"""Giriş noktası: `python -m crytobot prepare|start|download|backtest|calibrate|news|events` (spec
+0022, 0023, 0025, 0045, 0046, 0047, 0048).
 
 Karar içermez: kararların hepsi `app`'tedir. Burada yalnız gerçek etkiler bağlanır: ayar dosyası
 (`tomllib`, çalışma dizinindeki `crytobot.toml`), gerçek UTC saati, ≤1 s'lik parçalarla bekleme,
@@ -40,6 +40,18 @@ bağlanmaz, bot deposu ve ileriye dönük haber kaydı açılmaz. `news archive 
 almaz, iki depoyu yalnız okur. Çıkış: 0 arşiv tamam ya da durum, 1 ret ya da kaynak hatası, 3 kayıt
 dosyası yazılamıyor, 4 durdurma isteğiyle durdu, 130 zorla durma.
 
+`events download` ve `events measure` (spec 0048) geçmiş olay örnek kütüphanesini kurar: ayar ayrı
+dosyadadır (`crytobot-events.toml`, plan Risk 2); kaynak kayıtların yolları ve türleri haber ayar
+dosyasından, bot deposu ve kayıt yolu bot ayarından yalnız okunur. Sıra: iki ayar → çıktı yollarının
+çakışması (çözülmüş yollarla: kaynak kayıtlar, kayıt dosyaları, bot deposu, ayar dosyaları,
+birbirleri, deponun çalışma ağacı) → arşiv var mı → fiyat deposunun mutlak yolunun kilidi (iki
+komut için tek; `measure` raporun kilidini de alır) → koşu. Bütün retler ağa ve dosyaya dokunmadan.
+Kaynak kayıtlar `news`'le okunup etiketlenir ve `calibration`'ın tipine çevrilir (`app` `news`'i
+import etmez). `download` genel piyasa verisine ve herkese açık geçmiş veri arşivine çıkar;
+`measure` ağa çıkmaz, rapor ve kütüphane üzerine yazılmaz. Telegram bağlanmaz, bot deposu açılmaz.
+Çıkış: 0 tamam, 1 ret ya da kaynak hatası, 4 durdurma isteğiyle durdu, 6 çıktı yazılamadı, 130
+zorla durma.
+
 Çıkış kodları: 0 temiz durma, hazırlık, indirme ya da backtest tamam, 1 başlatma, hazırlık, indirme
 ya da backtest reddi (ayarlar, veri dosyası, rapor dosyası var), 2 okuma reddiyle durma, 3 kayıt
 dosyası yazılamıyor, 4 indirme durdu, 5 backtest durdu, 6 backtest tamam ama rapor dosyası
@@ -70,6 +82,11 @@ from crytobot.app import (
     CalibrationParts,
     DownloadConfig,
     DownloadParts,
+    EventDownloadParts,
+    EventInputs,
+    EventMeasureParts,
+    EventsConfig,
+    EventsOutcome,
     ExitReason,
     ForcedStop,
     KillRequest,
@@ -90,6 +107,7 @@ from crytobot.app import (
     load_calibration_config,
     load_config,
     load_download_config,
+    load_events_config,
     load_stage_config,
     open_for_start,
     prepare_live_store,
@@ -103,9 +121,12 @@ from crytobot.app import (
     run_calibration_final,
     run_download,
     run_evaluation,
+    run_events_download,
+    run_events_measure,
     run_loop,
 )
 from crytobot.backtest import read_report, report_exists, write_report
+from crytobot.calibration import EventAnnouncement
 from crytobot.control import (
     clear_kill_flag,
     clear_stop_flag,
@@ -121,15 +142,24 @@ from crytobot.dashboard import (
     load_dashboard_config,
 )
 from crytobot.market_data import (
+    DownloadOutcome,
+    EventPriceParts,
     HistoryRequest,
     HistoryResult,
     MarketRead,
+    PriceData,
+    PriceNeed,
+    PriceStore,
+    PriceStoreError,
     ReadSettings,
+    download_event_prices,
     download_history,
     read_history,
     read_market_data,
+    read_prices,
 )
 from crytobot.news import (
+    EVENT_TYPES,
     ArchiveConfig,
     ArchiveOutcome,
     ArchiveParts,
@@ -146,19 +176,22 @@ from crytobot.news import (
     fetch_source,
     load_archive_config,
     load_news_config,
+    read_library_sources,
     read_snapshot,
     run_archive,
     run_collection,
     status_lines,
+    title_pattern,
 )
 from crytobot.reporting import ReportingService, load_reporting_config
 
 CONFIG_FILE = "crytobot.toml"
 NEWS_CONFIG_FILE = "crytobot-news.toml"
+EVENTS_CONFIG_FILE = "crytobot-events.toml"
 USAGE = (
     "kullanım: python -m crytobot "
-    "prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news"
-    " [--live] [--trial] [--final] [archive] [status]"
+    "prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news|events"
+    " [--live] [--trial] [--final] [archive] [status] [download] [measure]"
 )
 COMMANDS = (
     ["prepare"],
@@ -181,6 +214,8 @@ COMMANDS = (
     ["news", "status"],
     ["news", "archive"],
     ["news", "archive", "status"],
+    ["events", "download"],
+    ["events", "measure"],
 )
 EXIT_OK = 0
 EXIT_REFUSED = 1
@@ -220,6 +255,18 @@ NewsFetch = Callable[[NewsSource, int, Callable[[], bool]], Fetched]
 NEWS_BUSY = "haber kaydı başka bir toplama komutunda açık"
 ArchiveFetch = Callable[[str, int, Callable[[], bool]], Fetched]
 ARCHIVE_BUSY = "arşiv başka bir arşiv komutunda açık"
+EventsDownload = Callable[
+    [Sequence[PriceNeed], PriceStore, EventPriceParts, float], DownloadOutcome
+]
+EVENTS_BUSY = "fiyat verisi başka bir events komutunda açık"
+EVENTS_REPORT_BUSY = "rapor başka bir events komutunda açık"
+_EVENTS_EXIT_CODES = {
+    EventsOutcome.COMPLETED: EXIT_OK,
+    EventsOutcome.REFUSED: EXIT_REFUSED,
+    EventsOutcome.FAILED: EXIT_REFUSED,
+    EventsOutcome.STOPPED: EXIT_DOWNLOAD_STOPPED,
+    EventsOutcome.NOT_WRITTEN: EXIT_REPORT_NOT_WRITTEN,
+}
 _ARCHIVE_EXIT_CODES = {
     ArchiveOutcome.COMPLETE: EXIT_OK,
     ArchiveOutcome.FAILED: EXIT_REFUSED,
@@ -789,6 +836,208 @@ def _news_archive(
     return _ARCHIVE_EXIT_CODES[outcome]
 
 
+def repo_root() -> Path | None:
+    """Botun çalışma ağacı: paketin üstündeki ilk `pyproject.toml`'lu dizin (spec 0048 R-10)."""
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "pyproject.toml").is_file():
+            return parent
+    return None
+
+
+def _inside(path: str, root: Path | None) -> bool:
+    return root is not None and Path(path).resolve().is_relative_to(root.resolve())
+
+
+def _events_config(
+    command: str,
+    events_path: Path,
+    news_path: Path,
+    bot_path: Path,
+    root: Path | None,
+    output: Output,
+) -> tuple[EventsConfig, ArchiveConfig] | None:
+    """Spec 0048 AC-10: ağa çıkmadan ve hiçbir dosyaya dokunmadan, ilk sorun adıyla."""
+
+    def refuse(text: str) -> None:
+        output.say(f"events {command}: reddedildi: {text}")
+
+    document = _load_toml(events_path)
+    if isinstance(document, str):
+        refuse(document)
+        return None
+    result = load_events_config(document)
+    config = result.config
+    if config is None:
+        refuse(result.message)
+        return None
+    news_document = _load_toml(news_path)
+    if isinstance(news_document, str):
+        refuse(news_document)
+        return None
+    loaded = load_archive_config(news_document)
+    archive = loaded.config
+    if archive is None:
+        refuse(loaded.message)
+        return None
+    protected = (
+        archive.store_path,
+        archive.log_path,
+        archive.news.store_path,
+        archive.news.log_path,
+        *_bot_paths(bot_path),
+        str(events_path),
+        str(news_path),
+        str(bot_path),
+    )
+    outputs = (
+        ("price_store_path", config.price_store_path),
+        ("report_path", config.report_path),
+        ("library_path", config.library_path),
+    )
+    for index, (key, path) in enumerate(outputs):
+        others = (*protected, *(other for _, other in outputs[:index]))
+        if any(_same_file(path, other) for other in others) or _inside(path, root):
+            refuse(f"ayar geçersiz: events.{key}")
+            return None
+    if not Path(archive.store_path).is_file():
+        refuse(f"arşiv yok: {archive.store_path}")
+        return None
+    return config, archive
+
+
+def _event_inputs(archive: ArchiveConfig) -> Callable[[], EventInputs | str]:
+    """Kaynak kayıtlar `news`'le okunur ve etiketlenir, `calibration`'ın tipine çevrilir."""
+
+    def read() -> EventInputs | str:
+        news = archive.news
+        binance = tuple(each.name for each in news.sources if each.kind == "binance-duyuru")
+        try:
+            sources = read_library_sources(archive.store_path, news.store_path, binance)
+        except ArchiveStoreError as error:
+            return str(error)
+        announcements = tuple(
+            EventAnnouncement(
+                item.article_id,
+                item.origin,
+                item.catalog,
+                item.title,
+                item.published,
+                item.first_seen,
+                item.event_type,
+                item.direction,
+                item.coins,
+                title_pattern(item.title),
+            )
+            for item in sources.announcements
+        )
+        return EventInputs(
+            announcements,
+            EVENT_TYPES,
+            archive.store_path,
+            sources.archive_records,
+            news.store_path,
+            sources.forward_records,
+            sources.rules_fingerprint,
+        )
+
+    return read
+
+
+def _event_prices(path: str) -> Callable[[], PriceData | str | None]:
+    def read() -> PriceData | str | None:
+        try:
+            return read_prices(path)
+        except PriceStoreError as error:
+            return str(error)
+
+    return read
+
+
+def _events_download(
+    config: EventsConfig,
+    archive: ArchiveConfig,
+    output: Output,
+    clock: Clock,
+    stop: StopRequest,
+    wait: Callable[[float], None] | None,
+    download: EventsDownload,
+) -> EventsOutcome:
+    try:
+        store = PriceStore.open(config.price_store_path)
+    except PriceStoreError as error:
+        output.say(f"events download: reddedildi: {error}")
+        return EventsOutcome.REFUSED
+    try:
+        parts = EventPriceParts(
+            clock,
+            time.monotonic,
+            make_wait(stop) if wait is None else wait,
+            lambda: stop.requested,
+            lambda text: output.say(f"events download: {text}"),
+        )
+        exit_ = run_events_download(
+            config,
+            EventDownloadParts(
+                _event_inputs(archive),
+                lambda needs: download(needs, store, parts, config.request_gap_s),
+                output.say,
+            ),
+        )
+    finally:
+        store.close()
+    return exit_.outcome
+
+
+def _events(
+    command: str,
+    paths: tuple[Path, Path, Path],
+    root: Path | None,
+    console: TextIO,
+    clock: Clock,
+    stop: StopRequest,
+    wait: Callable[[float], None] | None,
+    download: EventsDownload,
+) -> int:
+    """Spec 0048: ayarlar → yollar → arşiv → kilit(ler) → koşu (AC-10, AC-11)."""
+    output = Output(console)
+    events_path, news_path, bot_path = paths
+    loaded = _events_config(command, events_path, news_path, bot_path, root, output)
+    if loaded is None:
+        return EXIT_REFUSED
+    config, archive = loaded
+    wanted = [(config.price_store_path, EVENTS_BUSY)]
+    if command == "measure":
+        wanted.append((config.report_path, EVENTS_REPORT_BUSY))
+    locks: list[StoreLock] = []
+    try:
+        for path, busy in wanted:
+            lock = StoreLock(str(Path(path).resolve()))
+            refused = lock.acquire()
+            if refused is not None:
+                why = busy if refused == LOCK_BUSY else refused
+                output.say(f"events {command}: reddedildi: {why}")
+                return EXIT_REFUSED
+            locks.append(lock)
+        if command == "download":
+            outcome = _events_download(config, archive, output, clock, stop, wait, download)
+        else:
+            parts = EventMeasureParts(
+                _event_inputs(archive),
+                _event_prices(config.price_store_path),
+                report_exists,
+                write_report,
+                output.say,
+                clock,
+            )
+            outcome = run_events_measure(config, parts).outcome
+    except ForcedStop:
+        return EXIT_FORCED
+    finally:
+        for lock in locks:
+            lock.release()
+    return _EVENTS_EXIT_CODES[outcome]
+
+
 def _prepare(
     config: BotConfig,
     output: Output,
@@ -984,6 +1233,9 @@ def run(
     news_config_path: Path = Path(NEWS_CONFIG_FILE),
     news_fetch: NewsFetch = real_news_fetch,
     archive_fetch: ArchiveFetch = real_archive_fetch,
+    events_config_path: Path = Path(EVENTS_CONFIG_FILE),
+    events_download: EventsDownload = download_event_prices,
+    root: Path | None = None,
 ) -> int:
     """Komutu çalıştırır, çıkış kodunu döndürür. Ayar, kilit, depo sırası: borsaya ve depoya
     ayarlar denetlenmeden dokunulmaz (R-2); kilit depodan önce alınır (R-6)."""
@@ -998,6 +1250,17 @@ def run(
         return _backtest(config_path, output, stop, clock, final="--final" in argv)
     if argv[0] == "calibrate":
         return _calibrate(config_path, output, stop, clock, final="--final" in argv)
+    if argv[0] == "events":
+        return _events(
+            argv[1],
+            (events_config_path, news_config_path, config_path),
+            repo_root() if root is None else root,
+            console,
+            clock,
+            stop,
+            wait,
+            events_download,
+        )
     if list(argv[:2]) == ["news", "archive"]:
         return _news_archive(
             argv, news_config_path, config_path, console, clock, stop, wait, archive_fetch
