@@ -21,8 +21,22 @@ tamamlanmamış, güvenilmeyen veri). 0017'nin mum denetimleri aynen uygulanır;
 
 Dönem boşlukları (spec 0044): `period_gaps` bir çiftin dönemdeki boşluklarını (`CandleGap`)
 indirme özetinin `boşluk=` kuralıyla verir; `has_candle` dönemde mum olup olmadığını söyler. Saftır.
+
+Olay fiyatları (spec 0048): `download_event_prices` istenen coin aralıklarının 1h mumlarını genel
+piyasa verisinden, vermezse herkese açık geçmiş veri arşivinden (`data.binance.vision`) anahtarsız
+indirip ayrı bir SQLite deposuna (`PriceStore`) yazar: tek istek, istekler arası en az ayardaki
+süre, ilk kaynak hatasında durur, yeniden çalıştırma yalnız eksikleri ister. `read_prices` depoyu
+ağsız okur; `missing_spans` depoda olmayan parçaları verir.
 """
 
+from crytobot.market_data._event_prices import (
+    REQUEST_TIMEOUT_S,
+    DownloadOutcome,
+    EventPriceParts,
+    PriceNeed,
+    download_event_prices,
+    missing_spans,
+)
 from crytobot.market_data._gaps import CandleGap, has_candle, period_gaps
 from crytobot.market_data._history import (
     HistoryRequest,
@@ -39,6 +53,16 @@ from crytobot.market_data._history_read import (
     HistoryReadProblem,
     read_history,
 )
+from crytobot.market_data._price_store import (
+    DownloadRun,
+    PairInfo,
+    PriceData,
+    PriceStore,
+    PriceStoreError,
+    StoredCandle,
+    StoredSpan,
+    read_prices,
+)
 from crytobot.market_data._read import read_market_data
 from crytobot.market_data._types import (
     CANDLE_INTERVALS,
@@ -54,10 +78,21 @@ from crytobot.market_data._types import (
     ReadSettings,
 )
 from crytobot.market_data._types import settings_problem as read_settings_problem
+from crytobot.market_data._vision import (
+    VisionFetched,
+    VisionHop,
+    fetch_month,
+    month_url,
+    parse_month,
+)
 
 __all__: list[str] = [
     "CANDLE_INTERVALS",
+    "REQUEST_TIMEOUT_S",
     "CandleGap",
+    "DownloadOutcome",
+    "DownloadRun",
+    "EventPriceParts",
     "HistoryData",
     "HistoryPair",
     "HistoryRead",
@@ -71,16 +106,31 @@ __all__: list[str] = [
     "MarketCandle",
     "MarketRead",
     "MarketRules",
+    "PairInfo",
     "PairRead",
     "PairSummary",
+    "PriceData",
+    "PriceNeed",
+    "PriceStore",
+    "PriceStoreError",
     "ReadBan",
     "ReadField",
     "ReadIssue",
     "ReadSettings",
+    "StoredCandle",
+    "StoredSpan",
+    "VisionFetched",
+    "VisionHop",
+    "download_event_prices",
     "download_history",
+    "fetch_month",
     "has_candle",
+    "missing_spans",
+    "month_url",
+    "parse_month",
     "period_gaps",
     "read_history",
     "read_market_data",
+    "read_prices",
     "read_settings_problem",
 ]

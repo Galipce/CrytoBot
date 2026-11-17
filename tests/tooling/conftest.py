@@ -79,6 +79,9 @@ def project(tmp_path: Path) -> Project:
     testleriyle geçer.
     """
     shutil.copy2(ROOT / "pyproject.toml", tmp_path / "pyproject.toml")
+    # the sensitive modules' tests read the example configs at the root (spec 0048, plan A-6)
+    for example in ROOT.glob("*.example.toml"):
+        shutil.copy2(example, tmp_path / example.name)
     ignore = shutil.ignore_patterns("__pycache__")
     # The copy's only slow tests are the ones a tooling test writes: "no slow test" stays reachable,
     # and no self-test depends on a time measurement.
