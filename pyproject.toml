@@ -135,6 +135,20 @@ forbidden_modules = [
 ]
 allow_indirect_imports = true
 
+# Spec 0051 (plan step 1): `llm` is the `claude -p` subprocess only; it reads no project data and
+# never decides. The scorer in `news` does not import it either: the entry point passes the call in.
+[[tool.importlinter.contracts]]
+name = "R-3j: llm imports no project module"
+type = "forbidden"
+source_modules = ["crytobot.llm"]
+forbidden_modules = [
+    "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.analysis",
+    "crytobot.strategy", "crytobot.risk", "crytobot.execution", "crytobot.portfolio",
+    "crytobot.backtest", "crytobot.control", "crytobot.reporting", "crytobot.app",
+    "crytobot.persistence", "crytobot.dashboard", "crytobot.calibration",
+]
+allow_indirect_imports = true
+
 [[tool.importlinter.contracts]]
 name = "R-3d: no module imports another module's internal submodules"
 type = "no_foreign_submodule_imports"
