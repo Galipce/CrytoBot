@@ -183,6 +183,20 @@ class ScoreStore:
             raise ScoreStoreError("skor kaydı okunamıyor") from None
         return frozenset(int(row[0]) for row in rows)
 
+    def failures(self) -> dict[int, int]:
+        """Haber → sonuçsuz denemeler: `ok` dışında biten ve sonu hiç yazılmamış çağrılar
+        (R-1'in sırası, review M-1)."""
+        try:
+            rows = self._connection.execute(
+                "SELECT calls.news_id, COUNT(*) FROM calls"
+                " LEFT JOIN call_ends ON call_ends.call_id = calls.id"
+                " WHERE call_ends.outcome IS NULL OR call_ends.outcome != 'ok'"
+                " GROUP BY calls.news_id"
+            ).fetchall()
+        except sqlite3.Error:
+            raise ScoreStoreError("skor kaydı okunamıyor") from None
+        return {int(news_id): int(count) for news_id, count in rows}
+
     def calls_on(self, day: date) -> int:
         row = self._one("SELECT COUNT(*) FROM calls WHERE day = ?", (day.isoformat(),))
         return 0 if row is None else int(str(row[0]))

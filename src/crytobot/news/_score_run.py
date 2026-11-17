@@ -4,9 +4,10 @@ Kararlar burada; gerçek etkiler (saat, ≤1 s'lik bekleme, durdurma, LLM çağr
 başlangıçta bir kez okunan bağlam ile USDT çiftleri `ScoreParts` ile gelir. `news` `llm`'i import
 etmez: çağrıyı giriş noktası verir.
 
-Tur: başlangıç anından sonra (ya da eşit) görülmüş, sonucu olmayan haberler ilk görme anı ve kimlik
-sırasıyla. Önce çağrısız geçiş: ilk görme anından 24 saatten çok geçmiş haber "bayat" olur. Sonra
-çağrılar; her çağrıdan önce durdurma, tur sınırı, kota beklemesi ve UTC günlük sınır denetlenir.
+Tur: başlangıç anından sonra (ya da eşit) görülmüş, sonucu olmayan haberler sonuçsuz deneme sayısı,
+ilk görme anı ve kimlik sırasıyla (tekrar tekrar başarısız olan haber kuyruğu tüketmez, M-1). Önce
+çağrısız geçiş: ilk görme anından 24 saatten çok geçmiş haber "bayat" olur. Sonra çağrılar; her
+çağrıdan önce durdurma, tur sınırı, kota beklemesi ve UTC günlük sınır denetlenir.
 Çağrı süreç başlamadan sayılır. `ok` yanıt doğrulanır: "skorlandı" ya da "şema dışı" (yinelenmez).
 Geçici hata (zaman aşımı, oturum yok, kota, tanınmayan) sonuç yazmaz, turu bitirir; haber sonraki
 turda yeniden denenir. Kayıt dosyasına haber metni, prompt ve yanıt yazılmaz: yalnız kimlik, sonuç,
@@ -189,6 +190,11 @@ def run_score_round(config: ScoreConfig, store: ScoreStore, parts: ScoreParts) -
             parts.say(f"bayat: haber={item.record_id} kaynak={item.source} çağrı yok")
         else:
             pending.append(item)
+    failures = store.failures()
+    # a news item that keeps failing goes behind the less tried ones (R-1, review M-1)
+    pending.sort(
+        key=lambda item: (failures.get(item.record_id, 0), item.first_seen, item.record_id)
+    )
     tally.pending = len(pending)
     finished = True
     for item in pending:

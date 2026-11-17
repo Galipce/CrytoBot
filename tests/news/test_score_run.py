@@ -332,8 +332,8 @@ def test_transient_retried_next_round(tmp_path: Path, outcome: str) -> None:
     assert f"hata={outcome}" in run.lines[-1]
     run.now += timedelta(minutes=5)
     assert run.round()
-    assert len(run.prompts) == 3  # the same news first, then the next
-    assert BINANCE_TITLE in run.prompts[1]
+    assert len(run.prompts) == 3  # the untried news first, the failed one behind it (M-1)
+    assert RSS_TITLE in run.prompts[1] and BINANCE_TITLE in run.prompts[2]
     assert run.rows("SELECT news_id, kind FROM results ORDER BY news_id") == [
         (1, "skorlandı"),
         (2, "skorlandı"),
@@ -429,3 +429,27 @@ def test_overflow_reply_records_its_size(tmp_path: Path) -> None:
         ("şema dışı", "boyut sınırı", 65536)
     ]
     assert "sonuç=şema dışı neden=boyut sınırı boyut=65536" in run.lines[-2]
+
+
+def test_failing_news_moves_behind(tmp_path: Path) -> None:
+    """Spec 0051 R-1 (review M-1): a news item that keeps failing does not hold the queue."""
+    run = Harness(tmp_path, score={"daily_call_limit": 6})
+    run.add("binance", "id:poison", "Poison", "p", START)
+    for index in range(3):
+        run.add("coindesk", f"link:{index}", f"News {index}", "t", START + timedelta(minutes=1))
+    run.now = START + timedelta(minutes=2)
+
+    def reply(prompt: str) -> ScoreReply:
+        return failed("unknown") if "başlık: Poison" in prompt else ok(events())
+
+    run.replies = [reply] * 20
+    for _ in range(6):
+        run.now += timedelta(minutes=5)
+        assert run.round()
+    titles = [
+        next(t for t in ("Poison", "News 0", "News 1", "News 2") if f"başlık: {t}" in p)
+        for p in run.prompts
+    ]
+    # the poison fails once, then every other news is scored before it is tried again
+    assert titles == ["Poison", "News 0", "News 1", "News 2", "Poison", "Poison"]
+    assert run.rows("SELECT COUNT(*) FROM results WHERE kind = 'skorlandı'") == [(3,)]
