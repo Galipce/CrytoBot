@@ -9,8 +9,10 @@ saklanan metnin ilk 8 KB'ı. Veri sınırının işareti haberin kendi SHA-256's
 kendi parmak izini içeremeyeceği için sınırı taklit edemez. Prompt'a hiçbir yol, sır ya da kişisel
 bilgi girmez: rapordan başlık satırları (yollar orada) alınmaz.
 
-`PROMPT_FINGERPRINT` = sha256(sürüm + sistem talimatı + şablon); bağlamın parmak izi =
-sha256(rapor sha + kütüphane sha). Talimat ya da bağlam değişirse parmak izi değişir.
+`PROMPT_FINGERPRINT` = sha256(sürüm + sistem talimatı + şablon + talimatın habere bağlı olmayan
+alanları: türler, yönler, şiddetler, en çok olay); bağlamın parmak izi = sha256(rapor sha +
+kütüphane sha + etiket kuralları `RULES_FINGERPRINT`). Talimat ya da bağlam değişirse parmak izi
+değişir.
 """
 
 import hashlib
@@ -21,7 +23,7 @@ from datetime import datetime
 from typing import Final
 
 from crytobot.news._items import truncate_utf8
-from crytobot.news._labels import EVENT_TYPES, NEUTRAL, OTHER, label
+from crytobot.news._labels import EVENT_TYPES, NEUTRAL, OTHER, RULES_FINGERPRINT, label
 
 PROMPT_VERSION: Final = "1"
 DATA_LIMIT_BYTES: Final = 8 * 1024
@@ -77,11 +79,31 @@ def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-PROMPT_FINGERPRINT: Final = _sha(f"{PROMPT_VERSION}\n{SYSTEM_PROMPT}\n{TEMPLATE}")
+def instruction_fields(
+    event_types: tuple[tuple[str, str], ...] = EVENT_TYPES,
+) -> dict[str, str | int]:
+    """Talimat bölümünün habere bağlı olmayan alanları: şablon kadar talimattır (review L-1)."""
+    return {
+        "types": ", ".join(name for name, _ in event_types),
+        "directions": ", ".join(DIRECTIONS),
+        "severities": ", ".join(str(each) for each in SEVERITIES),
+        "max_events": MAX_EVENTS,
+    }
 
 
-def context_fingerprint(report_sha256: str, library_sha256: str) -> str:
-    return _sha(f"{report_sha256}\n{library_sha256}")
+def prompt_fingerprint(event_types: tuple[tuple[str, str], ...] = EVENT_TYPES) -> str:
+    fields = json.dumps(instruction_fields(event_types), ensure_ascii=False, sort_keys=True)
+    return _sha(f"{PROMPT_VERSION}\n{SYSTEM_PROMPT}\n{TEMPLATE}\n{fields}")
+
+
+PROMPT_FINGERPRINT: Final = prompt_fingerprint()
+
+
+def context_fingerprint(
+    report_sha256: str, library_sha256: str, rules_fingerprint: str = RULES_FINGERPRINT
+) -> str:
+    """Bağlam: iki dosya ve örnek seçen etiket kuralları (review L-1)."""
+    return _sha(f"{report_sha256}\n{library_sha256}\n{rules_fingerprint}")
 
 
 @dataclass(frozen=True)
@@ -206,10 +228,7 @@ def build_prompt(context: ScoreContext, title: str, text: str) -> ScorePrompt:
     examples = "\n".join(_example_line(each) for each in chosen) if chosen else "(örnek yok)"
     mark = _sha(f"{title}\n{body}")[:16]
     prompt = TEMPLATE.format(
-        types=", ".join(name for name, _ in EVENT_TYPES),
-        directions=", ".join(DIRECTIONS),
-        severities=", ".join(str(each) for each in SEVERITIES),
-        max_events=MAX_EVENTS,
+        **instruction_fields(),
         table=context.table,
         rule_type=rule_type,
         examples=examples,

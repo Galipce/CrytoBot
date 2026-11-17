@@ -140,3 +140,15 @@ def test_context_refused(
     library = (FIXTURES / "library.jsonl").read_bytes() if library is None else library
     with pytest.raises(ContextError, match=message):
         load_context(report, report_sha or sha(report), library, library_sha or sha(library))
+
+
+def test_fingerprints_cover_types_and_rules() -> None:
+    from crytobot.news import RULES_FINGERPRINT
+    from crytobot.news._labels import EVENT_TYPES
+    from crytobot.news._score_prompt import prompt_fingerprint
+
+    assert prompt_fingerprint() == PROMPT_FINGERPRINT
+    fewer = tuple(each for each in EVENT_TYPES if each[0] != "diğer")
+    assert prompt_fingerprint(fewer) != PROMPT_FINGERPRINT  # the type list is instruction too
+    assert context_fingerprint("r", "l") == context_fingerprint("r", "l", RULES_FINGERPRINT)
+    assert context_fingerprint("r", "l", "0" * 64) != context_fingerprint("r", "l")
