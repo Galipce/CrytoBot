@@ -169,6 +169,7 @@ from crytobot.market_data import (
     download_history,
     read_history,
     read_market_data,
+    read_pairs,
     read_prices,
 )
 from crytobot.news import (
@@ -949,23 +950,19 @@ def _score_context(config: ScoreConfig) -> ScoreContext | str:
 
 def _score_pairs(events_path: Path) -> tuple[frozenset[str], datetime | None] | str:
     """USDT spot çiftleri: `crytobot-events.toml`'un fiyat deposunun borsa bilgisi anlık
-    görüntüsünden, yalnız okunarak (plan Risk 2; 0048 R-1 ile aynı bilgi)."""
+    görüntüsünden, yalnız SELECT ile ve mumsuz (plan Risk 2, A-2; 0048 R-1 ile aynı bilgi)."""
     paths = _raw_paths(_load_toml(events_path), "events", ("price_store_path",))
-    if not paths or not Path(paths[0]).is_file():
+    if not paths:
         return "borsa bilgisi yok (crytobot-events.toml price_store_path; önce events download)"
     try:
-        store = PriceStore.open(paths[0])
+        snapshot = read_pairs(paths[0])
     except PriceStoreError:
         return "borsa bilgisi okunamıyor"
-    try:
-        pairs, at = store.pairs(), store.pairs_at()
-    except PriceStoreError:
-        return "borsa bilgisi okunamıyor"
-    finally:
-        store.close()
-    if pairs is None:
+    if snapshot is None:
+        return "borsa bilgisi yok (crytobot-events.toml price_store_path; önce events download)"
+    if snapshot.at is None:
         return "borsa bilgisi yok (önce events download)"
-    return frozenset(pairs), at
+    return frozenset(snapshot.pairs), snapshot.at
 
 
 def _news_score_status(config: ScoreConfig, output: Output, clock: Clock) -> int:

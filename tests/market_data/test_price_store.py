@@ -14,6 +14,7 @@ from crytobot.market_data import (
     PriceStore,
     PriceStoreError,
     StoredCandle,
+    read_pairs,
     read_prices,
 )
 
@@ -88,3 +89,37 @@ def test_span_written_whole_or_not_at_all(tmp_path: Path) -> None:
         store.close()
     data = read_prices(path)
     assert data is not None and data.candles == {} and data.spans == {}
+
+
+def test_read_pairs_only_reads(tmp_path: Path) -> None:
+    """Spec 0051 plan A-2 (review L-2): yalnız borsa bilgisi, dosya değişmez, mum okunmaz."""
+    path = tmp_path / "p.db"
+    assert read_pairs(str(path)) is None
+    assert list(tmp_path.iterdir()) == []
+    store = PriceStore.open(str(path))
+    store.close()
+    empty = read_pairs(str(path))
+    assert empty is not None and (empty.pairs, empty.at) == ({}, None)
+    store = PriceStore.open(str(path))
+    store.save_pairs([PairInfo("ABC", "ABCUSDT", "TRADING")], T0)
+    store.close()
+    before = path.read_bytes()
+    snapshot = read_pairs(str(path))
+    assert snapshot is not None
+    assert snapshot.pairs == {"ABC": PairInfo("ABC", "ABCUSDT", "TRADING")}
+    assert snapshot.at == T0
+    assert path.read_bytes() == before
+
+
+def test_read_pairs_foreign_file_untouched(tmp_path: Path) -> None:
+    other = tmp_path / "other.db"
+    connection = sqlite3.connect(other)
+    connection.execute("CREATE TABLE x (a)")
+    connection.commit()
+    connection.close()
+    before = other.read_bytes()
+    with pytest.raises(PriceStoreError):
+        read_pairs(str(other))
+    assert other.read_bytes() == before  # no schema written into a wrong file
+    with sqlite3.connect(other) as check:
+        assert [row[0] for row in check.execute("SELECT name FROM sqlite_master")] == ["x"]

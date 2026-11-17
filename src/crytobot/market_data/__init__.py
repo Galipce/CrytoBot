@@ -56,11 +56,13 @@ from crytobot.market_data._history_read import (
 from crytobot.market_data._price_store import (
     DownloadRun,
     PairInfo,
+    PairsSnapshot,
     PriceData,
     PriceStore,
     PriceStoreError,
     StoredCandle,
     StoredSpan,
+    read_pairs,
     read_prices,
 )
 from crytobot.market_data._read import read_market_data
@@ -109,6 +111,7 @@ __all__: list[str] = [
     "PairInfo",
     "PairRead",
     "PairSummary",
+    "PairsSnapshot",
     "PriceData",
     "PriceNeed",
     "PriceStore",
@@ -131,6 +134,7 @@ __all__: list[str] = [
     "period_gaps",
     "read_history",
     "read_market_data",
+    "read_pairs",
     "read_prices",
     "read_settings_problem",
 ]
