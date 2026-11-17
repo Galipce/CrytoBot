@@ -296,3 +296,19 @@ def test_needs_coin_changes_fingerprint() -> None:
 )
 def test_futures_margin_lead_and_noise_words(title: str, expected: str) -> None:
     assert label(title).event_type == expected, title
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Binance Futures Will Update Leverage and Margin Tiers of BTCUSDT Perpetual Contract",
+        "Binance Margin Will Adjust the Maximum Leverage of ETH Isolated Margin Pairs",
+        "Binance Futures Will Delay the Settlement of the BTCUSDT Quarterly 0628 Futures Contract",
+    ],
+)
+def test_futures_margin_without_opening_verb_is_other(title: str) -> None:
+    # CB-1 core: a coin and a futures/margin term but no new contract or margin opening, and no
+    # noise word — only the opening-verb condition keeps it out of the type (0050 VERIFY G-1).
+    result = label(title)
+    assert result.coins, title
+    assert result.event_type == "diğer", title
