@@ -42,6 +42,8 @@ elif mode == "hang":
         handle.write(str(child.pid))
     os.replace(report + ".pid.tmp", report + ".pid")  # whole or absent, never half-written
     time.sleep(120)
+elif mode == "fail":
+    sys.exit(3)
 elif mode == "flood":
     while True:
         sys.stdout.write("x" * 65536)
@@ -188,3 +190,16 @@ def test_forced_stop_kills_tree(tmp_path: Path) -> None:
             environ=fake.environ,
         )
     assert gone(int(pid_file.read_text()))
+
+
+def test_failure_under_stop_request_is_stopped(tmp_path: Path) -> None:
+    fake = Fake(tmp_path, "fail")
+    assert fake.call().outcome is CallOutcome.UNKNOWN  # alone: an unknown failure
+    fake.report.unlink()
+    reply = call_claude(
+        ClaudeRequest("m", "s", "p", 60.0),
+        executable=[sys.executable, str(fake.script)],
+        stopped=fake.report.exists,  # the stop arrives while the child exits on its own
+        environ=fake.environ,
+    )
+    assert reply.outcome is CallOutcome.STOPPED

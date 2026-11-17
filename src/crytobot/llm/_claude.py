@@ -258,4 +258,8 @@ def _run(
     if overflow.is_set():
         return CallOutcome.OK, None, len(out), True
     outcome, text = classify(process.returncode, bytes(out), bytes(err))
+    if outcome is not CallOutcome.OK and stopped():
+        # Ctrl+Break reaches the child's group too on Windows: it may die before the loop sees
+        # the request; a failed call under a stop request is a stopped call (review I-3)
+        return CallOutcome.STOPPED, None, len(out), False
     return outcome, text, len(out), False
