@@ -113,11 +113,18 @@ def _single(
 
 
 def check_reply(
-    text: str | None, overflow: bool, title: str, body: str, pairs: Collection[str]
+    text: str | None,
+    overflow: bool,
+    title: str,
+    body: str,
+    pairs: Collection[str],
+    read_size: int = 0,
 ) -> Checked:
     """`text`: zarfın `result` metni; `overflow`: süreç çıktı sınırını aştı. `title`, `body`:
-    LLM'e verilen haber metni. `pairs`: borsa bilgisinde USDT spot çifti olan coinler."""
-    size = 0 if text is None else len(text.encode("utf-8"))
+    LLM'e verilen haber metni. `pairs`: borsa bilgisinde USDT spot çifti olan coinler.
+    `read_size`: süreçten okunan bayt; metin yoksa (sınır aşıldı) kayda giden boyut odur (review
+    L-3)."""
+    size = read_size if text is None else len(text.encode("utf-8"))
     if overflow or text is None or size > REPLY_LIMIT_BYTES:
         return Checked((), (), TOO_LARGE, size)
     events = _whole(text)

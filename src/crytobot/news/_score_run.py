@@ -47,13 +47,14 @@ ROUND_FULL = "tur sınırı"
 @dataclass(frozen=True)
 class ScoreReply:
     """Bir LLM çağrısının sonucu, `news`'in diliyle. `outcome`: ok, timeout, no_session, quota,
-    unknown ya da stopped; `text` yalnız `ok`'ta."""
+    unknown ya da stopped; `text` yalnız `ok`'ta. `size`: süreçten okunan stdout baytı."""
 
     outcome: str
     text: str | None
     overflow: bool
     seconds: float
     workdir_clean: bool
+    size: int = 0
 
 
 # (model, system prompt, prompt, timeout_s) -> reply
@@ -128,7 +129,9 @@ def _score(
         tally.failure = reply.outcome
         parts.say(f"{head} sonuç={reply.outcome} klasör={folder}")
         return False
-    checked = check_reply(reply.text, reply.overflow, prompt.title, prompt.body, parts.pairs)
+    checked = check_reply(
+        reply.text, reply.overflow, prompt.title, prompt.body, parts.pairs, reply.size
+    )
     common = (config.model, PROMPT_FINGERPRINT, parts.context.fingerprint)
     if checked.schema_reason is not None:
         result = ScoreResult(

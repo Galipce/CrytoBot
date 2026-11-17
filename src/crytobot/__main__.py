@@ -881,7 +881,12 @@ def real_score_call(stopped: Callable[[], bool]) -> ScoreCall:
             stopped=stopped,
         )
         return ScoreReply(
-            reply.outcome.value, reply.text, reply.overflow, reply.seconds, reply.workdir_clean
+            reply.outcome.value,
+            reply.text,
+            reply.overflow,
+            reply.seconds,
+            reply.workdir_clean,
+            reply.size,
         )
 
     return call

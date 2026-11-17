@@ -418,3 +418,14 @@ def test_log_has_no_text_prompt_or_reply(tmp_path: Path) -> None:
         assert needle not in log
     assert "çağrı: haber=1 kaynak=binance süre=1.5s sonuç=skorlandı skor=1 klasör=boş" in log
     assert "çağrı: haber=2 kaynak=coindesk süre=1.5s sonuç=şema dışı neden=çözümlenemiyor" in log
+
+
+def test_overflow_reply_records_its_size(tmp_path: Path) -> None:
+    run = Harness(tmp_path)
+    run.add("binance", "id:1", BINANCE_TITLE, BINANCE_TEXT, START)
+    run.replies = [ScoreReply("ok", None, True, 3.0, True, 65536)]
+    assert run.round()
+    assert run.rows("SELECT kind, schema_reason, reply_size FROM results") == [
+        ("şema dışı", "boyut sınırı", 65536)
+    ]
+    assert "sonuç=şema dışı neden=boyut sınırı boyut=65536" in run.lines[-2]

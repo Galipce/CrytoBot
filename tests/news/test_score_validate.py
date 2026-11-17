@@ -182,3 +182,8 @@ def test_reasons_counted_together() -> None:
     assert checked.scores == ()
     assert dict(checked.rejections) == {BAD_SEVERITY: 2, NOT_VERBATIM: 1, NO_PAIR: 1}
     assert list(checked.rejections) == sorted(checked.rejections)  # one order, every run
+
+
+def test_overflow_size_is_the_read_size() -> None:
+    checked = check_reply(None, True, TITLE, BODY, PAIRS, read_size=65536)
+    assert (checked.schema_reason, checked.size) == (TOO_LARGE, 65536)
