@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from crytobot.news import RULES_FINGERPRINT
+from crytobot.news._labels import EVENT_TYPES
 from crytobot.news._score_prompt import (
     DATA_LIMIT_BYTES,
     PROMPT_FINGERPRINT,
@@ -16,6 +18,7 @@ from crytobot.news._score_prompt import (
     build_prompt,
     context_fingerprint,
     load_context,
+    prompt_fingerprint,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "score"
@@ -143,10 +146,6 @@ def test_context_refused(
 
 
 def test_fingerprints_cover_types_and_rules() -> None:
-    from crytobot.news import RULES_FINGERPRINT
-    from crytobot.news._labels import EVENT_TYPES
-    from crytobot.news._score_prompt import prompt_fingerprint
-
     assert prompt_fingerprint() == PROMPT_FINGERPRINT
     fewer = tuple(each for each in EVENT_TYPES if each[0] != "diğer")
     assert prompt_fingerprint(fewer) != PROMPT_FINGERPRINT  # the type list is instruction too
