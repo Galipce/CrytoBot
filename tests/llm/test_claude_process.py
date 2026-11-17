@@ -138,8 +138,16 @@ def test_timeout_kills_grandchild(tmp_path: Path) -> None:
 
 def test_stop_kills_tree(tmp_path: Path) -> None:
     fake = Fake(tmp_path, "hang")
-    reply = fake.call(stopped=True)
-    assert reply.outcome is CallOutcome.STOPPED
+    pid_file = tmp_path / "report.json.pid"
+    reply = call_claude(
+        ClaudeRequest("m", "s", "p", 60.0),
+        executable=[sys.executable, str(fake.script)],
+        stopped=pid_file.exists,  # the stop request comes once the grandchild runs
+        environ=fake.environ,
+    )
+    assert reply.outcome is CallOutcome.STOPPED and reply.text is None
+    assert gone(int(pid_file.read_text())), "grandchild still running after the stop"
+    assert reply.workdir_clean
 
 
 def test_output_limit(tmp_path: Path) -> None:
