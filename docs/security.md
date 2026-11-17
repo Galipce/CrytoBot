@@ -40,7 +40,7 @@
 - LLM harcaması günlük limitlidir (config); limit aşılınca LLM sinyali devre dışı kalır, bot teknik sinyalle devam eder.
 - **`claude -p` yalıtımı (spec 0051):** LLM sahibin aboneliğiyle `claude -p` alt sürecidir; API anahtarı ve
   `anthropic` SDK kullanılmaz, ortamdan `ANTHROPIC_API_KEY` ve adında KEY, TOKEN, SECRET ya da PASSWORD geçen
-  her değişken çıkarılır. Bayraklar: `--tools ""` (araç yok), `--strict-mcp-config` (MCP yok), `--setting-sources ""`
+  her değişken ve iç içe oturum işareti `CLAUDECODE` çıkarılır. Bayraklar: `--tools ""` (araç yok), `--strict-mcp-config` (MCP yok), `--setting-sources ""`
   (kullanıcı/proje ayarı, hook ve eklenti yok), `--disable-slash-commands`, `--no-session-persistence`, ayardaki
   `--model`; `--bare` (abonelik girişini okumaz), `--fallback-model` ve oturum sürdürme verilmez. Argv kullanıcı verisi
   taşımaz: sistem talimatı sabit, tek satır ASCII ve cmd.exe özel karakterlerinden arınmıştır (Windows'ta `claude.cmd`),

@@ -44,8 +44,15 @@ def test_isolated_argv_and_env() -> None:
         "my_secret": "x",
         "TELEGRAM_BOT_TOKEN": "x",
         "LANG": "C.UTF-8",
+        "CLAUDECODE": "1",
+        "CLAUDE_CODE_GIT_BASH_PATH": "C:/Git/bin/bash.exe",
     }
-    assert claude_env(parent) == {"PATH": "/bin", "USERPROFILE": "C:/Users/me", "LANG": "C.UTF-8"}
+    assert claude_env(parent) == {
+        "PATH": "/bin",
+        "USERPROFILE": "C:/Users/me",
+        "LANG": "C.UTF-8",
+        "CLAUDE_CODE_GIT_BASH_PATH": "C:/Git/bin/bash.exe",  # needed on Windows: kept
+    }
 
 
 def envelope(result: object, *, is_error: bool = False) -> bytes:

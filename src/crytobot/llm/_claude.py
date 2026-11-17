@@ -4,7 +4,7 @@ Argv sabittir ve kullanıcı verisi taşımaz: talimat tek satır ASCII'dir (Win
 `.cmd` sarmalayıcısıdır, argv cmd.exe'den geçer), prompt stdin'den gider. `--bare` kullanılmaz
 (abonelik girişini okumaz); araçlar, MCP, ayar kaynakları, slash komutları ve oturum saklama
 kapalıdır; `--fallback-model` ve `--json-schema` verilmez. Ortam üst süreçten gelir, eksi
-`ANTHROPIC_API_KEY` ve adında KEY, TOKEN, SECRET ya da PASSWORD geçen değişkenler.
+`ANTHROPIC_API_KEY`, adında KEY, TOKEN, SECRET ya da PASSWORD geçen değişkenler ve `CLAUDECODE`.
 
 Süreç kendi süreç grubunda başlar (Windows `CREATE_NEW_PROCESS_GROUP`, POSIX `start_new_session`);
 zaman aşımında, durdurmada ya da çıktı sınırı aşılınca bütün ağacıyla sonlandırılır (conventions,
@@ -33,6 +33,8 @@ _ERROR_LIMIT = 16 * 1024
 _POLL_S = 0.1
 _KILL_WAIT_S = 10.0
 _SECRET_MARKS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
+# set inside a Claude Code session: the child must start as from a plain terminal (review I-2)
+_NESTED = frozenset({"CLAUDECODE"})
 QUOTA_MARKS = ("usage limit", "rate limit", "hit your limit")
 NO_SESSION_MARKS = ("not logged in", "/login", "invalid api key")
 
@@ -89,11 +91,12 @@ def claude_argv(executable: Sequence[str], model: str, system_prompt: str) -> li
 
 
 def claude_env(parent: Mapping[str, str]) -> dict[str, str]:
-    """Üst ortam, eksi API anahtarı ve sır adlı değişkenler (plan Risk 3)."""
+    """Üst ortam, eksi API anahtarı, sır adlı değişkenler (plan Risk 3) ve iç içe Claude Code
+    oturumu işareti `CLAUDECODE` (review I-2)."""
     return {
         name: value
         for name, value in parent.items()
-        if not any(mark in name.upper() for mark in _SECRET_MARKS)
+        if not any(mark in name.upper() for mark in _SECRET_MARKS) and name.upper() not in _NESTED
     }
 
 
