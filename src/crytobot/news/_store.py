@@ -252,7 +252,8 @@ def read_forward(path: str, since: datetime) -> tuple[ForwardItem, ...] | None:
     sırasıyla. Depo yoksa `None` (dosya oluşturulmaz); okunamıyorsa `StoreError`.
 
     `mode=ro`: hiçbir satır yazılmaz; WAL kipinde çalışan toplayıcıyı beklemez, toplayıcı da onu
-    beklemez (spec 0051 R-8, AC-7)."""
+    beklemez (spec 0051 R-8, AC-7). Conventions'taki "`mode=ro` sıcak günlüğü geri alamaz" tuzağı
+    rollback günlüğüne aittir: WAL'de yazılmamış işlem okuyucuya hiç görünmez (review I-1)."""
     if not Path(path).is_file():
         return None
     uri = f"{Path(path).resolve().as_uri()}?mode=ro"

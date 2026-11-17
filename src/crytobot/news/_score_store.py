@@ -294,7 +294,10 @@ ERROR_OUTCOMES = ("timeout", "no_session", "quota", "unknown")
 
 
 def read_score_snapshot(path: str, today: date) -> ScoreSnapshot | None:
-    """Kayıt yoksa `None` (dosya oluşturulmaz); okunamıyorsa `ScoreStoreError`. `mode=ro`."""
+    """Kayıt yoksa `None` (dosya oluşturulmaz); okunamıyorsa `ScoreStoreError`.
+
+    `mode=ro`: kayıt WAL kipindedir; conventions'taki "`mode=ro` sıcak günlüğü geri alamaz" tuzağı
+    rollback günlüğüne aittir, WAL'de yazılmamış işlem okuyucuya hiç görünmez (review I-1)."""
     if not Path(path).is_file():
         return None
     uri = f"{Path(path).resolve().as_uri()}?mode=ro"
