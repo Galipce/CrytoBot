@@ -1,0 +1,27 @@
+# Geçmiş olay örnekleri — kalibrasyon tablosu (spec 0048)
+üretildi: 2026-11-17T00:00:00+00:00 | okunma anları: kaynak kayıtlar 2026-11-17T00:00:00+00:00, fiyat verisi 2026-11-17T00:00:00+00:00
+arşiv: C:/Users/owner/secret-dir/archive.db kayıt=10
+ileriye dönük kayıt: C:/Users/owner/secret-dir/news.db binance-duyuru kaydı=2
+kural seti parmak izi: 5dd52c15b39e04308d608917ff73bc01c9cdb2e6dbe222548f7cc8f248b54194
+
+## Sayılar
+duyuru=10 örnek=12 ölçülen=8 ilk görme anı kullanılan=0
+ölçülemeyen (nedene göre):
+  coin yok: 4
+
+## Ana sonuç (beklenen yönde)
+listeden çıkarma — düşüş
+  kesimden önce: duyuru=5 örnek=6 ölçülen=5 çakışan=0 isabet=60.00% taban=30.00% fark=+30.00 [yetersiz örnek]
+  toplam: duyuru=5 örnek=6 ölçülen=5 çakışan=0 isabet=60.00% taban=30.00% fark=+30.00 [yetersiz örnek]
+
+## Öteki yön
+listeden çıkarma — yükseliş
+  toplam: duyuru=5 örnek=6 ölçülen=5 çakışan=0 isabet=10.00% taban=30.00% fark=-20.00 [yetersiz örnek]
+
+## Nötr türler (iki yön, ana sonuç yok)
+askıya alma ve bakım — yükseliş
+  toplam: duyuru=2 örnek=2 ölçülen=2 çakışan=0 isabet=50.00% taban=30.00% fark=+20.00 [yetersiz örnek]
+
+## Etiket denetimi (R-8)
+listeden çıkarma: duyuru=5
+  "Binance Will Delist AAA, BBB on 2026-01-01"

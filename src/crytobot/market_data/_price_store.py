@@ -308,6 +308,35 @@ def _pairs(connection: sqlite3.Connection) -> dict[str, PairInfo] | None:
     }
 
 
+@dataclass(frozen=True)
+class PairsSnapshot:
+    """Borsa bilgisinin anlık görüntüsü: çiftler ve anı (spec 0051, plan A-2)."""
+
+    pairs: dict[str, PairInfo]
+    at: datetime | None
+
+
+def read_pairs(path: str) -> PairsSnapshot | None:
+    """Yalnız borsa bilgisi, mumsuz ve yalnız SELECT (spec 0051 L-2): depo yoksa `None` (dosya
+    oluşturulmaz), anlık görüntü yoksa `pairs` boş ve `at` `None`; okunamıyorsa `PriceStoreError`.
+    `mode=rw`: salt okuma da öldürülmüş sürecin günlüğünü geri alabilmeli (conventions, 0011)."""
+    if not Path(path).is_file():
+        return None
+    uri = f"{Path(path).resolve().as_uri()}?mode=rw"
+    try:
+        with closing(sqlite3.connect(uri, uri=True, timeout=0)) as connection:
+            _check_format(connection)
+            pairs = _pairs(connection)
+            info = connection.execute(
+                "SELECT value FROM meta WHERE name = 'exchange_info_at'"
+            ).fetchone()
+    except (sqlite3.Error, ValueError, TypeError):
+        raise PriceStoreError("fiyat deposu okunamıyor") from None
+    if pairs is None:
+        return PairsSnapshot({}, None)
+    return PairsSnapshot(pairs, None if info is None else datetime.fromisoformat(str(info[0])))
+
+
 def read_prices(path: str) -> PriceData | None:
     """Ölçüm: depo yoksa `None` (dosya oluşturulmaz); okunamıyorsa `PriceStoreError`."""
     if not Path(path).is_file():

@@ -1,5 +1,5 @@
 """Giriş noktası: `python -m crytobot prepare|start|download|backtest|calibrate|news|events` (spec
-0022, 0023, 0025, 0045, 0046, 0047, 0048).
+0022, 0023, 0025, 0045, 0046, 0047, 0048, 0051).
 
 Karar içermez: kararların hepsi `app`'tedir. Burada yalnız gerçek etkiler bağlanır: ayar dosyası
 (`tomllib`, çalışma dizinindeki `crytobot.toml`), gerçek UTC saati, ≤1 s'lik parçalarla bekleme,
@@ -52,6 +52,17 @@ import etmez). `download` genel piyasa verisine ve herkese açık geçmiş veri 
 Çıkış: 0 tamam, 1 ret ya da kaynak hatası, 4 durdurma isteğiyle durdu, 6 çıktı yazılamadı, 130
 zorla durma.
 
+`news score` (spec 0051) LLM olay skorlayıcısıdır, gölge modda: ayar haber ayar dosyasının
+`[score]` bölümüdür. Sıra: ayar → yolların çakışması (çözülmüş yollarla: haber kaydı, arşiv, bot
+deposu, bütün kayıt dosyaları, fiyat deposu, bağlam dosyaları) → haber kaydı var mı → bağlam
+dosyaları ve parmak izleri → borsa bilgisi (`crytobot-events.toml`'un fiyat deposundan USDT
+çiftleri, yalnız okunur; plan Risk 2) → skor kaydının mutlak yolunun kilidi (`<skor kaydı>.lock`;
+bot, toplayıcı ve arşiv kilitlerinden ayrı) → döngü. Bütün retler kayda dokunmadan. LLM çağrısı
+`llm`'in `claude -p` alt sürecidir (`claude` PATH'te aranır); kararlar `news`'tedir. Bot deposu
+açılmaz, Telegram bağlanmaz. `news score status` ağa ve LLM'e çıkmaz, kilit almaz, kayıtları yalnız
+okur. Çıkış: 0 temiz durma ya da durum, 1 ret ya da okunamayan/yazılamayan kayıt, 3 kayıt dosyası
+yazılamıyor, 130 zorla durma.
+
 Çıkış kodları: 0 temiz durma, hazırlık, indirme ya da backtest tamam, 1 başlatma, hazırlık, indirme
 ya da backtest reddi (ayarlar, veri dosyası, rapor dosyası var), 2 okuma reddiyle durma, 3 kayıt
 dosyası yazılamıyor, 4 indirme durdu, 5 backtest durdu, 6 backtest tamam ama rapor dosyası
@@ -59,6 +70,7 @@ yazılamadı (rapor konsolda), 130 zorla durma.
 """
 
 import hashlib
+import shutil
 import signal
 import sys
 import tempfile
@@ -141,6 +153,7 @@ from crytobot.dashboard import (
     create_server,
     load_dashboard_config,
 )
+from crytobot.llm import ClaudeRequest, call_claude
 from crytobot.market_data import (
     DownloadOutcome,
     EventPriceParts,
@@ -156,6 +169,7 @@ from crytobot.market_data import (
     download_history,
     read_history,
     read_market_data,
+    read_pairs,
     read_prices,
 )
 from crytobot.news import (
@@ -167,19 +181,34 @@ from crytobot.news import (
     ArchiveStoreError,
     CollectionExit,
     CollectParts,
+    ContextError,
     Fetched,
     NewsConfig,
     NewsSource,
     NewsStore,
+    ScoreCall,
+    ScoreConfig,
+    ScoreContext,
+    ScoreExit,
+    ScoreParts,
+    ScoreReply,
+    ScoreStore,
+    ScoreStoreError,
     StoreError,
     archive_status_lines,
     fetch_source,
     load_archive_config,
+    load_context,
     load_news_config,
+    load_score_config,
+    read_forward,
     read_library_sources,
+    read_score_snapshot,
     read_snapshot,
     run_archive,
     run_collection,
+    run_scoring,
+    score_status_lines,
     status_lines,
     title_pattern,
 )
@@ -191,7 +220,7 @@ EVENTS_CONFIG_FILE = "crytobot-events.toml"
 USAGE = (
     "kullanım: python -m crytobot "
     "prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news|events"
-    " [--live] [--trial] [--final] [archive] [status] [download] [measure]"
+    " [--live] [--trial] [--final] [archive] [score] [status] [download] [measure]"
 )
 COMMANDS = (
     ["prepare"],
@@ -214,6 +243,8 @@ COMMANDS = (
     ["news", "status"],
     ["news", "archive"],
     ["news", "archive", "status"],
+    ["news", "score"],
+    ["news", "score", "status"],
     ["events", "download"],
     ["events", "measure"],
 )
@@ -255,6 +286,7 @@ NewsFetch = Callable[[NewsSource, int, Callable[[], bool]], Fetched]
 NEWS_BUSY = "haber kaydı başka bir toplama komutunda açık"
 ArchiveFetch = Callable[[str, int, Callable[[], bool]], Fetched]
 ARCHIVE_BUSY = "arşiv başka bir arşiv komutunda açık"
+SCORE_BUSY = "skor kaydı başka bir skorlayıcıda açık"
 EventsDownload = Callable[
     [Sequence[PriceNeed], PriceStore, EventPriceParts, float], DownloadOutcome
 ]
@@ -836,6 +868,187 @@ def _news_archive(
     return _ARCHIVE_EXIT_CODES[outcome]
 
 
+def real_score_call(stopped: Callable[[], bool]) -> ScoreCall:
+    """`claude -p` alt süreci (spec 0051 R-5): komut PATH'te bir kez aranır; yoksa her çağrı
+    `no_session` olur (R-6)."""
+    found = shutil.which("claude")
+    executable = None if found is None else [found]
+
+    def call(model: str, system_prompt: str, prompt: str, timeout_s: float) -> ScoreReply:
+        reply = call_claude(
+            ClaudeRequest(model, system_prompt, prompt, timeout_s),
+            executable=executable,
+            stopped=stopped,
+        )
+        return ScoreReply(
+            reply.outcome.value,
+            reply.text,
+            reply.overflow,
+            reply.seconds,
+            reply.workdir_clean,
+            reply.size,
+        )
+
+    return call
+
+
+def _raw_paths(document: object, section: str, keys: Sequence[str]) -> tuple[str, ...]:
+    """Bir bölümün yol anahtarları, doğrulamasız: bölüm ya da anahtar yoksa boş."""
+    table = document.get(section) if isinstance(document, dict) else None
+    if not isinstance(table, Mapping):
+        return ()
+    return tuple(value for key in keys if isinstance(value := table.get(key), str))
+
+
+def _score_config(
+    news_path: Path, bot_path: Path, events_path: Path, output: Output
+) -> ScoreConfig | None:
+    """Spec 0051 AC-8: hiçbir kayda dokunmadan, ilk sorun adıyla. Skor kaydı ve kayıt dosyası
+    haber kaydı, arşiv, bot deposu, fiyat deposu, bağlam dosyası ya da başka bir kayıt dosyası
+    olamaz, birbirleri de olamaz: başka yazımla da."""
+    document = _load_toml(news_path)
+    if isinstance(document, str):
+        output.say(f"news score: reddedildi: {document}")
+        return None
+    result = load_score_config(document)
+    config = result.config
+    if config is None:
+        output.say(f"news score: reddedildi: {result.message}")
+        return None
+    events = _load_toml(events_path)
+    others = (
+        config.news.store_path,
+        config.news.log_path,
+        *_raw_paths(document, "news", ("archive_store_path", "archive_log_path")),
+        *_bot_paths(bot_path),
+        *_raw_paths(events, "events", ("price_store_path", "report_path", "library_path")),
+        config.calibration_report_path,
+        config.library_path,
+        str(news_path),
+        str(bot_path),
+        str(events_path),
+    )
+    if any(_same_file(config.store_path, other) for other in others):
+        output.say("news score: reddedildi: ayar geçersiz: score.store_path")
+        return None
+    if any(_same_file(config.log_path, other) for other in (*others, config.store_path)):
+        output.say("news score: reddedildi: ayar geçersiz: score.log_path")
+        return None
+    return config
+
+
+def _score_context(config: ScoreConfig) -> ScoreContext | str:
+    """Bağlam dosyaları okunur, parmak izleri ayardakiyle karşılaştırılır (R-4, AC-6)."""
+    report = file_bytes(config.calibration_report_path)
+    if report is None:
+        return "bağlam dosyası yok: score.calibration_report_path"
+    library = file_bytes(config.library_path)
+    if library is None:
+        return "bağlam dosyası yok: score.library_path"
+    try:
+        return load_context(
+            report, config.calibration_report_sha256, library, config.library_sha256
+        )
+    except ContextError as error:
+        return str(error)
+
+
+def _score_pairs(events_path: Path) -> tuple[frozenset[str], datetime | None] | str:
+    """USDT spot çiftleri: `crytobot-events.toml`'un fiyat deposunun borsa bilgisi anlık
+    görüntüsünden, yalnız SELECT ile ve mumsuz (plan Risk 2, A-2; 0048 R-1 ile aynı bilgi)."""
+    paths = _raw_paths(_load_toml(events_path), "events", ("price_store_path",))
+    if not paths:
+        return "borsa bilgisi yok (crytobot-events.toml price_store_path; önce events download)"
+    try:
+        snapshot = read_pairs(paths[0])
+    except PriceStoreError:
+        return "borsa bilgisi okunamıyor"
+    if snapshot is None:
+        return "borsa bilgisi yok (crytobot-events.toml price_store_path; önce events download)"
+    if snapshot.at is None:
+        return "borsa bilgisi yok (önce events download)"
+    return frozenset(snapshot.pairs), snapshot.at
+
+
+def _news_score_status(config: ScoreConfig, output: Output, clock: Clock) -> int:
+    """R-9: ağsız, LLM'siz, kilitsiz; kayıtlar yalnız okunur, yoksa oluşturulmaz."""
+    try:
+        snapshot = read_score_snapshot(config.store_path, clock().astimezone(UTC).date())
+        forward = (
+            None if snapshot is None else read_forward(config.news.store_path, snapshot.started_at)
+        )
+    except (ScoreStoreError, StoreError) as error:
+        output.say(f"news score: reddedildi: {error}")
+        return EXIT_REFUSED
+    for row in score_status_lines(config, snapshot, forward):
+        output.say(row)
+    return EXIT_OK
+
+
+def _news_score(
+    argv: Sequence[str],
+    paths: tuple[Path, Path, Path],
+    console: TextIO,
+    clock: Clock,
+    stop: StopRequest,
+    wait: Callable[[float], None] | None,
+    call: ScoreCall | None,
+) -> int:
+    """Spec 0051: `news score` skorlar, `news score status` gösterir (AC-8, AC-9)."""
+    news_path, bot_path, events_path = paths
+    output = Output(console)
+    config = _score_config(news_path, bot_path, events_path, output)
+    if config is None:
+        return EXIT_REFUSED
+    if list(argv[2:]) == ["status"]:
+        return _news_score_status(config, output, clock)
+    if not Path(config.news.store_path).is_file():
+        output.say(f"news score: reddedildi: haber kaydı yok: {config.news.store_path}")
+        return EXIT_REFUSED
+    context = _score_context(config)
+    if isinstance(context, str):
+        output.say(f"news score: reddedildi: {context}")
+        return EXIT_REFUSED
+    pairs = _score_pairs(events_path)
+    if isinstance(pairs, str):
+        output.say(f"news score: reddedildi: {pairs}")
+        return EXIT_REFUSED
+    lock = StoreLock(str(Path(config.store_path).resolve()))
+    refused = lock.acquire()
+    if refused is not None:
+        output.say(f"news score: reddedildi: {SCORE_BUSY if refused == LOCK_BUSY else refused}")
+        return EXIT_REFUSED
+    output = Output(console, config.log_path)
+    try:
+        try:
+            store = ScoreStore.open(config.store_path, clock())
+        except ScoreStoreError as error:
+            output(line(clock(), "skor", f"reddedildi: {error}"))
+            return EXIT_REFUSED
+        try:
+            parts = ScoreParts(
+                clock,
+                make_wait(stop) if wait is None else wait,
+                lambda: stop.requested,
+                real_score_call(lambda: stop.requested) if call is None else call,
+                lambda text: output(line(clock(), "skor", text)),
+                context,
+                pairs[0],
+                pairs[1],
+            )
+            exit_ = run_scoring(config, store, parts)
+        finally:
+            store.close()
+    except ForcedStop:
+        return EXIT_FORCED
+    except LogWriteError:
+        output.say(line(clock(), "skor", "kayıt dosyası yazılamıyor: skorlama durdu"))
+        return EXIT_LOG_FAILED
+    finally:
+        lock.release()
+    return EXIT_OK if exit_ is ScoreExit.STOPPED else EXIT_REFUSED
+
+
 def repo_root() -> Path | None:
     """Botun çalışma ağacı: paketin üstündeki ilk `pyproject.toml`'lu dizin (spec 0048 R-10)."""
     for parent in Path(__file__).resolve().parents:
@@ -1236,6 +1449,7 @@ def run(
     events_config_path: Path = Path(EVENTS_CONFIG_FILE),
     events_download: EventsDownload = download_event_prices,
     root: Path | None = None,
+    score_call: ScoreCall | None = None,
 ) -> int:
     """Komutu çalıştırır, çıkış kodunu döndürür. Ayar, kilit, depo sırası: borsaya ve depoya
     ayarlar denetlenmeden dokunulmaz (R-2); kilit depodan önce alınır (R-6)."""
@@ -1260,6 +1474,16 @@ def run(
             stop,
             wait,
             events_download,
+        )
+    if list(argv[:2]) == ["news", "score"]:
+        return _news_score(
+            argv,
+            (news_config_path, config_path, events_config_path),
+            console,
+            clock,
+            stop,
+            wait,
+            score_call,
         )
     if list(argv[:2]) == ["news", "archive"]:
         return _news_archive(

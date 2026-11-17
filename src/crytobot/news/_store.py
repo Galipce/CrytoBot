@@ -232,3 +232,54 @@ def read_snapshot(path: str) -> StoreSnapshot | None:
         for name in names
     }
     return StoreSnapshot(sources, sum(int(each) for each in counts.values()), store_size(path))
+
+
+@dataclass(frozen=True)
+class ForwardItem:
+    """Skorlayıcının okuduğu haber (spec 0051 R-1): kayıt kimliği, kaynak adı, başlık, saklanan
+    metin, yayın ve ilk görme anı."""
+
+    record_id: int
+    source: str
+    title: str
+    text: str
+    published: datetime | None
+    first_seen: datetime
+
+
+def read_forward(path: str, since: datetime) -> tuple[ForwardItem, ...] | None:
+    """İlk görme anı `since`'ten sonra (ya da eşit) olan haberler, ilk görme anı ve kimlik
+    sırasıyla. Depo yoksa `None` (dosya oluşturulmaz); okunamıyorsa `StoreError`.
+
+    `mode=ro`: hiçbir satır yazılmaz; WAL kipinde çalışan toplayıcıyı beklemez, toplayıcı da onu
+    beklemez (spec 0051 R-8, AC-7). Conventions'taki "`mode=ro` sıcak günlüğü geri alamaz" tuzağı
+    rollback günlüğüne aittir: WAL'de yazılmamış işlem okuyucuya hiç görünmez (review I-1)."""
+    if not Path(path).is_file():
+        return None
+    uri = f"{Path(path).resolve().as_uri()}?mode=ro"
+    try:
+        with closing(sqlite3.connect(uri, uri=True, timeout=0)) as connection:
+            row = connection.execute("SELECT value FROM meta WHERE name = 'format'").fetchone()
+            if row is None or row[0] != FORMAT_VERSION:
+                raise StoreError("haber kaydının biçimi tanınmıyor")
+            rows = connection.execute(
+                "SELECT id, source, title, body, published_at, first_seen_at FROM news"
+                " WHERE first_seen_at >= ?",
+                (_text(since),),
+            ).fetchall()
+        items = [
+            ForwardItem(
+                int(record_id),
+                str(source),
+                str(title),
+                str(body),
+                _moment(published),
+                datetime.fromisoformat(str(first_seen)),
+            )
+            for record_id, source, title, body, published, first_seen in rows
+        ]
+    except (sqlite3.Error, ValueError, TypeError):
+        raise StoreError("haber kaydı okunamıyor") from None
+    # text order and time order agree for one writer's format; the moment decides, not the text
+    kept = [item for item in items if item.first_seen >= since]
+    return tuple(sorted(kept, key=lambda item: (item.first_seen, item.record_id)))

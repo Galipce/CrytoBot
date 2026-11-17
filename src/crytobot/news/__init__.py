@@ -13,6 +13,11 @@ görme anı taşımaz. Durum `archive_status_lines` ile ağsız okunur.
 Spec 0048: örnek kütüphanesinin girdisi — `label` başlığa sabit kurallarla olay türü, beklenen yön
 ve coinler atar (`EVENT_TYPES`, `RULES_FINGERPRINT`); `read_library_sources` arşivi ve ileriye dönük
 kaydın `binance-duyuru` kayıtlarını yalnız okur, kimliğe göre birleştirir ve etiketler.
+
+Spec 0051: LLM olay skoru, gölge mod — `run_scoring` ileriye dönük kayıttaki yeni haberleri
+(`read_forward`) prompt'a (`build_prompt`, bağlam `load_context`) koyar, çağrıyı giriş noktasından
+alır (`ScoreParts.call`; `news` `llm`'i import etmez), yanıtı doğrular (`check_reply`) ve kendi
+yalnız eklenen kaydına (`ScoreStore`) yazar. Durum `score_status_lines` ile ağsız, LLM'siz okunur.
 """
 
 from crytobot.news._archive import (
@@ -72,17 +77,56 @@ from crytobot.news._library_sources import (
     read_library_sources,
 )
 from crytobot.news._parse import CatalogPage, ParseError, parse_binance_page
+from crytobot.news._score_config import (
+    DAILY_CALL_HARD_CAP,
+    ScoreConfig,
+    ScoreConfigResult,
+    load_score_config,
+)
+from crytobot.news._score_prompt import (
+    PROMPT_FINGERPRINT,
+    SYSTEM_PROMPT,
+    ContextError,
+    ScoreContext,
+    ScorePrompt,
+    build_prompt,
+    context_fingerprint,
+    load_context,
+)
+from crytobot.news._score_run import (
+    ScoreCall,
+    ScoreExit,
+    ScoreParts,
+    ScoreReply,
+    run_score_round,
+    run_scoring,
+)
+from crytobot.news._score_status import NO_SCORES, score_status_lines
+from crytobot.news._score_store import (
+    CallEnd,
+    EventScore,
+    ResultKind,
+    ScoreResult,
+    ScoreSnapshot,
+    ScoreStore,
+    ScoreStoreError,
+    read_score_snapshot,
+)
+from crytobot.news._score_validate import Checked, check_reply
 from crytobot.news._status import EMPTY, NEVER, status_lines
 from crytobot.news._store import (
+    ForwardItem,
     NewsStore,
     SourceState,
     StoreError,
     StoreSnapshot,
+    read_forward,
     read_snapshot,
 )
 
 __all__: list[str] = [
     "ARCHIVE_EMPTY",
+    "DAILY_CALL_HARD_CAP",
     "EMPTY",
     "EVENT_TYPES",
     "FROM_ARCHIVE",
@@ -92,10 +136,13 @@ __all__: list[str] = [
     "MIN_INTERVAL_MINUTES",
     "NEVER",
     "NO_FORWARD",
+    "NO_SCORES",
     "ORIGIN",
     "PAGE_SIZE",
     "POSSIBLE_MISS",
+    "PROMPT_FINGERPRINT",
     "RULES_FINGERPRINT",
+    "SYSTEM_PROMPT",
     "TEXT_LIMIT_BYTES",
     "USER_AGENT",
     "ArchiveConfig",
@@ -105,12 +152,17 @@ __all__: list[str] = [
     "ArchiveParts",
     "ArchiveStore",
     "ArchiveStoreError",
+    "CallEnd",
     "CatalogPage",
     "CatalogRun",
     "CatalogState",
+    "Checked",
     "CollectParts",
     "CollectionExit",
+    "ContextError",
+    "EventScore",
     "Fetched",
+    "ForwardItem",
     "Hop",
     "Label",
     "LibraryAnnouncement",
@@ -122,26 +174,49 @@ __all__: list[str] = [
     "NewsStore",
     "ParseError",
     "RawItem",
+    "ResultKind",
+    "ScoreCall",
+    "ScoreConfig",
+    "ScoreConfigResult",
+    "ScoreContext",
+    "ScoreExit",
+    "ScoreParts",
+    "ScorePrompt",
+    "ScoreReply",
+    "ScoreResult",
+    "ScoreSnapshot",
+    "ScoreStore",
+    "ScoreStoreError",
     "SourceRound",
     "SourceState",
     "StoreError",
     "StoreSnapshot",
     "archive_status_lines",
+    "build_prompt",
+    "check_reply",
+    "context_fingerprint",
     "fetch_source",
     "label",
     "load_archive_config",
+    "load_context",
     "load_news_config",
+    "load_score_config",
     "outage_notice",
     "page_url",
     "parse_binance_page",
     "prepare_archive",
     "read_archive",
+    "read_forward",
     "read_library_sources",
+    "read_score_snapshot",
     "read_snapshot",
     "recovery_notice",
     "run_archive",
     "run_collection",
     "run_round",
+    "run_score_round",
+    "run_scoring",
+    "score_status_lines",
     "status_lines",
     "title_pattern",
 ]

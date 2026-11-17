@@ -7,6 +7,13 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
+- **LLM olay skoru, gölge mod** (spec 0051): `python -m crytobot news score` ileriye dönük haber kaydındaki yeni
+  Binance duyurularını ve RSS haberlerini sahibin Claude aboneliğiyle (`claude -p` alt süreci; API anahtarı yok)
+  okur; coin başına şemalı, haberden birebir alıntılı olay skorunu (tür, yön, şiddet) kendi yalnız eklenen skor
+  kaydına yazar. Bağlam: kalibrasyon tablosu ve kütüphaneden en çok 3 örnek (parmak izleriyle). Yalıtılmış süreç
+  (araç, MCP, ayar, oturum yok; boş klasör; ağaç sonlandırma), iki katmanlı doğrulama, 24 saatlik pencere, kota
+  beklemesi, UTC günlük çağrı sınırı (en çok 1000). `news score status` ağsız ve LLM'siz durumu gösterir. Bot
+  skorları okumaz; ayar `crytobot-news.toml`'un `[score]` bölümü (toplayıcı bölümü tanır, A-1).
 - **Telegram bildirimleri ve raporlama** (spec 0029): Telegram üzerinden botun tek yönlü durum bildirimleri,
   risk ve kasa durdurma bildirimleri (B-42), işlem dolumu ve pozisyon kapanış bildirimleri ile UTC 00:00 gün
   dönümünde BR-1 kâr metriğini (%20-25 hedef) içeren günlük özet raporu desteği eklendi. Yapılandırma opt-in

@@ -8,6 +8,9 @@ ham değer mesaja yazılmaz. Ağa çıkılmaz, dosya açılmaz: bot deposu ve ka
 Spec 0047 (plan Risk 1): `[news]`'in `archive_` önekli dört anahtarı arşiv komutunundur. Toplayıcı
 onları tanır ama kullanmaz ve denetlemez; `load_archive_config` önce dosyanın tamamını
 `load_news_config` ile, sonra arşiv anahtarlarını doğrular.
+
+Spec 0051 (plan A-1): `[score]` bölümü skorlayıcınındır; aynı kalıpla tanınır ama burada
+kullanılmaz ve denetlenmez (`_score_config.py`).
 """
 
 from collections.abc import Mapping
@@ -15,6 +18,7 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 SECTION = "news"
+SCORE_SECTION = "score"
 KINDS = ("binance-duyuru", "rss")
 MIN_INTERVAL_MINUTES = 5
 _NAME_LIMIT = 64
@@ -119,7 +123,7 @@ def _source(raw: object, index: int) -> NewsSource:
 
 def _load(document: Mapping[str, object]) -> NewsConfig:
     for section in document:
-        if section != SECTION:
+        if section not in (SECTION, SCORE_SECTION):
             raise _Problem(f"bilinmeyen ayar: {section}")
     table = document.get(SECTION)
     if table is None:
