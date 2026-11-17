@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from crytobot.llm import CallOutcome, classify, claude_argv, claude_env
+from crytobot.llm._claude import CallOutcome, classify, claude_argv, claude_env, settle
 
 
 def test_isolated_argv_and_env() -> None:
@@ -93,3 +93,12 @@ def test_outcome_classification(
     outcome, text = classify(returncode, stdout, stderr)
     assert outcome is expected
     assert text == ('{"events": []}' if expected is CallOutcome.OK else None)
+
+
+@pytest.mark.parametrize("outcome", list(CallOutcome))
+def test_settle_under_stop_request(outcome: CallOutcome) -> None:
+    """Review I-3 and round 2 Info-2: only an unknown failure becomes stopped; quota and
+    no_session keep their name (the quota wait is derived from it)."""
+    assert settle(outcome, False) is outcome
+    expected = CallOutcome.STOPPED if outcome is CallOutcome.UNKNOWN else outcome
+    assert settle(outcome, True) is expected

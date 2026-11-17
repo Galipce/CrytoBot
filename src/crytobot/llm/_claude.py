@@ -147,6 +147,15 @@ def _feed(stream: IO[bytes], data: bytes) -> None:
             stream.close()
 
 
+def settle(outcome: CallOutcome, stopping: bool) -> CallOutcome:
+    """Süreç kendi çıktıktan sonraki sonuç. Windows'ta Ctrl+Break çocuğun grubuna da ulaşır: döngü
+    isteği görmeden ölebilir; durdurma altındaki tanınmayan hata durdurulmuş çağrıdır (review I-3).
+    `quota` ve `no_session` kalır: kota beklemesi onlardan türetilir (review round 2 Info-2)."""
+    if outcome is CallOutcome.UNKNOWN and stopping:
+        return CallOutcome.STOPPED
+    return outcome
+
+
 def kill_tree(process: "subprocess.Popen[bytes]") -> None:
     """Sürecin bütün ağacını sonlandırır (Windows `taskkill /T /F`, POSIX `killpg`)."""
     if process.poll() is None:
@@ -261,8 +270,5 @@ def _run(
     if overflow.is_set():
         return CallOutcome.OK, None, len(out), True
     outcome, text = classify(process.returncode, bytes(out), bytes(err))
-    if outcome is not CallOutcome.OK and stopped():
-        # Ctrl+Break reaches the child's group too on Windows: it may die before the loop sees
-        # the request; a failed call under a stop request is a stopped call (review I-3)
-        return CallOutcome.STOPPED, None, len(out), False
-    return outcome, text, len(out), False
+    outcome = settle(outcome, stopped())
+    return outcome, text if outcome is CallOutcome.OK else None, len(out), False
