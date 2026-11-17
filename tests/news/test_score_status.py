@@ -13,7 +13,7 @@ from crytobot.news import (
     score_status_lines,
 )
 from tests.main.test_news_score_entry import Scorer
-from tests.news.score_harness import START, Harness, event, events, failed, ok
+from tests.news.test_score_run import START, Harness, event, events, failed, ok
 
 
 def test_all_items(tmp_path: Path) -> None:
