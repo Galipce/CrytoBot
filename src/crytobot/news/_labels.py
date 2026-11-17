@@ -2,9 +2,18 @@
 3, 4). Saf: ağ, dosya ve LLM kullanmaz.
 
 Tür kuralları büyük/küçük harf duyarsızdır; başlık tablodaki sırayla ilk eşleşen türü alır, hiçbiri
-eşleşmezse "diğer"dir. Spot listeleme ve listeden çıkarma yalnız başlıkta
-`futures|perpetual|margin|options` geçmezse, vadeli / marjin yalnız `delist|remov` geçmezse sayılır
-(A-3).
+eşleşmezse "diğer"dir. Bir tür, kalıbı eşleşir, dışlama kalıbı eşleşmez ve "coin gerekir" ise
+başlıktan en az bir coin çıkarsa eşleşir. Spot listeleme ve listeden çıkarma yalnız başlıkta
+`futures|perpetual|margin|options` geçmezse sayılır (A-3). Spec 0050 üç türü daralttı (B-93):
+- spot listeleme: "Binance Will List …" ve "Binance Lists …"; yeni işlem çifti eklemek değildir
+  (CB-3);
+- listeden çıkarma: yalnız spot işlemden çıkarma; staking, kredi, teminat, dönüştürme, çekim, P2P,
+  grid ve API ucu bildirimleri değildir (CB-2);
+- vadeli / marjin listeleme: vadeli / perpetual / marjin terimi ve bir açılış fiili (list, launch,
+  add, enable, available) birlikte, en az bir coin ile; kampanya, ödül, limit, ücret, teminat,
+  sistem, program, copy trading, erteleme ve yeniden başlatma duyuruları değildir — başlığı
+  "Binance Adds/Enables … Margin" ya da "… Added/Enabled … Margin" diye açılan marjin listelemesi
+  ardından kampanya gelse de listelemedir (CB-1).
 
 Coin çıkarma kademelidir (A-2); ilk karar veren kademe kazanır:
 1. Parantez: `(XYZ)` içindeki semboller (tek harf yalnız tek başına parantezde: `(W)`). Parantezde
@@ -18,7 +27,7 @@ ya da saat eki: `1ST`, `10AM`; `AM`, `PM`) ve sabit kısaltmalar. Coinler başl�
 tekrarsız.
 
 Kural setinin parmak izi (`RULES_FINGERPRINT`) türlerin, kalıpların ve listelerin kanonik JSON'unun
-SHA-256'sıdır; bir kural değişirse değişir. Kurallar bu spec'le donar (R-1): değişiklik yeni spec.
+SHA-256'sıdır; bir kural değişirse değişir. Kurallar spec 0050'yle donar: değişiklik yeni spec.
 """
 
 import hashlib
@@ -35,21 +44,47 @@ OTHER: Final = "diğer"
 
 @dataclass(frozen=True)
 class EventRule:
-    """Bir olay türü: ad, beklenen yön, eşleşmesi gereken kalıp ve eşleşmemesi gereken kalıp."""
+    """Bir olay türü: ad, beklenen yön, eşleşmesi gereken kalıp, eşleşmemesi gereken kalıp ve
+    başlıkta en az bir coin gerekip gerekmediği (spec 0050 CB-1)."""
 
     name: str
     direction: str
     pattern: str | None
     unless: str | None = None
+    needs_coin: bool = False
+
+
+SPOT_PATTERN: Final = r"will list|\bbinance lists\b"
+DERIVATIVES: Final = r"futures|perpetual|margin|options"
+DELIST_UNLESS: Final = (
+    rf"{DERIVATIVES}|staking|loan|collateral|conver|withdraw|borrow|endpoint|p2p|grid"
+)
+FUTURES_PATTERN: Final = (
+    r"^(?=.*(?:futures|perpetual|margin))"
+    r"(?=.*\b(?:will (?:list|launch|add)|lists|launch(?:es|ed)?|adds?|added|enabl(?:e|es|ed)"
+    r"|available)\b)"
+)
+# A margin listing that leads the title ("Binance Adds X on Isolated Margin, Launches … Promotion")
+# stays a listing; the noise words exclude every other title (spec 0050 CB-1, plan step 3).
+MARGIN_LEAD: Final = (
+    r"binance (?:will )?(?:adds?|enables?)\b.*margin|[^,!]*\b(?:added|enabled)\b[^,!]*margin"
+)
+FUTURES_NOISE: Final = (
+    r"postpone|resume|copy trading|collateral|bonus|reward|prize|voucher|airdrop|give ?away"
+    r"|\b(?:to|&|and) win\b|\bwon\b|lucky draw|competition|tournament|challenge|promotion"
+    r"|discount|waiver|referral|borrow|lending|limit|\bfees?\b|function|feature|\bsystem\b"
+    r"|upgrade|program|\bclient\b"
+)
+FUTURES_UNLESS: Final = rf"delist|remov|^(?!{MARGIN_LEAD}).*(?:{FUTURES_NOISE})"
 
 
 RULES: Final = (
-    EventRule("spot listeleme", POSITIVE, r"will list", r"futures|perpetual|margin|options"),
-    EventRule("listeden çıkarma", NEGATIVE, r"delist", r"futures|perpetual|margin|options"),
+    EventRule("spot listeleme", POSITIVE, SPOT_PATTERN, DERIVATIVES),
+    EventRule("listeden çıkarma", NEGATIVE, r"delist", DELIST_UNLESS),
     EventRule("işlem çifti kaldırma", NEGATIVE, r"remov\w* .*trading pairs"),
     EventRule("izleme etiketi", NEGATIVE, r"monitoring tag"),
     EventRule("launchpool / launchpad / HODLer", POSITIVE, r"launchpool|launchpad|hodler"),
-    EventRule("vadeli / marjin listeleme", POSITIVE, r"futures|perpetual|margin", r"delist|remov"),
+    EventRule("vadeli / marjin listeleme", POSITIVE, FUTURES_PATTERN, FUTURES_UNLESS, True),
     EventRule("askıya alma ve bakım", NEUTRAL, r"suspen|maintenance"),
     EventRule("ağ yükseltmesi", NEUTRAL, r"upgrade|hard ?fork"),
     EventRule(OTHER, NEUTRAL, None),
@@ -108,7 +143,7 @@ DEFAULT_RULES: Final = RuleSet()
 
 def rules_fingerprint(rules: RuleSet = DEFAULT_RULES) -> str:
     canonical = {
-        "rules": [[r.name, r.direction, r.pattern, r.unless] for r in rules.rules],
+        "rules": [[r.name, r.direction, r.pattern, r.unless, r.needs_coin] for r in rules.rules],
         "token": rules.token,
         "candidate": rules.candidate,
         "number_token": rules.number_token,
@@ -130,8 +165,10 @@ def event_type(title: str, rules: RuleSet = DEFAULT_RULES) -> EventRule:
     for rule in rules.rules:
         if rule.pattern is None:
             return rule
-        if re.search(rule.pattern, title, re.IGNORECASE) and not (
-            rule.unless is not None and re.search(rule.unless, title, re.IGNORECASE)
+        if (
+            re.search(rule.pattern, title, re.IGNORECASE)
+            and not (rule.unless is not None and re.search(rule.unless, title, re.IGNORECASE))
+            and not (rule.needs_coin and not coins(title, rules))
         ):
             return rule
     raise AssertionError("the last rule matches every title")  # pragma: no cover

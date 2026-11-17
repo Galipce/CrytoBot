@@ -141,3 +141,174 @@ def test_title_pattern_hides_coins_and_digits() -> None:
         "Binance Will Delist X, X on ####-##-##"
     )
     assert title_pattern("Removal of DEFUSDT") == "Removal of X"
+
+
+# Spec 0050 CB-1…CB-4 (plan Risk 2, 3): three types narrowed after the 0049 label audit (B-93)
+
+FUTURES = "vadeli / marjin listeleme"
+DELISTING = "listeden çıkarma"
+SPOT = "spot listeleme"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Binance Futures Will Launch USDⓈ-M MBL Perpetual Contract With Up to 50x Leverage",
+        "Binance Adds ANT, CLV, MDT, MIR, NEAR & WAXP on Cross Margin and ALCX, BICO & ELF on "
+        "Isolated Margin",
+        "Margin Trading for SNX & REEF Enabled on Binance",
+        # boundary: new delivery contracts that name the coins
+        "Binance Futures Will List BTC, ETH, ADA & LINK Coin-Margined Quarterly 0326 Futures "
+        "Contracts",
+        # boundary: a new coin added to several products, margin among them
+        "Binance Will Add Kaia (KAIA) on Earn, Buy Crypto, Convert, and Margin",
+    ],
+)
+def test_futures_margin_only_new_contract_for_a_coin(title: str) -> None:
+    result = label(title)
+    assert result.event_type == FUTURES, title
+    assert result.coins, title
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        # no coin named: a general announcement
+        "Binance Launches Margin Trading Service",
+        # campaign, voucher, bonus
+        "Trade ONT to Win $50,000 in ONT Tokens & $15,000 in Binance Futures Vouchers!",
+        "Binance Futures Launches 200,000 USDT Welcome Bonus",
+        # system / function, collateral ratio
+        "Binance to Fully Resume Market Order Function for All Spot and Margin Trading Pairs",
+        "Binance Margin Will Update the Collateral Ratio of Multiple Cross Margin Assets "
+        "(2025-07-18)",
+        # boundary: trading resumes on an existing contract; copy trading
+        "Binance Futures to Resume Trading on USDT-Margined MINA Perpetual Contract",
+        "Binance Futures Copy Trading Adds New USDⓈ-M Contract (2024-08-06)",
+    ],
+)
+def test_futures_margin_noise_is_not_futures_listing(title: str) -> None:
+    assert label(title).event_type != FUTURES, title
+
+
+def test_futures_margin_without_coin_falls_to_other() -> None:
+    assert label("Binance Launches Margin Trading Service").event_type == "diğer"
+
+
+@pytest.mark.parametrize(
+    "title",
+    ["Binance Will Delist BEAM on 2023-01-26", "Binance Will Delist DEGO, DENT, TRU on 2026-04-28"],
+)
+def test_delisting_only_spot_trading(title: str) -> None:
+    assert label(title).event_type == DELISTING, title
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Binance Staking to Delist EZ, TRU, VITE, ANC & MIR",
+        "Binance Flexible Loan Has Delisted PEPE as a Borrowable Asset",
+        "Binance VIP Loan Will Delist TUSD and ALCX from Eligible Collateral Asset List - "
+        "2026-03-30",
+        "Notice on Converting Delisted Tokens Balances to BUSD (2021-07-02)",
+        "Notice on the Withdrawals of Delisted Tokens & Conversion of Selected Tokens to USDT "
+        "(2024-04-01)",
+    ],
+)
+def test_product_delisting_is_not_spot_delisting(title: str) -> None:
+    assert label(title).event_type == "diğer", title
+
+
+@pytest.mark.parametrize(
+    ("title", "coin"), [("Binance Lists LINK", "LINK"), ("Binance Lists SNGLS", "SNGLS")]
+)
+def test_lists_is_spot_listing(title: str, coin: str) -> None:
+    result = label(title)
+    assert (result.event_type, result.coins) == (SPOT, (coin,))
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Binance Adds NEO/ETH Trading Pair",
+        "Binance Will Add MCO/BTC Trading Pair On August 24",
+        "Binance Adds XLM/BUSD and ADA/BUSD Trading Pairs",
+        "Notice on New Trading Pairs & Trading Bots Services on Binance Spot - 2024-12-19",
+    ],
+)
+def test_new_pair_is_other(title: str) -> None:
+    assert label(title).event_type == "diğer", title
+
+
+def test_lists_is_spot_listing_new_pair_is_other() -> None:
+    # CB-3 in one place for the criterion map: "Lists" is a listing, a new pair is not
+    assert label("Binance Lists LINK").event_type == SPOT
+    assert label("Binance Adds NEO/ETH Trading Pair").event_type == "diğer"
+
+
+def test_needs_coin_changes_fingerprint() -> None:
+    # CB-4: the new rule field enters the canonical JSON
+    rules = tuple(replace(r, needs_coin=not r.needs_coin) for r in RULES)
+    assert rules_fingerprint(replace(DEFAULT_RULES, rules=rules)) != RULES_FINGERPRINT
+    assert RULES_FINGERPRINT != "ed55dd4f70a48f40ed0d0da3bced85ddef8109c96efa8141df55d01813f941f2"
+    # type list, order and expected directions are 0048's
+    assert EVENT_TYPES == (
+        ("spot listeleme", "olumlu"),
+        ("listeden çıkarma", "olumsuz"),
+        ("işlem çifti kaldırma", "olumsuz"),
+        ("izleme etiketi", "olumsuz"),
+        ("launchpool / launchpad / HODLer", "olumlu"),
+        ("vadeli / marjin listeleme", "olumlu"),
+        ("askıya alma ve bakım", "nötr"),
+        ("ağ yükseltmesi", "nötr"),
+        ("diğer", "nötr"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        # a margin listing leading the title stays a listing with a campaign appended (plan step 3)
+        ("Binance Adds FIS & WAXP on Isolated Margin, Launches 50,000 USDT Giveaway!", FUTURES),
+        ("FET Added to Margin Trading on Binance - $100,000 in FET Tokens to be Won!", FUTURES),
+        # WIN is a coin, "Ecosystem" is not a system notice
+        ("BTCST & WIN Enabled on Binance Isolated Margin", FUTURES),
+        (
+            "Binance Futures Launches DOTECO (Polkadot Ecosystem) Composite Index Perpetual "
+            "Contract with Up to 20x Leverage",
+            FUTURES,
+        ),
+        # noise not led by a margin listing
+        (
+            "Binance Margin Enables a 5% Discount on Borrowing Interest When Paying With BNB",
+            "diğer",
+        ),
+        ("Binance Futures Adds BTC to Cross Collateral", "diğer"),
+        ("Binance Futures Will Postpone the Launch of AIAUSDT Perpetual Contract", "diğer"),
+        ("Binance Launches Futures Battle Badges - $30,000 in BNB to Be Won", "diğer"),
+        # delist / remove still excludes, as in 0048 (A-3)
+        (
+            "Binance Adds GLM, NEBL & VIB on Cross Margin and Isolated Margin, Delisting DF from "
+            "Isolated Margin",
+            "diğer",
+        ),
+    ],
+)
+def test_futures_margin_lead_and_noise_words(title: str, expected: str) -> None:
+    assert label(title).event_type == expected, title
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Binance Futures Will Update Leverage and Margin Tiers of BTCUSDT Perpetual Contract",
+        "Binance Margin Will Adjust the Maximum Leverage of ETH Isolated Margin Pairs",
+        "Binance Futures Will Delay the Settlement of the BTCUSDT Quarterly 0628 Futures Contract",
+    ],
+)
+def test_futures_margin_without_opening_verb_is_other(title: str) -> None:
+    # CB-1 core: a coin and a futures/margin term but no new contract or margin opening, and no
+    # noise word — only the opening-verb condition keeps it out of the type (0050 VERIFY G-1).
+    result = label(title)
+    assert result.coins, title
+    assert result.event_type == "diğer", title
