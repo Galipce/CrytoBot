@@ -230,17 +230,21 @@ def _run(
         thread.start()
     deadline = time.monotonic() + request.timeout_s
     ended: CallOutcome | None = None
-    while process.poll() is None:
-        if stopped():
-            ended = CallOutcome.STOPPED
-        elif overflow.is_set():
-            ended = CallOutcome.OK
-        elif time.monotonic() >= deadline:
-            ended = CallOutcome.TIMEOUT
-        if ended is not None:
-            kill_tree(process)
-            break
-        time.sleep(_POLL_S)
+    try:
+        while process.poll() is None:
+            if stopped():
+                ended = CallOutcome.STOPPED
+            elif overflow.is_set():
+                ended = CallOutcome.OK
+            elif time.monotonic() >= deadline:
+                ended = CallOutcome.TIMEOUT
+            if ended is not None:
+                kill_tree(process)
+                break
+            time.sleep(_POLL_S)
+    except BaseException:  # a forced stop (second Ctrl+C) never leaves the tree running
+        kill_tree(process)
+        raise
     for thread in threads:
         thread.join(timeout=_KILL_WAIT_S)
     # a reader still blocked means a survivor holds the pipe: closing it under the reader blocks

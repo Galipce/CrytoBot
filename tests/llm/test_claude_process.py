@@ -38,8 +38,9 @@ elif mode == "litter":
     print(json.dumps({"type": "result", "is_error": False, "result": "{}"}))
 elif mode == "hang":
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
-    with open(report + ".pid", "w") as handle:
+    with open(report + ".pid.tmp", "w") as handle:
         handle.write(str(child.pid))
+    os.replace(report + ".pid.tmp", report + ".pid")  # whole or absent, never half-written
     time.sleep(120)
 elif mode == "flood":
     while True:
@@ -156,3 +157,26 @@ def test_missing_command_is_no_session(tmp_path: Path) -> None:
         call_claude(request, executable=None, stopped=lambda: False).outcome
         is CallOutcome.NO_SESSION
     )
+
+
+class Forced(BaseException):
+    pass
+
+
+def test_forced_stop_kills_tree(tmp_path: Path) -> None:
+    fake = Fake(tmp_path, "hang")
+    pid_file = tmp_path / "report.json.pid"
+
+    def stopped() -> bool:
+        if pid_file.exists():  # the grandchild runs: the second Ctrl+C arrives now
+            raise Forced
+        return False
+
+    with pytest.raises(Forced):
+        call_claude(
+            ClaudeRequest("m", "s", "p", 60.0),
+            executable=[sys.executable, str(fake.script)],
+            stopped=stopped,
+            environ=fake.environ,
+        )
+    assert gone(int(pid_file.read_text()))
