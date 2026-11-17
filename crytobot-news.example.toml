@@ -39,3 +39,27 @@ name = "cointelegraph"
 type = "rss"
 url = "https://cointelegraph.com/rss"
 enabled = true
+
+# LLM olay skoru, gölge mod (spec 0051): `python -m crytobot news score` ileriye dönük haber
+# kaydındaki yeni haberleri sahibin Claude aboneliğiyle (`claude -p` alt süreci; API anahtarı yok)
+# okur ve coin başına olay skorunu kendi kaydına yazar; `python -m crytobot news score status` ağa
+# ve LLM'e çıkmadan durumu gösterir. Skorlar hiçbir kararın girdisi değildir: bot onları okumaz.
+# Yalnız skorlayıcının ilk başladığı andan sonra görülen haberler skorlanır; arşiv hiç skorlanmaz.
+# `claude` komutu bu makinede kurulu ve giriş yapılmış olmalıdır. Kota etkileşimli kullanımla
+# ortaktır. USDT çiftleri crytobot-events.toml'daki fiyat deposunun borsa bilgisinden okunur.
+[score]
+store_path = "crytobot-score.db"     # skor kaydı (kendi SQLite deposu); yalnız eklenir
+log_path = "crytobot-score.log"      # skorlayıcının kayıt dosyası; diğer kayıtlardan ayrı
+model = "claude-sonnet-5-5"          # zorunlu, varsayılansız; her sonuçta kayıtlıdır
+# Bağlam (spec 0048-0050 çıktıları): dosyaların SHA-256'sı burada yazılıdır; uyuşmazsa başlamaz.
+# Bu sıfırlar yer tutucudur: kendi dosyalarınızın parmak izini yazın (`certutil -hashfile <dosya>
+# SHA256` ya da `sha256sum <dosya>`).
+calibration_report_path = "crytobot-events-report.txt"
+calibration_report_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+library_path = "crytobot-events-library.jsonl"
+library_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+interval_minutes = 5                 # iki turun başlangıcı arası, dakika; en az 1
+max_calls_per_round = 20             # bir turda en çok LLM çağrısı
+timeout_s = 120                      # bir çağrının süresi; aşılırsa süreç ağacıyla sonlanır
+quota_wait_minutes = 60              # kota ya da kullanım sınırı yanıtından sonra çağrısız bekleme
+daily_call_limit = 200               # UTC günü başına çağrı (başarılı ve başarısız); en çok 1000
