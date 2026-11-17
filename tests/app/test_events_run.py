@@ -49,9 +49,55 @@ from crytobot.news import (
     NewsStore,
     SourceState,
 )
-from tests.main.test_entry import config_text
-from tests.main.test_news_archive_entry import archive_text
-from tests.market_data.helpers import candle_row
+
+# Self-contained helpers: the tooling self-tests copy `tests/app` alone (a sensitive module's
+# tests), so this file imports nothing from other test packages.
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _example(name: str, section: str | None, values: dict[str, str]) -> str:
+    """Örnek ayar dosyası; `section` içindeki (`None`: her yerdeki) anahtarlar `values` ile."""
+    rows = []
+    inside = section is None
+    for row in (ROOT / name).read_text(encoding="utf-8").splitlines():
+        if section is not None and row.startswith("["):
+            inside = row == f"[{section}]"
+        key = row.split("=", 1)[0].strip()
+        rows.append(f"{key} = {values[key]}" if inside and key in values and "=" in row else row)
+    return "\n".join(rows) + "\n"
+
+
+def config_text(root: Path) -> str:
+    """Bot örnek ayarı; depo ve kayıt yolu `root`'ta."""
+    return _example(
+        "crytobot.example.toml",
+        None,
+        {
+            "store_path": f'"{(root / "bot.db").as_posix()}"',
+            "log_path": f'"{(root / "bot.log").as_posix()}"',
+        },
+    )
+
+
+def archive_text(root: Path) -> str:
+    """Haber örnek ayarı; kayıt, günlük ve arşiv yolları `root`'ta."""
+    return _example(
+        "crytobot-news.example.toml",
+        "news",
+        {
+            "store_path": f'"{(root / "news.db").as_posix()}"',
+            "log_path": f'"{(root / "news.log").as_posix()}"',
+            "archive_store_path": f'"{(root / "archive.db").as_posix()}"',
+            "archive_log_path": f'"{(root / "archive.log").as_posix()}"',
+        },
+    )
+
+
+def candle_row(open_ms: int) -> list[object]:
+    """Binance klines satırı (tests/market_data/helpers.py ile aynı biçim)."""
+    close_ms = open_ms + 3_600_000 - 1
+    return [open_ms, "10.00", "11.00", "9.00", "10.50", "1.0", close_ms, "1.0", 1, "1", "1", "0"]
+
 
 H = timedelta(hours=1)
 FIRST = datetime(2024, 1, 1, tzinfo=UTC)
