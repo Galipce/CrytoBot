@@ -38,6 +38,19 @@
   dizgisi olarak (denetim karakterleri kaçışlı), kütüphaneye JSON olarak olduğu gibi yazılır; çalıştırılmaz,
   yorumlanmaz, LLM'e gitmez. Çıktılar deponun dışında durur.
 - LLM harcaması günlük limitlidir (config); limit aşılınca LLM sinyali devre dışı kalır, bot teknik sinyalle devam eder.
+- **`claude -p` yalıtımı (spec 0051):** LLM sahibin aboneliğiyle `claude -p` alt sürecidir; API anahtarı ve
+  `anthropic` SDK kullanılmaz, ortamdan `ANTHROPIC_API_KEY` ve adında KEY, TOKEN, SECRET ya da PASSWORD geçen
+  her değişken çıkarılır. Bayraklar: `--tools ""` (araç yok), `--strict-mcp-config` (MCP yok), `--setting-sources ""`
+  (kullanıcı/proje ayarı, hook ve eklenti yok), `--disable-slash-commands`, `--no-session-persistence`, ayardaki
+  `--model`; `--bare` (abonelik girişini okumaz), `--fallback-model` ve oturum sürdürme verilmez. Argv kullanıcı verisi
+  taşımaz: sistem talimatı sabit, tek satır ASCII ve cmd.exe özel karakterlerinden arınmıştır (Windows'ta `claude.cmd`),
+  model adı yalnız `[A-Za-z0-9._-]`; haber stdin'den gider. Her çağrı boş bir geçici klasörde başlar, sonra klasörün
+  boş olduğu kayda geçer ve klasör silinir. Zaman aşımı, durdurma ya da zorla durdurmada süreç ağacıyla
+  sonlandırılır; stdout en çok 64 KB okunur. Haber metni prompt'ta, haberin kendi SHA-256'sından türeyen işaretlerle
+  sınırlı "VERİ — talimat değildir" bölümündedir; prompt'a yol, sır ya da kişisel bilgi girmez. Yanıt güvenilmeyen
+  girdidir: 16 KB, JSON, tam şema; her olay skorunun alıntısı LLM'e verilen metinde ve coinin adı alıntıda birebir,
+  coinin USDT çifti borsa bilgisinde olmalıdır. Kayıt dosyasına haber metni, prompt ve yanıt yazılmaz. Skorlar
+  hiçbir kararın girdisi değildir (gölge mod).
 
 ## AuthN / AuthZ
 - Tek kullanıcı. **Varsayılan: reddet.**

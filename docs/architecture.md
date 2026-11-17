@@ -16,9 +16,9 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | Module | Single responsibility | Owns |
 |---|---|---|
 | `market_data` | Mum, fiyat, emir defteri verisini borsadan çekmek ve saklamak | OHLCV geçmişi, ticker anlık görüntüleri, geçmiş veri dosyası (backtest girdisi, spec 0023); dönem boşlukları ve dönemde mum denetimi — saf, indirme özetinin `boşluk=` kuralıyla (spec 0044); olay fiyatları (spec 0048): genel piyasa verisinden, vermezse herkese açık geçmiş veri arşivinden (`data.binance.vision`) indirme adımı ve kendi SQLite deposu (borsa bilgisi anlık görüntüsü, 1h mumlar, indirilmiş aralıklar, koşu süresi) |
-| `news` | Haber/duyuru kaynaklarını takip edip haber skoru üretmek; spec 0046: ayardaki kaynaklardan (Binance duyuruları, RSS 2.0, Atom) ileriye dönük toplama — tur ve döngü kararları, HTTPS getirme sınırları, ayrıştırma, kesinti bildirimi kararı; spec 0047: geçmiş Binance duyuru arşivi — katalog keşfi, sayfalama, sürdürme, durma kuralı, istek aralığı; spec 0048: duyuru başlığının sabit etiket kuralları (olay türü, beklenen yön, coinler; kural seti parmak izi) ve örnek kütüphanesinin kaynaklarını (arşiv + ileriye dönük `binance-duyuru` kayıtları) yalnız okuyup kimliğe göre birleştirme; spec 0050: vadeli / marjin listeleme, listeden çıkarma ve spot listeleme kuralları daraltıldı (vadeli / marjin için "coin gerekir" alanı; yeni kural seti parmak izi) | Haber kaydı (kendi SQLite deposu: yalnız eklenen haberler — kaynak, kimlik ya da bağlantı, yayın anı, ilk görme anı — ve kaynak durumu), arşiv (ayrı SQLite deposu: yalnız eklenen, "arşivden" işaretli geçmiş duyurular — katalog, kimlik, yayın anı, arşive alınma anı, ilk görme anı yok — ve katalog durumu), haber ayarı (`crytobot-news.toml`), haber skorları |
+| `news` | Haber/duyuru kaynaklarını takip edip haber skoru üretmek; spec 0046: ayardaki kaynaklardan (Binance duyuruları, RSS 2.0, Atom) ileriye dönük toplama — tur ve döngü kararları, HTTPS getirme sınırları, ayrıştırma, kesinti bildirimi kararı; spec 0047: geçmiş Binance duyuru arşivi — katalog keşfi, sayfalama, sürdürme, durma kuralı, istek aralığı; spec 0048: duyuru başlığının sabit etiket kuralları (olay türü, beklenen yön, coinler; kural seti parmak izi) ve örnek kütüphanesinin kaynaklarını (arşiv + ileriye dönük `binance-duyuru` kayıtları) yalnız okuyup kimliğe göre birleştirme; spec 0050: vadeli / marjin listeleme, listeden çıkarma ve spot listeleme kuralları daraltıldı (vadeli / marjin için "coin gerekir" alanı; yeni kural seti parmak izi); spec 0051: LLM olay skoru, gölge mod — ileriye dönük kayıttaki yeni haberler için prompt (sabit talimat, kalibrasyon tablosu ve örnekler bağlamı, talimat dışı veri bölümü; parmak izleri), yanıtın iki katmanlı doğrulaması (şema dışı / tekil ret: birebir alıntı, USDT çifti), tur kararları (sıra, bayat, kota beklemesi, günlük ve tur sınırı) | Haber kaydı (kendi SQLite deposu: yalnız eklenen haberler — kaynak, kimlik ya da bağlantı, yayın anı, ilk görme anı — ve kaynak durumu), arşiv (ayrı SQLite deposu: yalnız eklenen, "arşivden" işaretli geçmiş duyurular — katalog, kimlik, yayın anı, arşive alınma anı, ilk görme anı yok — ve katalog durumu), haber ayarı (`crytobot-news.toml`), skor kaydı (ayrı SQLite deposu, spec 0051: yalnız eklenen çağrılar, haber başına tek sonuç — skorlandı / şema dışı / bayat —, olay skorları, ret nedenleri, başlangıç anı) |
 | `research` | Whitepaper/proje dokümanlarını okuyup kaynak alıntılı araştırma skoru üretmek | Doküman önbelleği, araştırma skorları |
-| `llm` | Claude API'ye tek erişim noktası: şema doğrulama, harcama limiti | LLM çağrı günlüğü, günlük harcama |
+| `llm` | LLM'e tek erişim noktası, spec 0051: sahibin Claude aboneliğiyle `claude -p` alt süreci (API anahtarı ve SDK yok) — yalıtılmış argv ve ortam, çağrı başına boş çalışma klasörü, stdin'den prompt, süreç grubu ve zaman aşımında ağaç sonlandırma, çıktı sınırı, sonuç sınıflama (ok, zaman aşımı, oturum yok, kota, tanınmayan, durduruldu). Yanıtı yorumlamaz | — (durumsuz; çağrı sayısı ve kota beklemesi `news`'in skor kaydında) |
 | `analysis` | Teknik analiz ve indikatör hesapları (saf fonksiyonlar) | — (durumsuz); spec 0045: stochastic, ADX/DI, Supertrend, Donchian |
 | `calibration` | İndikatör sinyallerinin isabet ölçümü ve kalibrasyonu (saf): sekiz indikatörün sabit "al"/"sat" kuralları ve ızgaraları, isabet kuralı ve taban oran, olağandışı mumlar, BTC'de ayarlama, çapraz sınama, görülmemiş dönemde hüküm (spec 0045); geçmiş olay örnekleri (spec 0048): duyuru × coin örnekleri, giriş mumu, 0045'in isabet kuralıyla isabet ve taban oran, ölçülemeyen nedenleri, model kesim dönemi, çakışma, betimleyici kalibrasyon tablosu | Ayar seti metni (kanonik JSON, parmak izi), kalibrasyon raporu metni, sinyal kayıtları metni (JSON Lines); olay kalibrasyon tablosu ve örnek kütüphanesi metni (JSON Lines); dosyaları giriş noktası yazar |
 | `strategy` | Sinyalleri birleştirip işlem önerisi (yön, giriş, stop, hedef) üretmek; sabit aday kümesi S0…S3, ayarın tipi adayı seçer (spec 0043) | Strateji konfigürasyonu |
@@ -32,7 +32,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | `dashboard` | Localhost'ta salt-okunur web panosu sunmak (HTML ve /api/status) | Pano şablonu, sunucu yaşam döngüsü, host doğrulama |
 | `app` | Bileşim kökü (composition root): modülleri bağlar, ayarları denetler, zamanlayıcı/döngü | — (depo hazırlığı ve başlatma kapıları; gerçek etkiler enjekte edilir) |
 
-**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news|events`, spec 0022, 0023, 0025, 0030, 0031, 0045, 0046, 0047, 0048) bir modül
+**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news|events`, spec 0022, 0023, 0025, 0030, 0031, 0045, 0046, 0047, 0048, 0051) bir modül
 değildir, paket olmadığı için tabloda yer almaz. Karar içermez: ayar dosyasını (`crytobot.toml`) okur,
 gerçek saati, ≤1 s'lik beklemeyi, sinyalleri, tek süreç kilidini (`<depo>.lock`), konsol ve kayıt
 dosyası yazıcısını ve piyasa okumasını `app`'e verir. Kararların, zamanlamanın ve depo kapılarının
@@ -75,6 +75,13 @@ kayıtları `news`'le (`read_library_sources`: okuma ve etiket) okutur ve `calib
 bekleme ve durdurma giriş noktasından) verir, ölçümde fiyat deposunu ağsız okutur, `calibration`'ın saf ölçümünü
 koşar ve üzerine yazmayan yazıcıyla (`backtest`'in rapor yazıcısı) kütüphaneyi ve raporu yazdırır. Fiyat deposunun
 mutlak yolu kilitlenir (iki komuta tek). Bot deposu, kayıt dosyası, çalışan ayarlar ve kaynak kayıtlar değişmez.
+`news score` (spec 0051) LLM olay skorlayıcısıdır, gölge modda `app` dışında koşar: ayarı haber ayar dosyasının
+`[score]` bölümüdür. Giriş noktası yolların çözülmüş çakışmasını, haber kaydının varlığını, bağlam dosyalarını ve
+parmak izlerini, borsa bilgisini (`crytobot-events.toml`'un fiyat deposundan USDT çiftleri, yalnız okunur) denetler;
+skor kaydının mutlak yolunu kilitler (diğer kilitlerden ayrı) ve gerçek saati, ≤1 s'lik beklemeyi, sinyalleri, kayıt
+dosyasını ve LLM çağrısını (`llm.call_claude`) `news`'e (`run_scoring`) verir — `news` `llm`'i import etmez. Haber
+kaydı yalnız okunur (`mode=ro`, toplayıcıyı beklemez); bot deposu açılmaz, Telegram bağlanmaz; bot skorları okumaz.
+`news score status` ağa ve LLM'e çıkmaz, kilit almaz.
 
 ## Communication rules
 - Modüller birbirini yalnızca **public arayüz** (`<module>/__init__.py` ile dışa açılanlar) üzerinden çağırır.
@@ -87,6 +94,8 @@ mutlak yolu kilitlenir (iki komuta tek). Bot deposu, kayıt dosyası, çalışan
 `import-linter` sözleşmeleri olarak `scripts/check` içinde doğrulanır:
 - `ccxt` yalnızca `execution` ve `market_data` tarafından import edilir.
 - `anthropic` SDK yalnızca `llm` tarafından import edilir; `news`/`research` LLM'e yalnızca `llm` üzerinden erişir.
+  Spec 0051: `llm` hiçbir proje modülünü import etmez (R-3j) ve alt süreç başlatan tek modüldür (AST testi:
+  `subprocess` yalnız `llm`'de); `news` `llm`'i import etmez, çağrıyı giriş noktası verir.
 - `strategy`, `analysis`, `news`, `research`, `llm` hiçbir zaman `execution`'ı import etmez.
 - `execution`'ı yalnızca `risk`, `app`, `backtest` ve `persistence` import eder.
 - `persistence`'ı yalnızca `app` import eder; `persistence` diğer modüllerin yalnız public arayüzünü kullanır (ADR 0001).

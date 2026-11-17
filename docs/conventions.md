@@ -132,6 +132,11 @@
   yalnız `LOT_SIZE`/`PRICE_FILTER` gibi birkaçı `InvalidOrder` olur — kesin ret yanıt gövdesindeki koddan
   okunur, hata sınıfı testleri elle kurulmuş istisnayla değil ccxt'nin gerçek `handle_errors` eşlemesinden
   üretilir — from spec 0036, review round 1 F-1
+- `claude --bare` abonelik girişini (OAuth/keychain) okumaz, yalnız `ANTHROPIC_API_KEY` ile çalışır: abonelikle
+  yalıtım `--bare` ile değil tek tek bayraklarla (`--tools ""`, `--strict-mcp-config`, `--setting-sources ""`,
+  `--disable-slash-commands`, `--no-session-persistence`) kurulur. Windows'ta npm kurulumu `claude.cmd`'dir: argv
+  cmd.exe'den geçer, satır sonu ve `"%^&|<>!` taşıyan argüman bozulur — veri stdin'den, argv'de yalnız sabit ASCII
+  — from spec 0051, plan Risk 3, 8
 
 ## Enforced by tooling
 - `ruff check` + `ruff format --check` — lint ve format.
