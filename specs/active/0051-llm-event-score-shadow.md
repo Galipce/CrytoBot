@@ -34,7 +34,9 @@ Terimler:
 - R-1 — **Hangi haberler (S-4).** Skorlayıcı yalnız ilk görme anı başlangıç anından sonra (ya da eşit) olan haberleri
   skorlar; daha önce görülmüş haberler ve arşiv hiçbir zaman skorlanmaz. Her haber en çok bir kez "skorlandı" sonucunu
   alır; yeniden başlatma ve aynı anda ikinci skorlayıcı (reddedilir, R-8) bunu bozmaz. Haberler ilk görme anına göre
-  eskiden yeniye sırayla skorlanır. İlk görme anından 24 saatten fazla geçmiş ve henüz "skorlandı" almamış haber
+  eskiden yeniye sırayla skorlanır; sonuçsuz denemesi (R-6) olan haber, daha az sonuçsuz denemesi olan haberlerin
+  arkasına geçer (sıra: sonuçsuz deneme sayısı, ilk görme anı) — tek bir haberin tekrarlanan hatası kuyruğu ve günlük
+  sınırı tüketmez (review round 1 M-1; Galip Badem, 2026-11-18). İlk görme anından 24 saatten fazla geçmiş ve henüz "skorlandı" almamış haber
   "skorlanmadı: bayat" olur ve bir daha denenmez.
 - R-2 — **Skorun şekli (S-5).** Bir haber için LLM'den sıfır ya da daha çok olay skoru istenir. Her olay skoru şunları
   taşır: coin sembolü, coinin haberde geçtiği biçimiyle adı (ör. "Bitcoin", "BTC"), olay türü, yön, şiddet, alıntı.
@@ -63,7 +65,7 @@ Terimler:
   (`docs/conventions.md`, Known traps). Hiçbir sır, yol ya da kişisel bilgi prompt'a girmez.
 - R-6 — **Kullanılamazlık ve sınırlar (S-3; ADR 0003 ilke 5).** Zaman aşımı, oturum yok / giriş yapılmamış, kota ya da
   kullanım sınırı yanıtı ve tanınmayan süreç hatası haberi "skorlanmadı" yapmaz; haber sonraki turlarda R-1'in 24
-  saatlik penceresi içinde yeniden denenir ve her deneme nedeniyle kaydedilir. Kota ya da kullanım sınırı yanıtı
+  saatlik penceresi içinde yeniden denenir (R-1'in sırasıyla) ve her deneme nedeniyle kaydedilir. Kota ya da kullanım sınırı yanıtı
   gelince ayardaki bekleme süresi (vars. 60 dk) boyunca çağrı yapılmaz. Kota yanıtının nasıl tanınacağını plan
   belirler; tanınamayan her yanıt tanınmayan süreç hatası sayılır (bekletilir, yeniden denenir, günlük sınıra
   işlenir), böylece hiçbir durumda sınırsız çağrı olmaz (G-7). Günlük çağrı sınırı (UTC günü; ayar, vars. 200,
@@ -123,7 +125,8 @@ yok ("henüz skor yok"). Komut adları plan aşamasında değişebilir; davranı
 - [ ] AC-1 — Başlangıç anından sonra görülen bir `binance-duyuru` haberi ve bir `rss` haberi skorlanır; kayıtta R-2'nin
   bütün alanları vardır; coin geçmeyen haber "skorlandı, olay skoru yok" olur.
 - [ ] AC-2 — Başlangıç anından önce görülen haber ve arşiv kaydı skorlanmaz; aynı haber yeniden başlatmadan sonra
-  ikinci kez skorlanmaz; 24 saatten eski bekleyen haber "bayat" olur ve çağrı yapılmaz; sıra ilk görme anına göredir.
+  ikinci kez skorlanmaz; 24 saatten eski bekleyen haber "bayat" olur ve çağrı yapılmaz; sıra ilk görme anına göredir,
+  sonuçsuz denemesi olan haber daha az denenmiş haberlerin arkasına geçer.
 - [ ] AC-3 — Doğrulama: çözümlenemeyen, alanı eksik/fazla ya da boyut sınırını aşan yanıt "şema dışı" olur ve
   yinelenmez; R-3'teki her olay skoru ret nedeni (alıntı birebir değil ya da boş, ad alıntıda yok, USDT çifti yok, tür,
   yön, şiddet, yinelenen coin) için ayrı örnekte yalnız o skor reddedilir, nedeni sayılır, geçerli olanlar kaydedilir.
