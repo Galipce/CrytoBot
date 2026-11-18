@@ -1,5 +1,5 @@
-"""Giriş noktası: `python -m crytobot prepare|start|download|backtest|calibrate|news|events` (spec
-0022, 0023, 0025, 0045, 0046, 0047, 0048, 0051).
+"""Giriş noktası: `python -m crytobot prepare|start|download|backtest|calibrate|news|events|forward`
+(spec 0022, 0023, 0025, 0045, 0046, 0047, 0048, 0051, 0053).
 
 Karar içermez: kararların hepsi `app`'tedir. Burada yalnız gerçek etkiler bağlanır: ayar dosyası
 (`tomllib`, çalışma dizinindeki `crytobot.toml`), gerçek UTC saati, ≤1 s'lik parçalarla bekleme,
@@ -76,10 +76,24 @@ dosyası açılmadan, kilit alınmadan, konsola. Her turda skor ve haber kaydı 
 ve `app`'in tipine (`PairFilter`) çevrilir; satırlar JSON Lines olarak yalnız eklenir (plan A-1).
 `start --live` ve `backtest` `[shadow]`'u okumaz. `shadow status` ağa ve LLM'e çıkmaz, kilit almaz,
 gölge kaydı ve bot kayıt dosyasını yalnız okur.
+
+`forward download` ve `forward report [--at <an>]` (spec 0053) ileriye dönük ölçüm raporudur: ayar
+ayrı dosyadadır (`crytobot-forward.toml`, plan Risk 6); skor ve haber kaydının yolları ve kaynak
+türleri haber ayarından (`[score]`, `[news]`), beyaz liste, `[shadow]` ve bot yolları bot ayarından
+okunur. Sıra: üç ayar → çıktı yollarının çakışması (çözülmüş yollarla: skor, gölge, haber kaydı,
+arşiv, kayıt dosyaları, bot deposu, paper kanıt deposu, ayar dosyaları, birbirleri; plan Risk 10) →
+koşu. Bütün retler hiçbir dosyaya dokunmadan. Kayıtlar `news`'le yalnız okunur (`mode=ro`), gölge
+kaydın JSON satırları burada çözülür, hepsi `calibration`'ın tipine çevrilir (`app` `news`'i import
+etmez). `download` fiyat deposunun mutlak yolunu kilitler ve 0048'in indirme adımını koşar;
+`report` ağa ve LLM'e çıkmaz, kilit almaz; rapor ve örnek dosyası geçici dosya + `os.replace` ile
+atomik üzerine yazılır (plan Risk 7). `--at` saat dilimli ISO an ister, gelecekteki an reddedilir.
+Çıkış: 0 tamam, 1 ret ya da kaynak hatası, 4 durdurma isteğiyle durdu, 6 çıktı yazılamadı, 130 zorla
+durma.
 """
 
 import hashlib
 import json
+import os
 import shutil
 import signal
 import sys
@@ -111,6 +125,11 @@ from crytobot.app import (
     EventsOutcome,
     ExitReason,
     ForcedStop,
+    ForwardConfig,
+    ForwardDownloadParts,
+    ForwardOutcome,
+    ForwardReportParts,
+    ForwardSources,
     KillRequest,
     LogWriteError,
     LoopParts,
@@ -134,6 +153,7 @@ from crytobot.app import (
     load_config,
     load_download_config,
     load_events_config,
+    load_forward_config,
     load_shadow_config,
     load_stage_config,
     open_for_start,
@@ -150,11 +170,19 @@ from crytobot.app import (
     run_evaluation,
     run_events_download,
     run_events_measure,
+    run_forward_download,
+    run_forward_report,
     run_loop,
     shadow_status_lines,
 )
 from crytobot.backtest import read_report, report_exists, write_report
-from crytobot.calibration import EventAnnouncement
+from crytobot.calibration import (
+    EventAnnouncement,
+    ForwardEvent,
+    ForwardInputs,
+    ScoredNews,
+    ShadowTurn,
+)
 from crytobot.control import (
     clear_kill_flag,
     clear_stop_flag,
@@ -222,6 +250,8 @@ from crytobot.news import (
     read_filter_view,
     read_forward,
     read_library_sources,
+    read_news_sources,
+    read_score_record,
     read_score_snapshot,
     read_snapshot,
     run_archive,
@@ -236,11 +266,13 @@ from crytobot.reporting import ReportingService, load_reporting_config
 CONFIG_FILE = "crytobot.toml"
 NEWS_CONFIG_FILE = "crytobot-news.toml"
 EVENTS_CONFIG_FILE = "crytobot-events.toml"
+FORWARD_CONFIG_FILE = "crytobot-forward.toml"
 USAGE = (
     "kullanım: python -m crytobot "
     "prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news|events"
-    "|shadow"
+    "|shadow|forward"
     " [--live] [--trial] [--final] [archive] [score] [status] [download] [measure]"
+    " [report] [--at YYYY-MM-DDTHH:MM:SSZ]"
 )
 COMMANDS = (
     ["prepare"],
@@ -268,6 +300,8 @@ COMMANDS = (
     ["events", "download"],
     ["events", "measure"],
     ["shadow", "status"],
+    ["forward", "download"],
+    ["forward", "report"],
 )
 EXIT_OK = 0
 EXIT_REFUSED = 1
@@ -319,6 +353,15 @@ _EVENTS_EXIT_CODES = {
     EventsOutcome.FAILED: EXIT_REFUSED,
     EventsOutcome.STOPPED: EXIT_DOWNLOAD_STOPPED,
     EventsOutcome.NOT_WRITTEN: EXIT_REPORT_NOT_WRITTEN,
+}
+FORWARD_BUSY = "fiyat verisi başka bir indirme komutunda açık"
+FORWARD_AT_INVALID = "rapor anı geçersiz (saat dilimli ISO an: YYYY-MM-DDTHH:MM:SSZ)"
+_FORWARD_EXIT_CODES = {
+    ForwardOutcome.COMPLETED: EXIT_OK,
+    ForwardOutcome.REFUSED: EXIT_REFUSED,
+    ForwardOutcome.FAILED: EXIT_REFUSED,
+    ForwardOutcome.STOPPED: EXIT_DOWNLOAD_STOPPED,
+    ForwardOutcome.NOT_WRITTEN: EXIT_REPORT_NOT_WRITTEN,
 }
 _ARCHIVE_EXIT_CODES = {
     ArchiveOutcome.COMPLETE: EXIT_OK,
@@ -1272,6 +1315,298 @@ def _events(
     return _EVENTS_EXIT_CODES[outcome]
 
 
+ForwardSetup = tuple[ForwardConfig, ScoreConfig, tuple[str, ...], ShadowConfig | None]
+
+
+def _forward_config(
+    command: str, paths: tuple[Path, Path, Path, Path], output: Output, clock: Clock
+) -> ForwardSetup | None:
+    """Spec 0053 AC-10, plan Risk 6, 10: hiçbir dosyaya dokunmadan, ilk sorun adıyla. Korunanlar
+    skorlayıcının bağlam dosyalarını ve 0048'in çıktılarını da içerir (review R1-3)."""
+    forward_path, news_path, bot_path, events_path = paths
+
+    def refuse(text: str) -> None:
+        output.say(f"forward {command}: reddedildi: {text}")
+
+    document = _load_toml(forward_path)
+    if isinstance(document, str):
+        refuse(document)
+        return None
+    loaded = load_forward_config(document)
+    config = loaded.config
+    if config is None:
+        refuse(loaded.message)
+        return None
+    news_document = _load_toml(news_path)
+    if isinstance(news_document, str):
+        refuse(news_document)
+        return None
+    scored = load_score_config(news_document)
+    score = scored.config
+    if score is None:
+        refuse(scored.message)
+        return None
+    bot_document = _load_toml(bot_path)
+    if isinstance(bot_document, str):
+        refuse(bot_document)
+        return None
+    bot = load_config(bot_document, clock())
+    if bot.config is None:
+        refuse(f"bot ayarı: {bot.message}")
+        return None
+    shadowed = load_shadow_config(bot_document)
+    shadow = shadowed.config
+    if shadow is None and shadowed.setting is not None:
+        refuse(shadowed.message)
+        return None
+    protected = (
+        score.store_path,
+        score.log_path,
+        score.calibration_report_path,
+        score.library_path,
+        score.news.store_path,
+        score.news.log_path,
+        *_raw_paths(news_document, "news", ("archive_store_path", "archive_log_path")),
+        *_raw_paths(
+            _load_toml(events_path), "events", ("price_store_path", "report_path", "library_path")
+        ),
+        *(() if shadow is None else (shadow.record_path,)),
+        bot.config.store_path,
+        bot.config.log_path,
+        *_raw_paths(bot_document, "stage", ("paper_store_path",)),
+        str(forward_path),
+        str(news_path),
+        str(bot_path),
+    )
+    outputs = (
+        ("price_store_path", config.price_store_path),
+        ("report_path", config.report_path),
+        ("samples_path", config.samples_path),
+    )
+    for index, (key, path) in enumerate(outputs):
+        others = (*protected, *(other for _, other in outputs[:index]))
+        if any(_same_file(path, other) for other in others):
+            refuse(f"ayar geçersiz: forward.{key}")
+            return None
+    return config, score, tuple(bot.config.turn.whitelist), shadow
+
+
+def _shadow_turn(row: object) -> ShadowTurn | None:
+    """Gölge kaydın bir satırı (spec 0052 A-1); beklenen alanları taşımayan satır bozuktur."""
+    if not isinstance(row, Mapping):
+        return None
+    texts = ("turn_at", "pair", "state", "reason", "technical_buy")
+    if any(not isinstance(row.get(key), str) for key in texts):
+        return None
+    listed = row.get("whitelist")
+    if not isinstance(listed, list) or not all(isinstance(pair, str) for pair in listed):
+        return None
+    try:
+        moment = datetime.fromisoformat(str(row["turn_at"]))
+    except ValueError:
+        return None
+    if moment.utcoffset() is None:
+        return None
+    return ShadowTurn(
+        moment,
+        str(row["pair"]),
+        tuple(str(pair) for pair in listed),
+        str(row["state"]),
+        str(row["reason"]),
+        row["technical_buy"] == "var",
+    )
+
+
+def _triple(
+    model: str | None, prompt: str | None, context: str | None
+) -> tuple[str, str, str] | None:
+    if model is None or prompt is None or context is None:
+        return None
+    return model, prompt, context
+
+
+def _forward_sources(
+    score: ScoreConfig, whitelist: tuple[str, ...], shadow: ShadowConfig | None
+) -> Callable[[], ForwardSources | str]:
+    """Kayıtlar `news`'le yalnız okunur (R-1), gölge kayıt burada çözülür; `calibration`'ın tipi."""
+
+    def read() -> ForwardSources | str:
+        try:
+            record = read_score_record(score.store_path)
+            names = read_news_sources(score.news.store_path)
+        except (ScoreStoreError, StoreError) as error:
+            return str(error)
+        kinds = {source.name: source.kind for source in score.news.sources}
+        sources = (
+            {}
+            if names is None
+            else {news_id: kinds.get(name, "bilinmiyor") for news_id, name in names.items()}
+        )
+        rows: list[object] | None = None
+        if shadow is not None:
+            try:
+                rows = _shadow_rows(shadow.record_path)
+            except OSError:
+                return "gölge kayıt okunamıyor"
+        turns = None if rows is None else [_shadow_turn(row) for row in rows]
+        results = (
+            None
+            if record is None
+            else tuple(
+                ScoredNews(
+                    row.news_id,
+                    row.kind,
+                    row.at,
+                    _triple(row.model, row.prompt_fingerprint, row.context_fingerprint),
+                )
+                for row in record.results
+            )
+        )
+        events = (
+            ()
+            if record is None
+            else tuple(
+                ForwardEvent(e.news_id, e.coin, e.event_type, e.direction, e.severity)
+                for e in record.events
+            )
+        )
+        kept = None if turns is None else tuple(turn for turn in turns if turn is not None)
+        return ForwardSources(
+            ForwardInputs(results, events, sources, kept, whitelist),
+            score.store_path,
+            0 if record is None else record.skipped,
+            score.news.store_path,
+            None if shadow is None else shadow.record_path,
+            0 if turns is None else sum(turn is None for turn in turns),
+        )
+
+    return read
+
+
+def write_atomic(path: str, text: str) -> bool:
+    """Plan Risk 7: aynı dizinde geçici dosya, sonra `os.replace`; yarım dosya kalmaz."""
+    target = Path(path)
+    temp: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            newline="\n",
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as file:
+            temp = Path(file.name)
+            file.write(text)
+        os.replace(temp, target)
+    except OSError:
+        if temp is not None:
+            with suppress(OSError):
+                temp.unlink()
+        return False
+    return True
+
+
+def _report_at(argv: Sequence[str]) -> datetime | str | None:
+    """`report` → `None`; `report --at <an>` → an; geçersizse ret metni."""
+    if len(argv) == 1:
+        return None
+    try:
+        moment = datetime.fromisoformat(argv[2])
+    except ValueError:
+        return FORWARD_AT_INVALID
+    if moment.utcoffset() is None:
+        return FORWARD_AT_INVALID
+    return moment.astimezone(UTC)
+
+
+def _forward_download(
+    config: ForwardConfig,
+    sources: Callable[[], ForwardSources | str],
+    output: Output,
+    clock: Clock,
+    stop: StopRequest,
+    wait: Callable[[float], None] | None,
+    download: EventsDownload,
+) -> ForwardOutcome:
+    lock = StoreLock(str(Path(config.price_store_path).resolve()))
+    refused = lock.acquire()
+    if refused is not None:
+        why = FORWARD_BUSY if refused == LOCK_BUSY else refused
+        output.say(f"forward download: reddedildi: {why}")
+        return ForwardOutcome.REFUSED
+    try:
+        try:
+            store = PriceStore.open(config.price_store_path)
+        except PriceStoreError as error:
+            output.say(f"forward download: reddedildi: {error}")
+            return ForwardOutcome.REFUSED
+        try:
+            parts = EventPriceParts(
+                clock,
+                time.monotonic,
+                make_wait(stop) if wait is None else wait,
+                lambda: stop.requested,
+                lambda text: output.say(f"forward download: {text}"),
+            )
+            exit_ = run_forward_download(
+                config,
+                ForwardDownloadParts(
+                    sources,
+                    lambda needs: download(needs, store, parts, config.request_gap_s),
+                    output.say,
+                    clock,
+                ),
+            )
+        finally:
+            store.close()
+    finally:
+        lock.release()
+    return exit_.outcome
+
+
+def _forward(
+    argv: Sequence[str],
+    paths: tuple[Path, Path, Path, Path],
+    console: TextIO,
+    clock: Clock,
+    stop: StopRequest,
+    wait: Callable[[float], None] | None,
+    download: EventsDownload,
+) -> int:
+    """Spec 0053: ayarlar → yollar → koşu; `download` kilitli, `report` kilitsiz (R-1)."""
+    output = Output(console)
+    given = list(argv)
+    valid = given in (["download"], ["report"]) or (
+        len(given) == 3 and given[:2] == ["report", "--at"]
+    )
+    if not valid:
+        output.say(USAGE)
+        return EXIT_REFUSED
+    command = given[0]
+    at = _report_at(given) if command == "report" else None
+    if isinstance(at, str):
+        output.say(f"forward report: reddedildi: {at}")
+        return EXIT_REFUSED
+    setup = _forward_config(command, paths, output, clock)
+    if setup is None:
+        return EXIT_REFUSED
+    config, score, whitelist, shadow = setup
+    sources = _forward_sources(score, whitelist, shadow)
+    try:
+        if command == "download":
+            outcome = _forward_download(config, sources, output, clock, stop, wait, download)
+        else:
+            parts = ForwardReportParts(
+                sources, _event_prices(config.price_store_path), write_atomic, output.say, clock
+            )
+            outcome = run_forward_report(config, parts, at).outcome
+    except ForcedStop:
+        return EXIT_FORCED
+    return _FORWARD_EXIT_CODES[outcome]
+
+
 def _prepare(
     config: BotConfig,
     output: Output,
@@ -1595,11 +1930,22 @@ def run(
     events_download: EventsDownload = download_event_prices,
     root: Path | None = None,
     score_call: ScoreCall | None = None,
+    forward_config_path: Path = Path(FORWARD_CONFIG_FILE),
 ) -> int:
     """Komutu çalıştırır, çıkış kodunu döndürür. Ayar, kilit, depo sırası: borsaya ve depoya
     ayarlar denetlenmeden dokunulmaz (R-2); kilit depodan önce alınır (R-6)."""
     stop = StopRequest() if stop is None else stop
     output = Output(console)
+    if argv and argv[0] == "forward":
+        return _forward(
+            list(argv[1:]),
+            (forward_config_path, news_config_path, config_path, events_config_path),
+            console,
+            clock,
+            stop,
+            wait,
+            events_download,
+        )
     if list(argv) not in COMMANDS:
         output.say(USAGE)
         return EXIT_REFUSED

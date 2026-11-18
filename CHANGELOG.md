@@ -7,6 +7,14 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
+- **İleriye dönük ölçüm raporu ve hüküm** (spec 0053): `python -m crytobot forward download` skor kaydındaki
+  olumsuz olay skorlarının ve gölge kayıttaki teknik "al"ların 1h mumlarını indirir; `forward report [--at <an>]`
+  ağsız, LLM'siz, kilitsiz her olumsuz skorun ardından fiyatta ne olduğunu 0048'in düşüş isabeti ve 30 günlük taban
+  oranıyla ölçer. Ön kayıtlı hüküm: güncel üçlünün (model, prompt, bağlam) ilk sonucundan en az 90 gün ve skor
+  anındaki beyaz listede en az 30 ölçülmüş, örtüşmeyen örnek; isabet taban oranı en az 5 puan geçerse `olumlu`,
+  geçmezse `olumsuz`, şart dolmadan `hüküm yok` (kalan gün ve örnek). Eski üçlüler ve beyaz liste dışı coinler
+  `hüküm dışı` tablolarda; gölge kayıt bölümü bilgi. Rapor ve JSON Lines örnek dosyası yeniden üretilebilir, atomik
+  yazılır; hüküm hiçbir aksiyonu tetiklemez. Ayar `crytobot-forward.toml` (`[forward]`).
 - **Gölge filtre: "bastırılırdı" kaydı** (spec 0052): paper bot `[shadow]` ayarıyla her tamamlanan turda beyaz
   listedeki her çift için filtre durumunu (`bastırılırdı` / `bastırılmazdı` / eksik bilgiyle / `filtre yok`
   nedeniyle), eşleşen olumsuz olayları, eksik bilgi sayılarını, teknik al ve risk sonucunu JSON Lines gölge kayda

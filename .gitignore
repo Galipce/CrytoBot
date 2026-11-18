@@ -28,6 +28,7 @@ htmlcov/
 # Local bot data (SQLite, caches) — never commit
 crytobot-news.toml
 crytobot-events.toml
+crytobot-forward.toml
 *.sqlite
 *.sqlite3
 *.db

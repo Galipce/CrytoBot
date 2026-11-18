@@ -107,6 +107,18 @@ from crytobot.app._event_samples import (
     run_events_measure,
 )
 from crytobot.app._events import TRIAL_MARK, line
+from crytobot.app._forward import (
+    ForwardConfig,
+    ForwardConfigResult,
+    ForwardDownloadParts,
+    ForwardExit,
+    ForwardOutcome,
+    ForwardReportParts,
+    ForwardSources,
+    load_forward_config,
+    run_forward_download,
+    run_forward_report,
+)
 from crytobot.app._grid import CANDIDATE_GRIDS
 from crytobot.app._inputs import PairMarket, TurnSettings
 from crytobot.app._loop import (
@@ -193,6 +205,13 @@ __all__: list[str] = [
     "ExitReason",
     "FinalConfigsResult",
     "ForcedStop",
+    "ForwardConfig",
+    "ForwardConfigResult",
+    "ForwardDownloadParts",
+    "ForwardExit",
+    "ForwardOutcome",
+    "ForwardReportParts",
+    "ForwardSources",
     "KillRequest",
     "LogWriteError",
     "LoopExit",
@@ -233,6 +252,7 @@ __all__: list[str] = [
     "load_config",
     "load_download_config",
     "load_events_config",
+    "load_forward_config",
     "load_shadow_config",
     "load_stage_config",
     "open_for_start",
@@ -250,6 +270,8 @@ __all__: list[str] = [
     "run_evaluation",
     "run_events_download",
     "run_events_measure",
+    "run_forward_download",
+    "run_forward_report",
     "run_loop",
     "run_turn",
     "shadow_rows",
