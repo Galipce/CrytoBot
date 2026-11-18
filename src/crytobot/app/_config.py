@@ -44,8 +44,11 @@ _PROBE_STRATEGY = StrategySettings(1, 2, 2, Decimal(70), 2, Decimal(2), Decimal(
 _INTERVALS_BY_TEXT = {text: interval for interval, text in CANDLE_INTERVALS.items()}
 _DIGITS = frozenset("0123456789")
 # Specs 0024, 0026, 0028, 0029, 0033: their contents are judged by loaders
-# (0023, 0025, 0028, 0029, 0032/0033); the bot never reads them; matched by exact name only
-_PASSED_SECTIONS = frozenset({"history", "backtest", "stage", "reporting", "dashboard", "exchange"})
+# (0023, 0025, 0028, 0029, 0032/0033); the bot never reads them; matched by exact name only.
+# Spec 0052: `[shadow]` is read by the paper start only (`load_shadow_config`)
+_PASSED_SECTIONS = frozenset(
+    {"history", "backtest", "stage", "reporting", "dashboard", "exchange", "shadow"}
+)
 
 
 @dataclass(frozen=True)

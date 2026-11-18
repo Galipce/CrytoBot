@@ -149,6 +149,15 @@ forbidden_modules = [
 ]
 allow_indirect_imports = true
 
+# Spec 0052 (plan Risk 4): the paper turn cannot reach the scores structurally; the entry point
+# reads the score and news records and hands the bot a view in `app`'s own type.
+[[tool.importlinter.contracts]]
+name = "R-3k: app imports neither news nor llm"
+type = "forbidden"
+source_modules = ["crytobot.app"]
+forbidden_modules = ["crytobot.news", "crytobot.llm"]
+allow_indirect_imports = true
+
 [[tool.importlinter.contracts]]
 name = "R-3d: no module imports another module's internal submodules"
 type = "no_foreign_submodule_imports"

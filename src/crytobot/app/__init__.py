@@ -49,6 +49,12 @@ Olay örnekleri (spec 0048): `load_events_config` `crytobot-events.toml`'un `[ev
 denetler; `run_events_download` örneklerin fiyat aralıklarını `market_data`'nın indirme adımına
 verir, `run_events_measure` ağsız ölçer ve kütüphane ile kalibrasyon tablosunu yazar. Kaynak
 kayıtları giriş noktası okur ve etiketler (`EventInputs`); işlem davranışı değişmez.
+
+Gölge filtre kaydı (spec 0052): `load_shadow_config` `[shadow]` bölümünü denetler; paper döngüsü
+`LoopParts.shadow` doluyken tamamlanan her turda `shadow_rows` ile beyaz listedeki her çift için
+satır kurar. Filtre görünümü (`PairFilter`) ve satırların yazımı giriş noktasındandır: `app`
+`news`'i ve `llm`'i import etmez (R-3k), tur kararları değişmez. `shadow_status_lines` durum
+satırlarıdır.
 """
 
 from crytobot.app._backtest import BacktestExit, BacktestOutcome, BacktestParts, run_backtest
@@ -118,6 +124,16 @@ from crytobot.app._notices import NoticeKind, TurnMemory, TurnNotice
 from crytobot.app._paper_proof import PaperProof, PaperProofResult, check_paper_proof
 from crytobot.app._result import BuyHalt, PairNote, PairOutcome, TurnOutcome, TurnResult
 from crytobot.app._session import KillRequest
+from crytobot.app._shadow import SECTION as SHADOW_SECTION
+from crytobot.app._shadow import (
+    PairFilter,
+    ShadowConfig,
+    ShadowConfigResult,
+    ShadowParts,
+    load_shadow_config,
+    shadow_rows,
+)
+from crytobot.app._shadow_status import NO_SHADOW, last_shadow_error, shadow_status_lines
 from crytobot.app._stage import (
     StageConfig,
     StageConfigResult,
@@ -144,8 +160,10 @@ __all__: list[str] = [
     "CANDIDATE_GRIDS",
     "FINAL_INTERVALS",
     "MAX_WAIT_S",
+    "NO_SHADOW",
     "PREPARE_HINT",
     "SETTING_NAMES",
+    "SHADOW_SECTION",
     "TRIAL_MARK",
     "BacktestConfig",
     "BacktestConfigResult",
@@ -180,6 +198,7 @@ __all__: list[str] = [
     "LoopExit",
     "LoopParts",
     "NoticeKind",
+    "PairFilter",
     "PairMarket",
     "PairNote",
     "PairOutcome",
@@ -187,6 +206,9 @@ __all__: list[str] = [
     "PaperProofResult",
     "PrepareOutcome",
     "PrepareResult",
+    "ShadowConfig",
+    "ShadowConfigResult",
+    "ShadowParts",
     "StageConfig",
     "StageConfigResult",
     "StageGateResult",
@@ -204,12 +226,14 @@ __all__: list[str] = [
     "engage_kill_switch",
     "final_configs",
     "get_dashboard_status",
+    "last_shadow_error",
     "line",
     "load_backtest_config",
     "load_calibration_config",
     "load_config",
     "load_download_config",
     "load_events_config",
+    "load_shadow_config",
     "load_stage_config",
     "open_for_start",
     "prepare_live_store",
@@ -228,5 +252,7 @@ __all__: list[str] = [
     "run_events_measure",
     "run_loop",
     "run_turn",
+    "shadow_rows",
+    "shadow_status_lines",
     "to_turn_market",
 ]
