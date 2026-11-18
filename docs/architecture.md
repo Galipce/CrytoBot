@@ -20,7 +20,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | `research` | Whitepaper/proje dokümanlarını okuyup kaynak alıntılı araştırma skoru üretmek | Doküman önbelleği, araştırma skorları |
 | `llm` | LLM'e tek erişim noktası, spec 0051: sahibin Claude aboneliğiyle `claude -p` alt süreci (API anahtarı ve SDK yok) — yalıtılmış argv ve ortam, çağrı başına boş çalışma klasörü, stdin'den prompt, süreç grubu ve zaman aşımında ağaç sonlandırma, çıktı sınırı, sonuç sınıflama (ok, zaman aşımı, oturum yok, kota, tanınmayan, durduruldu). Yanıtı yorumlamaz | — (durumsuz; çağrı sayısı ve kota beklemesi `news`'in skor kaydında) |
 | `analysis` | Teknik analiz ve indikatör hesapları (saf fonksiyonlar) | — (durumsuz); spec 0045: stochastic, ADX/DI, Supertrend, Donchian |
-| `calibration` | İndikatör sinyallerinin isabet ölçümü ve kalibrasyonu (saf): sekiz indikatörün sabit "al"/"sat" kuralları ve ızgaraları, isabet kuralı ve taban oran, olağandışı mumlar, BTC'de ayarlama, çapraz sınama, görülmemiş dönemde hüküm (spec 0045); geçmiş olay örnekleri (spec 0048): duyuru × coin örnekleri, giriş mumu, 0045'in isabet kuralıyla isabet ve taban oran, ölçülemeyen nedenleri, model kesim dönemi, çakışma, betimleyici kalibrasyon tablosu | Ayar seti metni (kanonik JSON, parmak izi), kalibrasyon raporu metni, sinyal kayıtları metni (JSON Lines); olay kalibrasyon tablosu ve örnek kütüphanesi metni (JSON Lines); dosyaları giriş noktası yazar |
+| `calibration` | İndikatör sinyallerinin isabet ölçümü ve kalibrasyonu (saf): sekiz indikatörün sabit "al"/"sat" kuralları ve ızgaraları, isabet kuralı ve taban oran, olağandışı mumlar, BTC'de ayarlama, çapraz sınama, görülmemiş dönemde hüküm (spec 0045); geçmiş olay örnekleri (spec 0048): duyuru × coin örnekleri, giriş mumu, 0045'in isabet kuralıyla isabet ve taban oran, ölçülemeyen nedenleri, model kesim dönemi, çakışma, betimleyici kalibrasyon tablosu; ileriye dönük ölçüm (spec 0053): skor kaydının olumsuz olay skorları × coin örnekleri, skor anındaki beyaz liste, 0048'in çekirdeğiyle (`measure_reference`) isabet ve taban oran, `ölçüm bekliyor`, sıralı örtüşme, üçlü tabloları, yardımcı tablo, gölge kayıt bölümü, ön kayıtlı kesin eşikli hüküm | Ayar seti metni (kanonik JSON, parmak izi), kalibrasyon raporu metni, sinyal kayıtları metni (JSON Lines); olay kalibrasyon tablosu ve örnek kütüphanesi metni (JSON Lines); ileriye dönük ölçüm raporu ve örnek dosyası metni (JSON Lines); dosyaları giriş noktası yazar |
 | `strategy` | Sinyalleri birleştirip işlem önerisi (yön, giriş, stop, hedef) üretmek; sabit aday kümesi S0…S3, ayarın tipi adayı seçer (spec 0043) | Strateji konfigürasyonu |
 | `risk` | Her işlem önerisini BR-3…BR-11'e göre onaylamak/reddetmek, pozisyon boyutlamak | Risk limitleri, sabit üst sınırlar, kill switch durumu |
 | `execution` | Onaylı emirleri borsaya (live) / simülatöre (paper, backtest) iletmek, emir durumunu izlemek | Emir kayıtları, clientOrderId'ler |
@@ -32,7 +32,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | `dashboard` | Localhost'ta salt-okunur web panosu sunmak (HTML ve /api/status) | Pano şablonu, sunucu yaşam döngüsü, host doğrulama |
 | `app` | Bileşim kökü (composition root): modülleri bağlar, ayarları denetler, zamanlayıcı/döngü | — (depo hazırlığı ve başlatma kapıları; gerçek etkiler enjekte edilir) |
 
-**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news|events`, spec 0022, 0023, 0025, 0030, 0031, 0045, 0046, 0047, 0048, 0051) bir modül
+**Giriş noktası.** `src/crytobot/__main__.py` (`python -m crytobot prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news|events|shadow|forward`, spec 0022, 0023, 0025, 0030, 0031, 0045, 0046, 0047, 0048, 0051, 0052, 0053) bir modül
 değildir, paket olmadığı için tabloda yer almaz. Karar içermez: ayar dosyasını (`crytobot.toml`) okur,
 gerçek saati, ≤1 s'lik beklemeyi, sinyalleri, tek süreç kilidini (`<depo>.lock`), konsol ve kayıt
 dosyası yazıcısını ve piyasa okumasını `app`'e verir. Kararların, zamanlamanın ve depo kapılarının
@@ -89,6 +89,15 @@ yalnız okur (`mode=ro`), sonucu `app`'in kendi tipine (`PairFilter`) çevirir; 
 satır kurma (`TurnResult`'tan teknik al ve risk sonucu) `app`'te, JSON Lines kodlaması ve yalnız ekleyen yazım giriş
 noktasındadır. Gölge adımın hatası turu değiştirmez; bot deposu skor içermez. Skorlayıcı her turun başında canlılık izini
 (`rounds`) skor kaydına yazar; tur aralığı en çok 15 dakikadır. `shadow status` ağsız, LLM'siz, kilitsiz okur.
+`forward download` ve `forward report` (spec 0053) ayarı ayrı dosyadan (`crytobot-forward.toml`) okur; skor ve
+haber kaydının yolları ve kaynak türleri haber ayarından, beyaz liste, `[shadow]` ve bot yolları bot ayarından okunur.
+Giriş noktası çıktı yollarının çözülmüş çakışmasını denetler, skor ve haber kaydını `news`'le (`read_score_record`,
+`read_news_sources`; `mode=ro`, kilitsiz) okutur, gölge kaydın JSON satırlarını çözer ve hepsini `calibration`'ın
+tipine çevirir — `app` `news`'i import etmez. `app` (`run_forward_download`, `run_forward_report`) örnekleri ve fiyat
+aralıklarını `calibration`'dan alır; indirmede `market_data`'nın adımını (`download_event_prices`) koşar (fiyat
+deposunun mutlak yolu kilitlenir), raporda fiyat deposunu ağsız okutur, ölçülecek aralık indirilmemişse reddeder,
+`calibration`'ın saf ölçümünü ve hükmünü koşar; rapor ve örnek dosyasını giriş noktası atomik üzerine yazar. Rapor
+kilit almaz, ağa ve LLM'e çıkmaz; hüküm hiçbir aksiyonu tetiklemez. Okunan kayıtlar, bot deposu ve ayarlar değişmez.
 
 ## Communication rules
 - Modüller birbirini yalnızca **public arayüz** (`<module>/__init__.py` ile dışa açılanlar) üzerinden çağırır.
