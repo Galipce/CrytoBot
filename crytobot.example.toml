@@ -127,3 +127,14 @@ r = "2"
 # data_path = "crytobot-history.jsonl"   # veri dosyası; deponun ve kayıt dosyasının yolu olamaz
 # start = 2025-11-01T00:00:00Z           # dönem başı, UTC, tur aralığı sınırında
 # end = 2025-12-01T00:00:00Z             # dönem sonu (hariç); başlangıçtan sonra, indirme anından önce
+
+# Gölge filtre kaydı (spec 0052): yalnız paper `start` (`--trial` ve kanıtlı) okur; bölüm yoksa kayıt tutulmaz.
+# Her tamamlanan turda beyaz listedeki her çift için, skor kaydını (`news score`) ve haber kaydını yalnız okuyarak,
+# filtre açık olsaydı alımın bastırılıp bastırılmayacağını JSON Lines olarak yalnız ekler; bot kararları değişmez.
+# Durum: `python -m crytobot shadow status`. Bölüm varsa üç yol zorunludur; gölge kaydın yolu bot deposu, kayıt
+# dosyası, skor ya da haber kaydı, ayar dosyaları ya da haber ayarının kayıtları olamaz. Skorlayıcı aynı makinede
+# çalışmalıdır: son tur izi 30 dakikadan eskiyse satırlar `filtre yok: skorlayıcı durmuş` olur.
+# [shadow]
+# record_path = "crytobot-shadow.jsonl"  # gölge kayıt; yalnız eklenir, UTF-8
+# score_path = "crytobot-score.db"       # crytobot-news.toml [score] store_path
+# news_path = "crytobot-news.db"         # crytobot-news.toml [news] store_path
