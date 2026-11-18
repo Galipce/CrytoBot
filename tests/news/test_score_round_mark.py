@@ -4,6 +4,7 @@ reddeder, tam 15 kabul edilir. İz yalnız eklenir; 0051'de açılmış kayıtta
 oluşur. 0051'in testleri değişmeden geçer (aynı düzenek)."""
 
 import sqlite3
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 
@@ -19,20 +20,17 @@ def marks(run: Harness) -> list[tuple[str, str | None]]:
     return [(str(at), held) for at, held in run.rows("SELECT at, held FROM rounds ORDER BY id")]
 
 
-def test_round_mark_without_calls_quota_wait(tmp_path: Path) -> None:
-    run = Harness(tmp_path)
+def quota_wait(run: Harness) -> list[tuple[str, str | None]]:
     run.add("binance", "id:1", "News ABC", "t", START)
     run.replies = [failed("quota")]
     assert run.round()
-    quota_at = run.now
-    run.now = quota_at + timedelta(minutes=5)
+    run.now += timedelta(minutes=5)
     assert run.round()
     assert len(run.prompts) == 1  # the second round made no call
-    assert marks(run) == [(START.isoformat(), None), (run.now.isoformat(), "kota beklemesi")]
+    return [(START.isoformat(), None), (run.now.isoformat(), "kota beklemesi")]
 
 
-def test_round_mark_without_calls_daily_limit(tmp_path: Path) -> None:
-    run = Harness(tmp_path, score={"daily_call_limit": 1})
+def daily_limit(run: Harness) -> list[tuple[str, str | None]]:
     for index in range(2):
         run.add("coindesk", f"link:{index}", f"News {index}", "t", START)
     run.now = START + timedelta(minutes=1)
@@ -41,22 +39,33 @@ def test_round_mark_without_calls_daily_limit(tmp_path: Path) -> None:
     run.now = START + timedelta(minutes=6)
     assert run.round()
     assert len(run.prompts) == 1
-    assert marks(run) == [
-        (first.isoformat(), None),
-        (run.now.isoformat(), "günlük sınır dolu"),
-    ]
+    return [(first.isoformat(), None), (run.now.isoformat(), "günlük sınır dolu")]
 
 
-def test_round_mark_without_calls_nothing_pending(tmp_path: Path) -> None:
-    run = Harness(tmp_path)
+def nothing_pending(run: Harness) -> list[tuple[str, str | None]]:
     for minutes in (1, 6):
         run.now = START + timedelta(minutes=minutes)
         assert run.round()
     assert run.prompts == []
-    assert marks(run) == [
+    return [
         ((START + timedelta(minutes=1)).isoformat(), None),
         ((START + timedelta(minutes=6)).isoformat(), None),
     ]
+
+
+@pytest.mark.parametrize(
+    ("arrange", "score"),
+    [(quota_wait, {}), (daily_limit, {"daily_call_limit": 1}), (nothing_pending, {})],
+    ids=["quota-wait", "daily-limit", "nothing-pending"],
+)
+def test_round_mark_written_without_calls(
+    tmp_path: Path,
+    arrange: Callable[[Harness], list[tuple[str, str | None]]],
+    score: dict[str, object],
+) -> None:
+    run = Harness(tmp_path, score=score)
+    expected = arrange(run)
+    assert marks(run) == expected
 
 
 def test_round_mark_before_news_read(tmp_path: Path) -> None:

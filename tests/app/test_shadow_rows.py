@@ -2,7 +2,8 @@
 (var / yok ve nedeni / değerlendirilmedi ve nedeni) ve risk sonucu. Durdurma senaryoları gerçek
 turlarla kurulur; tur kodu değişmez."""
 
-from datetime import timedelta
+from collections.abc import Callable
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -103,34 +104,38 @@ def test_no_filter_row_has_no_missing() -> None:
     ] * 2
 
 
-def test_not_evaluated_with_halt_safe_mode(tmp_path: Path) -> None:
+def safe_mode(tmp_path: Path) -> tuple[TurnResult, datetime, BuyHalt]:
     bot = Bot(opened_store(tmp_path / "s.db"), settings=make_settings(PAIRS))
     unknown = Exchange(place={"cb-": OrderStatus.UNKNOWN})
     bot.turn({BTC: pair_market(), ETH: pair_market()}, exchange=unknown)
     later = NOW + MINUTE
     market = {pair: pair_market(price_at=later) for pair in PAIRS}
     result = bot.turn(market, now=later, exchange=unknown)  # safe mode: the buy path stops
-    assert BuyHalt.UNKNOWN_ORDERS in result.halts and result.buys == ()
-    assert technical(result, later) == {
-        BTC: ("değerlendirilmedi", "unknown_orders", None),
-        ETH: ("değerlendirilmedi", "unknown_orders", None),
-    }
+    return result, later, BuyHalt.UNKNOWN_ORDERS
 
 
-def test_not_evaluated_with_halt_stale_data(tmp_path: Path) -> None:
+def stale_data(tmp_path: Path) -> tuple[TurnResult, datetime, BuyHalt]:
     now = NOW + MINUTE
     bot = Bot(opened_store(tmp_path / "s.db"), settings=make_settings(PAIRS))
     stale = pair_market(price_at=now - MAX_PRICE_AGE - timedelta(microseconds=1))
     result = bot.turn({BTC: pair_market(price_at=now), ETH: stale}, now=now)
     assert result.halts == (BuyHalt.STALE_DATA,)
-    assert technical(result, now) == {
-        BTC: ("değerlendirilmedi", "stale_data", None),
-        ETH: ("değerlendirilmedi", "stale_data", None),
+    return result, now, BuyHalt.STALE_DATA
+
+
+@pytest.mark.parametrize("arrange", [safe_mode, stale_data], ids=["safe-mode", "stale-data"])
+def test_not_evaluated_with_halt(
+    tmp_path: Path, arrange: Callable[[Path], tuple[TurnResult, datetime, BuyHalt]]
+) -> None:
+    result, at, halt = arrange(tmp_path)
+    assert halt in result.halts and result.buys == ()
+    assert technical(result, at) == {
+        BTC: ("değerlendirilmedi", halt.value, None),
+        ETH: ("değerlendirilmedi", halt.value, None),
     }
 
 
-def test_kill_switch_risk_refusal(tmp_path: Path) -> None:
-    """Plan Risk 1 (a): kill switch alım yolunu durdurmaz; öneri risk reddiyle yazılır."""
+def kill_switch(tmp_path: Path) -> tuple[TurnResult, datetime]:
     store = opened_store(tmp_path / "bot.db")
     config = make_bot_config(store, tmp_path / "bot.log")
     bot = Bot(store, settings=config.turn)
@@ -145,10 +150,10 @@ def test_kill_switch_risk_refusal(tmp_path: Path) -> None:
         now=later,
     )
     assert BuyHalt.KILL_SWITCH in result.halts
-    assert technical(result, later)[ETH] == ("var", None, "ret: kill_switch_active")
+    return result, later
 
 
-def test_daily_loss_risk_refusal(tmp_path: Path) -> None:
+def daily_loss(tmp_path: Path) -> tuple[TurnResult, datetime]:
     settings = make_settings(PAIRS, limits=limits(daily_loss_limit=Decimal("0.01")))
     bot = Bot(opened_store(tmp_path / "s.db"), settings=settings)
     bot.turn({BTC: pair_market(), ETH: pair_market(FLAT)})
@@ -156,7 +161,21 @@ def test_daily_loss_risk_refusal(tmp_path: Path) -> None:
         {BTC: pair_market(price=Decimal(7), price_at=LATER), ETH: pair_market(price_at=LATER)},
         now=LATER,
     )
-    assert technical(result, LATER)[ETH] == ("var", None, "ret: daily_loss_limit")
+    return result, LATER
+
+
+@pytest.mark.parametrize(
+    ("arrange", "refusal"),
+    [(kill_switch, "ret: kill_switch_active"), (daily_loss, "ret: daily_loss_limit")],
+    ids=["kill-switch", "daily-loss"],
+)
+def test_kill_switch_and_daily_loss_risk_refusal(
+    tmp_path: Path, arrange: Callable[[Path], tuple[TurnResult, datetime]], refusal: str
+) -> None:
+    """Plan Risk 1 (a): kill switch ve günlük zarar limiti alım yolunu durdurmaz; strateji koşar,
+    öneri risk reddiyle yazılır."""
+    result, at = arrange(tmp_path)
+    assert technical(result, at)[ETH] == ("var", None, refusal)
 
 
 @pytest.mark.parametrize(
