@@ -18,6 +18,10 @@ Spec 0051: LLM olay skoru, gölge mod — `run_scoring` ileriye dönük kayıtta
 (`read_forward`) prompt'a (`build_prompt`, bağlam `load_context`) koyar, çağrıyı giriş noktasından
 alır (`ScoreParts.call`; `news` `llm`'i import etmez), yanıtı doğrular (`check_reply`) ve kendi
 yalnız eklenen kaydına (`ScoreStore`) yazar. Durum `score_status_lines` ile ağsız, LLM'siz okunur.
+
+Spec 0052: gölge filtre görünümü — `read_filter_view` skor ve haber kaydını yalnız okuyup bir paper
+turu anında coin başına filtre durumunu (`FilterState`) verir; skorlayıcı her turda canlılık izini
+(`ScoreStore.mark_round`) yazar. Bot görünümü giriş noktasının verdiği işlevle alır.
 """
 
 from crytobot.news._archive import (
@@ -79,6 +83,7 @@ from crytobot.news._library_sources import (
 from crytobot.news._parse import CatalogPage, ParseError, parse_binance_page
 from crytobot.news._score_config import (
     DAILY_CALL_HARD_CAP,
+    INTERVAL_CAP_MINUTES,
     ScoreConfig,
     ScoreConfigResult,
     load_score_config,
@@ -113,6 +118,17 @@ from crytobot.news._score_store import (
     read_score_snapshot,
 )
 from crytobot.news._score_validate import Checked, check_reply
+from crytobot.news._shadow_view import (
+    CoinFilter,
+    EventRef,
+    FilterState,
+    MissingCounts,
+    ScoreReadout,
+    base_of,
+    filter_view,
+    read_filter_view,
+    read_score_readout,
+)
 from crytobot.news._status import EMPTY, NEVER, status_lines
 from crytobot.news._store import (
     ForwardItem,
@@ -132,6 +148,7 @@ __all__: list[str] = [
     "FROM_ARCHIVE",
     "FROM_BOTH",
     "FROM_FORWARD",
+    "INTERVAL_CAP_MINUTES",
     "MIN_ARCHIVE_GAP_S",
     "MIN_INTERVAL_MINUTES",
     "NEVER",
@@ -157,16 +174,20 @@ __all__: list[str] = [
     "CatalogRun",
     "CatalogState",
     "Checked",
+    "CoinFilter",
     "CollectParts",
     "CollectionExit",
     "ContextError",
+    "EventRef",
     "EventScore",
     "Fetched",
+    "FilterState",
     "ForwardItem",
     "Hop",
     "Label",
     "LibraryAnnouncement",
     "LibrarySources",
+    "MissingCounts",
     "NewsConfig",
     "NewsConfigResult",
     "NewsItem",
@@ -182,6 +203,7 @@ __all__: list[str] = [
     "ScoreExit",
     "ScoreParts",
     "ScorePrompt",
+    "ScoreReadout",
     "ScoreReply",
     "ScoreResult",
     "ScoreSnapshot",
@@ -192,10 +214,12 @@ __all__: list[str] = [
     "StoreError",
     "StoreSnapshot",
     "archive_status_lines",
+    "base_of",
     "build_prompt",
     "check_reply",
     "context_fingerprint",
     "fetch_source",
+    "filter_view",
     "label",
     "load_archive_config",
     "load_context",
@@ -206,8 +230,10 @@ __all__: list[str] = [
     "parse_binance_page",
     "prepare_archive",
     "read_archive",
+    "read_filter_view",
     "read_forward",
     "read_library_sources",
+    "read_score_readout",
     "read_score_snapshot",
     "read_snapshot",
     "recovery_notice",
