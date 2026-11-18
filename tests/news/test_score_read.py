@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-import crytobot.news._score_read as score_read
 from crytobot.news import (
     EventScore,
     NewsItem,
@@ -71,9 +70,9 @@ def test_read_only_uri(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     def connect(database: str, **kwargs: object) -> sqlite3.Connection:
         seen.append((database, kwargs.get("timeout")))
-        return real(database, **kwargs)  # type: ignore[arg-type]
+        return real(database, **kwargs)
 
-    monkeypatch.setattr(score_read.sqlite3, "connect", connect)
+    monkeypatch.setattr(sqlite3, "connect", connect)
     before = (path.read_bytes(), news.read_bytes())
     assert read_score_record(str(path)) is not None
     assert read_news_sources(str(news)) == {}

@@ -77,4 +77,4 @@ def test_costs_and_gap_read() -> None:
     )
     assert result.config is not None
     assert result.config.request_gap_s == 3
-    assert (result.config.costs.fee, result.config.costs.slippage) == (Decimal("0.002"), 0)
+    assert (result.config.costs.fee, result.config.costs.slippage) == (Decimal("0.002"), Decimal(0))
