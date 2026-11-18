@@ -219,7 +219,7 @@ def price_needs(samples: Iterable[EventSample]) -> dict[str, tuple[Span, ...]]:
 
 
 @dataclass(frozen=True)
-class _Coin:
+class Series:
     """Bir örneğin kendi aralığındaki seri (review round 1 F-3): ATR ve sonuçlar yalnız o
     aralığın mumlarından; başka örneklerin aralıkları sonucu değiştirmez."""
 
@@ -234,15 +234,15 @@ class _Coin:
 FIRST_ATR: Final = ATR_PERIOD - 1
 
 
-def _prepare(candles: Sequence[Candle], costs: Costs) -> _Coin:
+def prepare_series(candles: Sequence[Candle], costs: Costs) -> Series:
     if not candles:
-        return _Coin((), (), (), (), ())
+        return Series((), (), (), (), ())
     series = PairSeries("", HOUR, tuple(candles), ())
     results = outcomes(series, costs, [""] * len(candles))
-    return _Coin(results.opens, results.buy, results.sell, results.entry, results.last_open)
+    return Series(results.opens, results.buy, results.sell, results.entry, results.last_open)
 
 
-def _base(coin: _Coin, low: int, high: int, reference: datetime) -> tuple[Fraction, Fraction]:
+def _base(coin: Series, low: int, high: int, reference: datetime) -> tuple[Fraction, Fraction]:
     signals = ups = downs = 0
     for index in range(low, high):
         last = coin.last_open[index]
@@ -253,40 +253,51 @@ def _base(coin: _Coin, low: int, high: int, reference: datetime) -> tuple[Fracti
         ups += up
         downs += bool(coin.sell[index])
     if signals == 0:  # pragma: no cover - 720 candles before the reference always count some
-        raise _Unmeasured(Reason.FEW_CANDLES)
+        raise Unmeasured(Reason.FEW_CANDLES)
     return Fraction(ups, signals), Fraction(downs, signals)
 
 
-class _Unmeasured(Exception):
+class Unmeasured(Exception):
     def __init__(self, reason: Reason) -> None:
         super().__init__(reason.value)
         self.reason = reason
 
 
-def _measure(sample: EventSample, coin: _Coin | None, has_pair: bool) -> SampleResult:
-    reference = sample.reference
-    assert reference is not None and sample.coin is not None  # checked by the caller
+@dataclass(frozen=True)
+class Measurement:
+    """Bir referans anın ölçümü (spec 0053 plan step 2: 0048 ile ileriye dönük ölçümün ortak
+    çekirdeği). `signal`: sinyal mumunun serideki konumu; giriş mumu `signal + 1`'dir."""
+
+    entry_time: datetime
+    entry_price: float | None
+    up: bool
+    down: bool
+    base_up: Fraction
+    base_down: Fraction
+    window_end: datetime
+    signal: int
+
+
+def measure_reference(reference: datetime, coin: Series | None, has_pair: bool) -> Measurement:
+    """Giriş mumu, isabet ve taban oran; ölçülemiyorsa `Unmeasured` (nedenin sırası `Reason`)."""
     if not has_pair or coin is None:
-        raise _Unmeasured(Reason.NO_PAIR)
+        raise Unmeasured(Reason.NO_PAIR)
     opens = coin.opens
     if not opens:
-        raise _Unmeasured(Reason.NO_PRICES)
+        raise Unmeasured(Reason.NO_PRICES)
     entry = bisect_right(opens, reference)
     if entry >= len(opens) or opens[entry] - reference > LATEST_ENTRY:
-        raise _Unmeasured(Reason.NO_ENTRY)
+        raise Unmeasured(Reason.NO_ENTRY)
     signal = entry - 1
     low = bisect_left(opens, reference - BASE_CANDLES * HOUR)
     high = bisect_left(opens, reference)
     if signal < FIRST_ATR or high - low < BASE_CANDLES or low < FIRST_ATR:
-        raise _Unmeasured(Reason.FEW_CANDLES)
+        raise Unmeasured(Reason.FEW_CANDLES)
     up, down, last = coin.buy[signal], coin.sell[signal], coin.last_open[signal]
     if up is None or last is None:
-        raise _Unmeasured(Reason.PAST_END)
+        raise Unmeasured(Reason.PAST_END)
     base_up, base_down = _base(coin, low, high, reference)
-    return SampleResult(
-        sample,
-        None,
-        None,
+    return Measurement(
         opens[entry],
         coin.entry[signal],
         up,
@@ -294,6 +305,25 @@ def _measure(sample: EventSample, coin: _Coin | None, has_pair: bool) -> SampleR
         base_up,
         base_down,
         last + HOUR,
+        signal,
+    )
+
+
+def _measure(sample: EventSample, coin: Series | None, has_pair: bool) -> SampleResult:
+    reference = sample.reference
+    assert reference is not None and sample.coin is not None  # checked by the caller
+    found = measure_reference(reference, coin, has_pair)
+    return SampleResult(
+        sample,
+        None,
+        None,
+        found.entry_time,
+        found.entry_price,
+        found.up,
+        found.down,
+        found.base_up,
+        found.base_down,
+        found.window_end,
     )
 
 
@@ -337,9 +367,9 @@ def measure_events(
         for coin, item in prices.items()
         if item.has_pair
     }
-    prepared: dict[tuple[str, datetime], _Coin] = {}
+    prepared: dict[tuple[str, datetime], Series] = {}
 
-    def own(coin: str, reference: datetime) -> _Coin | None:
+    def own(coin: str, reference: datetime) -> Series | None:
         if coin not in opens:
             return None
         span = sample_span(reference)
@@ -347,7 +377,7 @@ def measure_events(
         if key not in prepared:
             times = opens[coin]
             low, high = bisect_left(times, span.start), bisect_left(times, span.end)
-            prepared[key] = _prepare(prices[coin].candles[low:high], costs)
+            prepared[key] = prepare_series(prices[coin].candles[low:high], costs)
         return prepared[key]
 
     results: list[SampleResult] = []
@@ -364,7 +394,7 @@ def measure_events(
             result = _measure(
                 sample, own(sample.coin, sample.reference), known is not None and known.has_pair
             )
-        except _Unmeasured as unmeasured:
+        except Unmeasured as unmeasured:
             results.append(SampleResult(sample, unmeasured.reason, period))
             continue
         results.append(replace(result, period=period))
