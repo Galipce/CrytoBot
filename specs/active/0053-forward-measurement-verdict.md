@@ -90,8 +90,9 @@ Terimler:
   Okunan kayıtlar rapordan sonra değişmemiştir.
 - R-10 — **Ayar ve hatalar.** Rapor çıktı yolları skor kaydı, gölge kayıt, haber kaydı, arşiv, fiyat verisi, bot
   deposu, paper kanıt deposu ya da bir kayıt dosyasıyla (çözülmüş mutlak yollarla) aynıysa rapor başlamayı adıyla
-  reddeder ve hiçbir yere yazmaz. Skor kaydı yoksa rapor yine yazılır ve `hüküm yok: skor yok` der (G-7). Okunamayan
-  (bozuk) bir kayıt satırı raporu durdurmaz; atlanan satır sayısı kayda göre yazılır.
+  reddeder ve hiçbir yere yazmaz. Skor kaydı yoksa rapor yine yazılır ve `hüküm yok: skor yok` der (G-7); istisna:
+  gölge kayıtta teknik "al" varsa fiyat verisi yine gerekir ve fiyat deposu yoksa rapor
+  `fiyat verisi yok: <yol>; önce forward download` ile reddeder (plan A-5). Okunamayan (bozuk) bir kayıt satırı raporu durdurmaz; atlanan satır sayısı kayda göre yazılır.
 
 ## User experience
 none — no user interface (CLI). Akış: sahip fiyatları indirir → rapor komutunu (isteğe bağlı rapor anıyla)
