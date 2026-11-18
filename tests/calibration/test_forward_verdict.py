@@ -115,6 +115,25 @@ def test_triple_change_resets_clock() -> None:
     assert previous.first_at == old[0].at and previous.last_at == old[-1].at
 
 
+def test_triple_return_counts_from_first_result() -> None:
+    """R-5 (plan A-4): üçlü A → B → A dönerse A'nın saati ilk A sonucundan sayılır."""
+    hours, prices = spaced(3)
+    first_a = result(1, scored_hour(hours[0]))
+    middle_b = result(2, scored_hour(hours[1]), OTHER_TRIPLE)
+    back_a = result(3, scored_hour(hours[2]))
+    report = first_a.at + 90 * DAY
+    measured = measure_forward(
+        inputs([first_a, middle_b, back_a], [event(1), event(2), event(3)]),
+        report,
+        {"BTC": prices},
+        NO_COSTS,
+    )
+    assert measured.current == first_a.triple and measured.current_first == first_a.at
+    assert measured.verdict.line == "hüküm yok: olay yetersiz (2/30) — kalan 0 gün, 28 örnek"
+    (previous,) = measured.old
+    assert previous.triple == OTHER_TRIPLE and previous.judged is False
+
+
 def test_old_triple_out_of_verdict() -> None:
     hours, prices = spaced(31)
     old, old_events = spaced_inputs(hours[:30], triple=OTHER_TRIPLE)
