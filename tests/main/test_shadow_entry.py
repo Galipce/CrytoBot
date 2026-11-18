@@ -18,7 +18,9 @@ import pytest
 import crytobot.__main__ as entry
 from crytobot.__main__ import EXIT_OK, EXIT_REFUSED, StoreLock, run
 from crytobot.app import StopRequest, load_shadow_config
+from tests.main.test_backtest_entry import Backtester
 from tests.main.test_entry import Bot, config_text, event_lines
+from tests.main.test_live_paper_proof_entry import SpyClient, live_dir, start_live
 
 
 def toml(value: str) -> str:
@@ -199,25 +201,49 @@ def spy_loader(monkeypatch: pytest.MonkeyPatch) -> list[object]:
     return calls
 
 
-def test_live_start_ignores_shadow(bot: ShadowBot, monkeypatch: pytest.MonkeyPatch) -> None:
+def colliding_section(root: Path) -> str:
+    """`record_path` deponun kendisi: paper başlatma bunu reddeder (R-8); okunursa tuzak çalışır."""
+    paths = {
+        "record_path": (root / "bot.db").as_posix(),
+        "score_path": (root / "score.db").as_posix(),
+        "news_path": (root / "news.db").as_posix(),
+    }
+    return "\n[shadow]\n" + "".join(f"{k} = {toml(v)}\n" for k, v in paths.items())
+
+
+def untimed(console: str) -> list[str]:
+    """Gerçek saatle koşan satırların zaman damgası atılır."""
+    return [row.split(" ", 1)[-1] for row in console.splitlines()]
+
+
+def test_live_start_ignores_shadow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """AC-7 (fix-1, M-1): live başlatma bütün kapılardan geçer; bölüm okunmaz, çakışma reddetmez."""
     calls = spy_loader(monkeypatch)
-    bot.shadow["record_path"] = bot.path("bot.db")  # a collision a paper start would refuse
-    results = []
-    for section in (False, True):
-        bot.write_all(section=section, mode="live")
-        results.append(bot.run("start", "--live"))
-    assert results[0] == results[1]
+    config, _paper = live_dir(tmp_path)
+    plain = config.read_text(encoding="utf-8")
+    code, without = start_live(config, SpyClient(), stopped=True)
+    assert code == EXIT_OK, without
+    assert " başlatma başladı:" in without
+    config.write_text(plain + colliding_section(tmp_path), encoding="utf-8")
+    code, with_section = start_live(config, SpyClient(), stopped=True)
+    assert code == EXIT_OK, with_section
+    assert untimed(with_section) == untimed(without)
     assert calls == []
+    assert "gölge" not in (tmp_path / "bot.log").read_text(encoding="utf-8")
 
 
-def test_backtest_ignores_shadow(bot: ShadowBot, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_backtest_ignores_shadow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """AC-7 (fix-1, M-1): geçerli ayarla koşan backtest; bölüm varken konsol ve rapor aynı."""
     calls = spy_loader(monkeypatch)
-    bot.shadow["record_path"] = bot.path("bot.db")
-    results = []
-    for section in (False, True):
-        bot.write_all(section=section)
-        results.append(bot.run("backtest"))
-    assert results[0] == results[1]
+    tester = Backtester(tmp_path)
+    plain = tester.run()
+    assert plain[0] == EXIT_OK, plain[1]
+    report = tester.report.read_bytes()
+    tester.report.unlink()  # an existing report is never overwritten
+    text = tester.bot.config_path.read_text(encoding="utf-8")
+    tester.bot.config_path.write_text(text + colliding_section(tmp_path), encoding="utf-8")
+    assert tester.run() == plain
+    assert tester.report.read_bytes() == report
     assert calls == []
 
 

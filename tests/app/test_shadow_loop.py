@@ -8,6 +8,7 @@ import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ from crytobot.app import (
     ShadowConfig,
     ShadowParts,
     TurnOutcome,
+    prepare_live_store,
 )
 from crytobot.market_data import MarketRead
 from crytobot.news import (
@@ -36,6 +38,8 @@ from crytobot.persistence import create_store
 from crytobot.reporting import ReportingService, TelegramConfig
 from tests.app.helpers import BTC, CROSS, ETH, make_settings, opened_store
 from tests.app.loop_fakes import START, Harness, harness, pair_read
+from tests.app.test_live_loop import MockLiveExchange
+from tests.app.test_live_start import FakeLiveClient
 
 TELEGRAM = TelegramConfig(enabled=True, bot_token="token-123", chat_id="chat-456")
 SECRET = "gizli-yol-ve-anahtar"
@@ -291,3 +295,32 @@ def test_score_and_news_unchanged_after_turn(tmp_path: Path) -> None:
     assert first[BTC]["events"] == [{"news_id": 1, "severity": 3}]
     assert first[ETH]["state"] == "bastırılmazdı"
     assert first[BTC]["technical_buy"] == "var" and first[BTC]["risk"] == "onay"  # still bought
+
+
+def run_live(root: Path, shadow: ShadowParts | None) -> tuple[LoopExit, list[str], list[str]]:
+    """Live modda iki tur (sahte canlı borsa): çıkış, satırlar, depo dökümü."""
+    root.mkdir(parents=True, exist_ok=True)
+    store = root / "bot.db"
+    prepare_live_store(str(store), START, live_client=FakeLiveClient(free_balance=Decimal(1000)))
+    base = harness(store, turn=make_settings(PAIRS), closes=CROSS, stop_after=2)
+    bot = ShadowHarness(
+        base.store,
+        replace(base.config, mode="live"),
+        closes=CROSS,
+        stop_after=2,
+        shadow=shadow,
+    )
+    exit_ = bot.run(exchange=MockLiveExchange())  # type: ignore[arg-type]
+    lines = [text.replace(str(store), "<depo>") for text in bot.lines]
+    return exit_, lines, dump(store)
+
+
+def test_live_loop_never_calls_shadow(tmp_path: Path) -> None:
+    """AC-7 (fix-1, M-1): live döngüde parçalar verilse de görünüm ve yazma hiç çağrılmaz; tur
+    sonucu, satırlar ve depo gölgesiz koşuyla aynı (`_loop.py` mod koruması)."""
+    plain = run_live(tmp_path / "plain", None)
+    record = Record()
+    shadowed = run_live(tmp_path / "shadow", record.parts)
+    assert plain[0].turns == 2
+    assert record.views == [] and record.appends == 0
+    assert shadowed == plain
