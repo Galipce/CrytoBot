@@ -1,0 +1,25 @@
+# CrytoBot ileriye dönük ölçüm raporu ayarı örneği (spec 0053). Kopyala: crytobot-forward.toml
+# (çalışma dizininde, git'e girmez). Botun, haberin ve events ayarından ayrıdır; hiçbiri değişmez.
+# Skor kaydı ve haber kaydı ([score], [news]) crytobot-news.toml'dan, beyaz liste, gölge kayıt
+# ([shadow]) ve bot yolları crytobot.toml'dan yalnız okunur.
+#
+# `python -m crytobot forward download` skor kaydındaki olumsuz olay skorlarının ve gölge kayıttaki
+# teknik "al"ların 1h mumlarını Binance'in genel piyasa verisinden, vermezse herkese açık geçmiş veri
+# arşivinden anahtarsız indirir (events download'ın adımı); yeniden çalıştırılınca yalnız eksikleri
+# ister. `python -m crytobot forward report [--at YYYY-MM-DDTHH:MM:SSZ]` ağa ve LLM'e çıkmadan,
+# kilit almadan ölçer; rapor ve örnek dosyası her koşuda yeniden yazılır (atomik). Hüküm kuralı spec
+# 0053'te ön kayıtlıdır (90 gün, 30 örnek, 5 puan) ve buradan ayarlanamaz. Hüküm bilgi verir: emir,
+# mod, beyaz liste ve ayar değişmez.
+#
+# Çıktı yolları skor, gölge, haber kaydı, arşiv, kayıt dosyaları, bot deposu, paper kanıt deposu ve
+# ayar dosyaları olamaz, birbirlerinden de farklıdır.
+
+[forward]
+price_store_path = "C:/CrytoBot-data/forward-prices.db"     # fiyat verisi (kendi SQLite deposu)
+report_path = "C:/CrytoBot-data/forward-report.txt"         # rapor (metin)
+samples_path = "C:/CrytoBot-data/forward-samples.jsonl"     # örnek dosyası (JSON Lines)
+request_gap_s = 1             # iki istek arası en az saniye (tamsayı, en az 1)
+# Ölçüm maliyetleri (0048'in varsayılanları; oran, metin): hedef mesafesinin alt sınırı.
+fee = "0.001"
+slippage = "0.001"
+spread = "0.0005"

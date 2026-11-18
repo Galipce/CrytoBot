@@ -63,6 +63,7 @@ from crytobot.calibration._forward import (
     measure_forward,
     price_coins,
     report_needs,
+    shadow_buys,
 )
 from crytobot.calibration._forward_report import (
     SAMPLES_FORMAT,
@@ -223,6 +224,7 @@ __all__ = [
     "select",
     "setting_label",
     "settings_text",
+    "shadow_buys",
     "signals",
     "stage_one",
     "table_rows",

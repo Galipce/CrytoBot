@@ -22,6 +22,10 @@ yalnız eklenen kaydına (`ScoreStore`) yazar. Durum `score_status_lines` ile a�
 Spec 0052: gölge filtre görünümü — `read_filter_view` skor ve haber kaydını yalnız okuyup bir paper
 turu anında coin başına filtre durumunu (`FilterState`) verir; skorlayıcı her turda canlılık izini
 (`ScoreStore.mark_round`) yazar. Bot görünümü giriş noktasının verdiği işlevle alır.
+
+Spec 0053: ileriye dönük ölçümün okuyucuları — `read_score_record` skor kaydının sonuçlarını ve olay
+skorlarını, `read_news_sources` haber kaydının kaynak adlarını `mode=ro`, kilitsiz okur; bozuk satır
+atlanır ve sayılır.
 """
 
 from crytobot.news._archive import (
@@ -97,6 +101,13 @@ from crytobot.news._score_prompt import (
     build_prompt,
     context_fingerprint,
     load_context,
+)
+from crytobot.news._score_read import (
+    EventRow,
+    ScoreRecord,
+    ScoreRow,
+    read_news_sources,
+    read_score_record,
 )
 from crytobot.news._score_run import (
     ScoreCall,
@@ -179,6 +190,7 @@ __all__: list[str] = [
     "CollectionExit",
     "ContextError",
     "EventRef",
+    "EventRow",
     "EventScore",
     "Fetched",
     "FilterState",
@@ -204,8 +216,10 @@ __all__: list[str] = [
     "ScoreParts",
     "ScorePrompt",
     "ScoreReadout",
+    "ScoreRecord",
     "ScoreReply",
     "ScoreResult",
+    "ScoreRow",
     "ScoreSnapshot",
     "ScoreStore",
     "ScoreStoreError",
@@ -233,7 +247,9 @@ __all__: list[str] = [
     "read_filter_view",
     "read_forward",
     "read_library_sources",
+    "read_news_sources",
     "read_score_readout",
+    "read_score_record",
     "read_score_snapshot",
     "read_snapshot",
     "recovery_notice",
