@@ -1,6 +1,6 @@
 # Spec 0053 — İleriye dönük ölçüm raporu ve hüküm
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0053-plan.md`
 - Self-critique: done
@@ -119,44 +119,44 @@ der; sessiz boşluk yok, plan Risk 2). Komut adları plan aşamasında belirleni
   yalnız okur ve rapor yazar.
 
 ## Acceptance criteria
-- [ ] AC-1 — Örnek seçimi: olumsuz yön şiddet 2 ve 3 örnek olur; şiddet 1, olumlu ve belirsiz yön örnek olmaz;
+- [x] AC-1 — Örnek seçimi: olumsuz yön şiddet 2 ve 3 örnek olur; şiddet 1, olumlu ve belirsiz yön örnek olmaz;
   rapor anından sonraki skor girmez; skor anındaki beyaz liste gölge kayıttaki son turdan (eşit an dahil), tur yoksa
   ayardan alınır.
-- [ ] AC-2 — Giriş mumu ve isabet: giriş mumu skor anından kesin sonra açılan ilk 1h mumdur, tam skor anında açılan
+- [x] AC-2 — Giriş mumu ve isabet: giriş mumu skor anından kesin sonra açılan ilk 1h mumdur, tam skor anında açılan
   değildir; 1 saatten geç açılan mum `giriş mumu yok ya da geç` olur; düşüş isabeti 24. mumda hedefe ulaşan için var,
   25. mumda yok; stopa önce değen ve aynı mumda iki sınıra değen isabetsizdir; 2×ATR maliyetten küçükse hedef
   maliyettir; yükseliş isabeti ters yönde aynı kuraldır.
-- [ ] AC-3 — Taban oran skor anından önceki 720 mumla, aynı kuralla hesaplanır; penceresi skor anını aşan mum
+- [x] AC-3 — Taban oran skor anından önceki 720 mumla, aynı kuralla hesaplanır; penceresi skor anını aşan mum
   sayılmaz; 719 mumla `mum yetmiyor` olur; küme taban oranı örnek taban oranlarının ortalamasıdır.
-- [ ] AC-4 — Ölçülmeme: `ölçüm bekliyor`, `giriş mumu yok ya da geç`, `fiyat verisi yok`, `çift yok`, `mum yetmiyor`
+- [x] AC-4 — Ölçülmeme: `ölçüm bekliyor`, `giriş mumu yok ya da geç`, `fiyat verisi yok`, `çift yok`, `mum yetmiyor`
   her biri ayrı örnekte adıyla sayılır ve hiçbir orana girmez; örtüşen örnek gösterilir ama hükme girmez.
-- [ ] AC-5 — Hüküm sırası: skor yok; 89 gün 23 saat → `süre yetersiz`, tam 90 gün geçer; 29 örnek → `olay yetersiz`,
+- [x] AC-5 — Hüküm sırası: skor yok; 89 gün 23 saat → `süre yetersiz`, tam 90 gün geçer; 29 örnek → `olay yetersiz`,
   30 geçer; fark tam +5 puan → `olumlu`; +4.9 → `olumsuz` değer ve eşikle; `hüküm yok` kalan gün ve örneği yazar.
-- [ ] AC-6 — Üçlü: üçlü değişince eski üçlü `hüküm dışı` olur ve güncel üçlünün 90 gün / 30 örnek şartı kendi ilk
+- [x] AC-6 — Üçlü: üçlü değişince eski üçlü `hüküm dışı` olur ve güncel üçlünün 90 gün / 30 örnek şartı kendi ilk
   sonucundan sayılır; eski üçlünün örnekleri hükmü etkilemez.
-- [ ] AC-7 — Tablolar: R-4'ün bütün kalemleri (olağandışı çıkarılmış oranlar dahil) yazılır ve olağandışı oranlar
+- [x] AC-7 — Tablolar: R-4'ün bütün kalemleri (olağandışı çıkarılmış oranlar dahil) yazılır ve olağandışı oranlar
   hükmü değiştirmez; R-6 yardımcı tablosu beyaz liste dışı coinleri gösterir ve hükmü değiştirmez; R-7 gölge bölümü
   bütün kalemleriyle yazılır, gölge kayıt yokken "gölge kayıt yok" der ve hüküm aynıdır.
-- [ ] AC-8 — Yeniden üretim ve dosya: aynı girdiler ve rapor anıyla iki koşu bayt bayt aynı rapor ve örnek dosyası
+- [x] AC-8 — Yeniden üretim ve dosya: aynı girdiler ve rapor anıyla iki koşu bayt bayt aynı rapor ve örnek dosyası
   üretir (üretim anı satırı hariç); örnek dosyası R-2'nin bütün alanlarını taşır.
-- [ ] AC-9 — Sınır: rapor ağa ve LLM'e çıkmaz, kilit almaz; skorlayıcı ve bot kilitliyken çalışır; okunan kayıtlar
+- [x] AC-9 — Sınır: rapor ağa ve LLM'e çıkmaz, kilit almaz; skorlayıcı ve bot kilitliyken çalışır; okunan kayıtlar
   rapordan sonra bayt bayt aynıdır; bot, skorlayıcı, toplayıcı ve mevcut komutların bugünkü testleri değiştirilmeden
   geçer.
-- [ ] AC-10 — Ayar ve hata: R-10'daki her yol çakışması adıyla reddeder ve hiçbir yere yazmaz; skor kaydı yokken rapor
+- [x] AC-10 — Ayar ve hata: R-10'daki her yol çakışması adıyla reddeder ve hiçbir yere yazmaz; skor kaydı yokken rapor
   `hüküm yok: skor yok` ile yazılır; bozuk satır atlanır ve kayda göre sayılır.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed (`docs/commands.md`, `docs/architecture.md`, örnek ayar)
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed (`docs/commands.md`, `docs/architecture.md`, örnek ayar)
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 3 (BUILD adım 1: Risk 1, 2 metni; fix-1: R-5 A → B → A, R-10 G-7 istisnası) |
+| Fix rounds | 2 (fix-1: review R1-1/2/3/6; fix-2: VERIFY V-1, yalnız test) |
+| Review findings: real / noise / deferred | 5 / 1 / 2 (round 1: R1-1, R1-2, R1-3, R1-6 real, R1-7 noise, R1-4 → B-98, R1-5 → B-99; VERIFY: V-1 real) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (ship anında) |
