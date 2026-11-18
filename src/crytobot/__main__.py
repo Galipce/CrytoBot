@@ -1319,10 +1319,11 @@ ForwardSetup = tuple[ForwardConfig, ScoreConfig, tuple[str, ...], ShadowConfig |
 
 
 def _forward_config(
-    command: str, paths: tuple[Path, Path, Path], output: Output, clock: Clock
+    command: str, paths: tuple[Path, Path, Path, Path], output: Output, clock: Clock
 ) -> ForwardSetup | None:
-    """Spec 0053 AC-10, plan Risk 6, 10: hiçbir dosyaya dokunmadan, ilk sorun adıyla."""
-    forward_path, news_path, bot_path = paths
+    """Spec 0053 AC-10, plan Risk 6, 10: hiçbir dosyaya dokunmadan, ilk sorun adıyla. Korunanlar
+    skorlayıcının bağlam dosyalarını ve 0048'in çıktılarını da içerir (review R1-3)."""
+    forward_path, news_path, bot_path, events_path = paths
 
     def refuse(text: str) -> None:
         output.say(f"forward {command}: reddedildi: {text}")
@@ -1361,9 +1362,14 @@ def _forward_config(
     protected = (
         score.store_path,
         score.log_path,
+        score.calibration_report_path,
+        score.library_path,
         score.news.store_path,
         score.news.log_path,
         *_raw_paths(news_document, "news", ("archive_store_path", "archive_log_path")),
+        *_raw_paths(
+            _load_toml(events_path), "events", ("price_store_path", "report_path", "library_path")
+        ),
         *(() if shadow is None else (shadow.record_path,)),
         bot.config.store_path,
         bot.config.log_path,
@@ -1562,7 +1568,7 @@ def _forward_download(
 
 def _forward(
     argv: Sequence[str],
-    paths: tuple[Path, Path, Path],
+    paths: tuple[Path, Path, Path, Path],
     console: TextIO,
     clock: Clock,
     stop: StopRequest,
@@ -1933,7 +1939,7 @@ def run(
     if argv and argv[0] == "forward":
         return _forward(
             list(argv[1:]),
-            (forward_config_path, news_config_path, config_path),
+            (forward_config_path, news_config_path, config_path, events_config_path),
             console,
             clock,
             stop,

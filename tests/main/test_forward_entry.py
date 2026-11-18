@@ -87,7 +87,17 @@ COLLISIONS = [
     ("report_path", "out/prices.db"),
     ("price_store_path", "score.db"),
     ("price_store_path", "./out/../news.db"),
+    ("report_path", "events-report.txt"),
+    ("samples_path", "events-library.jsonl"),
+    ("price_store_path", "events-prices.db"),
+    ("report_path", "events-out.txt"),
+    ("samples_path", "events-lib.jsonl"),
 ]
+EVENTS_TOML = """[events]
+price_store_path = "{root}/events-prices.db"
+report_path = "{root}/events-out.txt"
+library_path = "{root}/events-lib.jsonl"
+"""
 
 
 @pytest.mark.parametrize("command", ["download", "report"])
@@ -98,6 +108,8 @@ def test_output_path_collisions_refused_nothing_written(
     world = World(tmp_path)
     world.write_bot(stage=f'"{(tmp_path / "paper.db").as_posix()}"')
     world.write_forward(**{key: f'"{(tmp_path / target).as_posix()}"'})
+    events = EVENTS_TOML.format(root=tmp_path.as_posix())
+    (tmp_path / "crytobot-events.toml").write_text(events, encoding="utf-8")
     before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
 
     assert world.run("forward", command) == EXIT_REFUSED
