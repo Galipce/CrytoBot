@@ -72,7 +72,8 @@ def test_verdict_table_items() -> None:
         "olay türü: hack=3",
         "şiddet: 2=3",
         "coin: BTC=3",
-        "olağandışı kuralı: a, c — b hacim yok, d beş çift yok",
+        "olağandışı kuralı: a, c — b hacim yok, d beş çift yok,"
+        " c pencerenin son 3 mumunda sonraki mumları göremez",
         "skor kaydı: /x/score.db atlanan satır=2",
         "gölge kayıt: /x/shadow.jsonl bozuk satır=1",
         "maliyet: ücret=0 slippage=0 spread=0",

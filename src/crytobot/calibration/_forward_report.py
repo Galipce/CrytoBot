@@ -38,7 +38,10 @@ from crytobot.calibration._tuning import percent, points
 SAMPLES_FORMAT: Final = "crytobot-forward-samples"
 SAMPLES_VERSION: Final = 1
 NO_SHADOW: Final = "gölge kayıt yok"
-UNUSUAL_NOTE: Final = "olağandışı kuralı: a, c — b hacim yok, d beş çift yok"
+UNUSUAL_NOTE: Final = (
+    "olağandışı kuralı: a, c — b hacim yok, d beş çift yok,"
+    " c pencerenin son 3 mumunda sonraki mumları göremez"
+)
 
 
 @dataclass(frozen=True)
