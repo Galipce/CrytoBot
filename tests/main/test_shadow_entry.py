@@ -18,6 +18,8 @@ import pytest
 import crytobot.__main__ as entry
 from crytobot.__main__ import EXIT_OK, EXIT_REFUSED, StoreLock, run
 from crytobot.app import StopRequest, load_shadow_config
+from crytobot.app._shadow_status import STATES
+from crytobot.news import FilterState
 from tests.main.test_backtest_entry import Backtester
 from tests.main.test_entry import Bot, config_text, event_lines
 from tests.main.test_live_paper_proof_entry import SpyClient, live_dir, start_live
@@ -245,6 +247,12 @@ def test_backtest_ignores_shadow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert tester.run() == plain
     assert tester.report.read_bytes() == report
     assert calls == []
+
+
+def test_status_states_match_filter_states() -> None:
+    """L-1 (fix-1): `shadow status`'un tanıdığı durumlar görünümün durumlarıyla aynı. R-3k ikisini
+    ayrı tutar; ayrışırsa gerçek satırlar sessizce bozuk sayılırdı."""
+    assert sorted(STATES) == sorted(state.value for state in FilterState)
 
 
 def test_status_no_lock_no_network(bot: ShadowBot, monkeypatch: pytest.MonkeyPatch) -> None:
