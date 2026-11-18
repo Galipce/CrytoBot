@@ -17,7 +17,7 @@ import pytest
 
 import crytobot.__main__ as entry
 from crytobot.__main__ import EXIT_OK, EXIT_REFUSED, StoreLock, run
-from crytobot.app import StopRequest
+from crytobot.app import StopRequest, load_shadow_config
 from tests.main.test_entry import Bot, config_text, event_lines
 
 
@@ -189,7 +189,7 @@ def test_missing_shadow_key_refused_by_name(bot: ShadowBot) -> None:
 
 def spy_loader(monkeypatch: pytest.MonkeyPatch) -> list[object]:
     calls: list[object] = []
-    real = entry.load_shadow_config
+    real = load_shadow_config
 
     def spy(document: object) -> Any:
         calls.append(document)
