@@ -1,6 +1,6 @@
 # Spec 0052 — Gölge filtre: "bastırılırdı" kaydı
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0052-plan.md`
 - Self-critique: done
@@ -99,50 +99,50 @@ satırları), kayıt yok ("henüz gölge kayıt yok"). Komut ve bölüm adları 
   (`docs/security.md`: LLM çıktısı aksiyon tetiklemez) geçerlidir.
 
 ## Acceptance criteria
-- [ ] AC-1 — Ayar varken tamamlanan bir paper turunda beyaz listedeki her coin için R-2'nin bütün alanlarıyla tam bir
+- [x] AC-1 — Ayar varken tamamlanan bir paper turunda beyaz listedeki her coin için R-2'nin bütün alanlarıyla tam bir
   satır yazılır; teknik al çıkan coinde risk sonucu da yazılır; ayar yokken hiçbir satır yazılmaz ve tur bugünkü gibi
   geçer.
-- [ ] AC-2 — Filtre durumu: olumsuz olay (yön olumsuz, şiddet 2 ve 3) → `bastırılırdı`; şiddet 1, yön olumlu ya da
+- [x] AC-2 — Filtre durumu: olumsuz olay (yön olumsuz, şiddet 2 ve 3) → `bastırılırdı`; şiddet 1, yön olumlu ya da
   belirsiz, beyaz liste dışı coin, başka coin ya da ilk görme anı tur anından 24 saatten fazla önce olan haber →
   bastırmaz; tam 24 saat sınırı sayılır; coin eşleşmesi taban varlığa birebirdir.
-- [ ] AC-3 — Look-ahead yok: skor anı tur anından sonra olan olumsuz olay o turda sayılmaz, eşit olan sayılır; ilk
+- [x] AC-3 — Look-ahead yok: skor anı tur anından sonra olan olumsuz olay o turda sayılmaz, eşit olan sayılır; ilk
   görme anı tur anından sonra olan haber pencereye girmez.
-- [ ] AC-4 — Eksik bilgi: penceredeki bekleyen, şema dışı ve bayat haberler ayrı sayılır; olumsuz olay yokken durum
+- [x] AC-4 — Eksik bilgi: penceredeki bekleyen, şema dışı ve bayat haberler ayrı sayılır; olumsuz olay yokken durum
   `bastırılmazdı — eksik bilgi`, olumsuz olay varken `bastırılırdı` olur; kota beklemesi ve günlük sınır engeli
   satırda görünür.
-- [ ] AC-5 — `filtre yok`: skor kaydı yok, okunamıyor, başlangıç anı tur anından sonra, haber kaydı yok ya da
+- [x] AC-5 — `filtre yok`: skor kaydı yok, okunamıyor, başlangıç anı tur anından sonra, haber kaydı yok ya da
   okunamıyor, skorlayıcının son tur anı 30 dakikadan eski ya da yok — her biri ayrı örnekte adıyla `filtre yok` olur;
   tam 30 dakika `filtre yok` değildir; bu durumlarda tur kararları değişmez.
-- [ ] AC-6 — Canlılık izi: skorlayıcı çağrı yapmayan turda da tur anını yazar; tur aralığı 15 dakikayı aşan ayarla
+- [x] AC-6 — Canlılık izi: skorlayıcı çağrı yapmayan turda da tur anını yazar; tur aralığı 15 dakikayı aşan ayarla
   başlamayı adıyla reddeder, tam 15 dakika kabul edilir; 0051'in bugünkü testleri değiştirilmeden geçer.
-- [ ] AC-7 — Gölge mod: aynı girdilerle gölge ayarlı ve ayarsız paper turları aynı alımları, kapanışları, risk
+- [x] AC-7 — Gölge mod: aynı girdilerle gölge ayarlı ve ayarsız paper turları aynı alımları, kapanışları, risk
   kararlarını, bildirimleri, tur sonucunu ve bot deposu içeriğini üretir — `bastırılırdı` durumunda da; live ve
   backtest ayar varken değişmeden geçer (bugünkü testleri değiştirilmeden); skor ve haber kaydı turdan sonra
   değişmemiştir.
-- [ ] AC-8 — Alım aşamasına gelmeyen turda (güvenli mod, bayat veri) satırlar yazılır ve teknik al "değerlendirilmedi"
+- [x] AC-8 — Alım aşamasına gelmeyen turda (güvenli mod, bayat veri) satırlar yazılır ve teknik al "değerlendirilmedi"
   ile nedenini taşır; kill switch ve günlük zarar limitinde alım yolu durmaz (strateji koşar): satır stratejinin
   sonucunu, öneri varsa risk ret nedenini taşır; reddedilen ya da tamamlanmayan turda satır yazılmaz. (Plan 0052
   Risk 1, R-10 kararı (a): Galip Badem, 2026-11-18 — kodda kill switch bilgi amaçlıdır, günlük zarar limiti risk
   reddidir.)
-- [ ] AC-9 — Kayıt hatası: gölge kayıt yazılamayınca tur sonucu ve bot deposu değişmez, bot kayıt dosyasına hatanın
+- [x] AC-9 — Kayıt hatası: gölge kayıt yazılamayınca tur sonucu ve bot deposu değişmez, bot kayıt dosyasına hatanın
   adı yazılır, sonraki tur yeniden dener; kayıt yalnız eklenir (var olan satır değişmez).
-- [ ] AC-10 — Ayar ve durum: R-8'deki her yol çakışması adıyla reddeder ve hiçbir yere yazmaz; durum çıktısı ağa ve
+- [x] AC-10 — Ayar ve durum: R-8'deki her yol çakışması adıyla reddeder ve hiçbir yere yazmaz; durum çıktısı ağa ve
   LLM'e çıkmadan, kilit almadan R-9'un bütün kalemlerini gösterir, kayıt yokken "henüz gölge kayıt yok" der.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed (`docs/architecture.md`: `app` turunun skor ve haber
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed (`docs/architecture.md`: `app` turunun skor ve haber
       kaydını yalnız okuması, gölge kayıt ve import kuralı; `crytobot.example.toml`, `crytobot-news.example.toml`
       tur aralığı üst sınırı)
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 1 (plan Risk 1, R-10: AC-8 metni BUILD adım 1'de düzeltildi) |
+| Fix rounds | 1 |
+| Review findings: real / noise / deferred | 4 / 0 / 0 (round 1: M-1, L-1 real; round 2: Info-1, Info-2 real) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (ship anında) |
