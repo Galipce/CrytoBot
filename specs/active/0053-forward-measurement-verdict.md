@@ -73,7 +73,8 @@ Terimler:
   (nedene göre) ve beyaz liste dışı örnek sayıları; kaynağa, olay türüne, şiddete ve coine göre dağılım.
 - R-5 — **Üçlü ayrımı (Q-4).** Her üçlü kendi tablosunu alır (ilk ve son skor anı, R-4'ün sayıları). Güncel üçlü
   dışındakiler `hüküm dışı` diye işaretlenir. Güncel üçlü değiştiğinde 90 gün ve 30 örnek şartı yeni üçlünün ilk
-  sonucundan yeniden sayılır.
+  sonucundan yeniden sayılır. Bir üçlünün ilk sonucu o üçlünün en eski "skorlandı" sonucudur: üçlü A → B → A dönerse
+  A'nın saati ilk A sonucundan sayılır (plan A-4).
 - R-6 — **Yardımcı tablo (Q-5).** Güncel üçlünün, beyaz liste dışı da dahil USDT spot çifti olan bütün coinlerdeki
   örnekleri, aynı kuralla ayrı bir tabloda, `hüküm dışı` başlığıyla gösterilir. Bu tablo hükmü etkilemez; beyaz liste
   hiçbir koşulda kendiliğinden genişlemez.
