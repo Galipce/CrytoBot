@@ -12,6 +12,10 @@ ilk görme anı ve kimlik sırasıyla (tekrar tekrar başarısız olan haber kuy
 Geçici hata (zaman aşımı, oturum yok, kota, tanınmayan) sonuç yazmaz, turu bitirir; haber sonraki
 turda yeniden denenir. Kayıt dosyasına haber metni, prompt ve yanıt yazılmaz: yalnız kimlik, sonuç,
 süre, sayılar ve neden adları.
+
+Her tur, çağrıdan ve haber okumadan önce anını ve o anki engelini (kota beklemesi, günlük sınır
+ya da yok) skor kaydına yazar: botun gölge kaydı skorlayıcının canlılığını buradan bilir (spec 0052
+R-5).
 """
 
 from collections.abc import Callable, Collection
@@ -175,6 +179,9 @@ def _score(
 def run_score_round(config: ScoreConfig, store: ScoreStore, parts: ScoreParts) -> bool:
     """Bir tur; durdurmayla kesildiyse `False`."""
     tally = _Tally()
+    started = parts.clock()
+    # the liveness mark goes first, before any call (spec 0052 R-5, plan Risk 3)
+    store.mark_round(started, _held(config, store, tally, started))
     items = read_forward(config.news.store_path, store.started_at)
     if items is None:
         raise StoreError("haber kaydı yok")

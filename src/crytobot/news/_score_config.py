@@ -17,6 +17,8 @@ from crytobot.news._config import NewsConfig, load_news_config
 
 SECTION = "score"
 DAILY_CALL_HARD_CAP = 1000
+# the bot's shadow record calls the scorer stopped after 30 minutes without a round (spec 0052 R-5)
+INTERVAL_CAP_MINUTES = 15
 _PATH_LIMIT = 2048
 _MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -112,6 +114,10 @@ def _load(document: Mapping[str, object], news: NewsConfig) -> ScoreConfig:
     library_path = _text(table, "library_path")
     library_sha = _matching(table, "library_sha256", _SHA256)
     numbers = {key: _number(table, key) for key in _NUMBERS}
+    # a separate check keeps 0051's range message (plan 0052 Risk 2)
+    if numbers["interval_minutes"] > INTERVAL_CAP_MINUTES:
+        cap = INTERVAL_CAP_MINUTES
+        raise _Problem(f"ayar geçersiz: {_name('interval_minutes')} (en çok {cap})")
     # other spellings of one file are caught resolved, in __main__ (plan step 7)
     if store_path in (news.store_path, news.log_path):
         raise _Problem(f"ayar geçersiz: {_name('store_path')}")

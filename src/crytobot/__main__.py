@@ -67,9 +67,19 @@ yazılamıyor, 130 zorla durma.
 ya da backtest reddi (ayarlar, veri dosyası, rapor dosyası var), 2 okuma reddiyle durma, 3 kayıt
 dosyası yazılamıyor, 4 indirme durdu, 5 backtest durdu, 6 backtest tamam ama rapor dosyası
 yazılamadı (rapor konsolda), 130 zorla durma.
+
+Gölge filtre kaydı (spec 0052): paper `start` (`--trial` ve kanıtlı) bot ayarının `[shadow]`
+bölümünü okur; bölüm yoksa davranış bugünküdür. Gölge kaydın yolu bot deposu, bot kayıt dosyası,
+paper kanıt deposu, skor ve haber kaydı, bot ayar dosyası ve varsayılan haber ayarının kayıtları ve
+kayıt dosyalarıyla (çözülmüş yollarla) aynı olamaz; skor ve haber kaydı bot deposu olamaz. Ret kayıt
+dosyası açılmadan, kilit alınmadan, konsola. Her turda skor ve haber kaydı `news`'le yalnız okunur
+ve `app`'in tipine (`PairFilter`) çevrilir; satırlar JSON Lines olarak yalnız eklenir (plan A-1).
+`start --live` ve `backtest` `[shadow]`'u okumaz. `shadow status` ağa ve LLM'e çıkmaz, kilit almaz,
+gölge kaydı ve bot kayıt dosyasını yalnız okur.
 """
 
 import hashlib
+import json
 import shutil
 import signal
 import sys
@@ -104,8 +114,11 @@ from crytobot.app import (
     KillRequest,
     LogWriteError,
     LoopParts,
+    PairFilter,
     PaperProof,
     PrepareOutcome,
+    ShadowConfig,
+    ShadowParts,
     StartOutcome,
     StopRequest,
     check_paper_proof,
@@ -114,12 +127,14 @@ from crytobot.app import (
     engage_kill_switch,
     final_configs,
     get_dashboard_status,
+    last_shadow_error,
     line,
     load_backtest_config,
     load_calibration_config,
     load_config,
     load_download_config,
     load_events_config,
+    load_shadow_config,
     load_stage_config,
     open_for_start,
     prepare_live_store,
@@ -136,6 +151,7 @@ from crytobot.app import (
     run_events_download,
     run_events_measure,
     run_loop,
+    shadow_status_lines,
 )
 from crytobot.backtest import read_report, report_exists, write_report
 from crytobot.calibration import EventAnnouncement
@@ -179,6 +195,7 @@ from crytobot.news import (
     ArchiveParts,
     ArchiveStore,
     ArchiveStoreError,
+    CoinFilter,
     CollectionExit,
     CollectParts,
     ContextError,
@@ -196,11 +213,13 @@ from crytobot.news import (
     ScoreStoreError,
     StoreError,
     archive_status_lines,
+    base_of,
     fetch_source,
     load_archive_config,
     load_context,
     load_news_config,
     load_score_config,
+    read_filter_view,
     read_forward,
     read_library_sources,
     read_score_snapshot,
@@ -220,6 +239,7 @@ EVENTS_CONFIG_FILE = "crytobot-events.toml"
 USAGE = (
     "kullanım: python -m crytobot "
     "prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news|events"
+    "|shadow"
     " [--live] [--trial] [--final] [archive] [score] [status] [download] [measure]"
 )
 COMMANDS = (
@@ -247,6 +267,7 @@ COMMANDS = (
     ["news", "score", "status"],
     ["events", "download"],
     ["events", "measure"],
+    ["shadow", "status"],
 )
 EXIT_OK = 0
 EXIT_REFUSED = 1
@@ -1388,6 +1409,130 @@ def _dashboard(
     return EXIT_OK
 
 
+def _pair_filter(found: CoinFilter) -> PairFilter:
+    """`news`'in görünümü `app`'in tipine (plan Risk 4)."""
+    missing = found.missing
+    return PairFilter(
+        found.state.value,
+        found.reason,
+        tuple((ref.news_id, ref.severity) for ref in found.events),
+        None if missing is None else (missing.pending, missing.schema, missing.stale),
+        found.held,
+    )
+
+
+ShadowViewCall = Callable[[datetime, tuple[str, ...]], dict[str, PairFilter]]
+
+
+def shadow_view(config: ShadowConfig) -> ShadowViewCall:
+    """Tur anında skor ve haber kaydını yalnız okur; çift → filtre durumu (R-3, R-6)."""
+
+    def view(at: datetime, pairs: tuple[str, ...]) -> dict[str, PairFilter]:
+        coins = tuple(dict.fromkeys(base_of(pair) for pair in pairs))
+        found = read_filter_view(config.score_path, config.news_path, at, coins)
+        return {pair: _pair_filter(found[base_of(pair)]) for pair in pairs}
+
+    return view
+
+
+def shadow_append(path: str) -> Callable[[Sequence[Mapping[str, object]]], None]:
+    """Bir turun satırları tek yazım ve `flush` ile, yalnız ekleme kipinde (R-8, plan Risk 5).
+    Çökmede yarım kalan son satırın arkasına yazılmaz: önce satır sonu eklenir."""
+
+    def append(rows: Sequence[Mapping[str, object]]) -> None:
+        text = "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
+        with open(path, "a+b") as file:
+            if file.tell() > 0:
+                file.seek(-1, 2)
+                if file.read(1) != b"\n":
+                    text = "\n" + text
+            file.write(text.encode("utf-8"))
+            file.flush()
+
+    return append
+
+
+def _shadow_refused(message: str, output: Output, clock: Clock) -> str:
+    output.say(line(clock(), "ayar", f"bot başlamadı: {message}"))
+    return message
+
+
+def _shadow_config(
+    paths: tuple[Path, Path], config: BotConfig, output: Output, clock: Clock
+) -> ShadowConfig | str | None:
+    """Paper başlatmanın `[shadow]` bölümü: yoksa `None`, ret varsa konsola yazılmış neden (R-8).
+    Kayıt dosyası açılmadan, kilit alınmadan; yollar çözülmüş hâlleriyle karşılaştırılır."""
+    config_path, news_config_path = paths
+    document = _load_toml(config_path)
+    result = load_shadow_config(document if isinstance(document, Mapping) else {})
+    shadow = result.config
+    if shadow is None:
+        return None if result.setting is None else _shadow_refused(result.message, output, clock)
+    for key, path in (("score_path", shadow.score_path), ("news_path", shadow.news_path)):
+        if _same_file(path, config.store_path):
+            return _shadow_refused(f"ayar geçersiz: shadow.{key}", output, clock)
+    news = _load_toml(news_config_path)
+    news_keys = ("store_path", "log_path", "archive_store_path", "archive_log_path")
+    others = (
+        config.store_path,
+        config.log_path,
+        *_raw_paths(document, "stage", ("paper_store_path",)),
+        shadow.score_path,
+        shadow.news_path,
+        str(config_path),
+        str(news_config_path),
+        *_raw_paths(news, "news", news_keys),
+        *_raw_paths(news, "score", ("store_path", "log_path")),
+    )
+    if any(_same_file(shadow.record_path, other) for other in others):
+        return _shadow_refused("ayar geçersiz: shadow.record_path", output, clock)
+    return shadow
+
+
+def _shadow_rows(path: str) -> list[object] | None:
+    """Gölge kayıt yoksa `None`; çözülemeyen satır `None` öğedir (yarım kalan satır)."""
+    try:
+        data = Path(path).read_bytes()
+    except FileNotFoundError:
+        return None
+    rows: list[object] = []
+    for raw in data.split(b"\n"):
+        if not raw.strip():
+            continue
+        try:
+            rows.append(json.loads(raw.decode("utf-8")))
+        except (ValueError, RecursionError):
+            rows.append(None)
+    return rows
+
+
+def _shadow_status(config_path: Path, output: Output) -> int:
+    """R-9: ağsız, LLM'siz, kilitsiz; gölge kayıt ve bot kayıt dosyası yalnız okunur."""
+    document = _load_toml(config_path)
+    if isinstance(document, str):
+        output.say(f"shadow status: reddedildi: {document}")
+        return EXIT_REFUSED
+    result = load_shadow_config(document)
+    if result.config is None:
+        output.say(f"shadow status: reddedildi: {result.message or 'ayar eksik: shadow'}")
+        return EXIT_REFUSED
+    path = result.config.record_path
+    try:
+        rows = _shadow_rows(path)
+    except OSError:
+        output.say("shadow status: reddedildi: gölge kayıt okunamıyor")
+        return EXIT_REFUSED
+    error: str | None = None
+    logs = _raw_paths(document, "bot", ("log_path",))
+    if logs:
+        with suppress(OSError):
+            text = Path(logs[0]).read_text(encoding="utf-8", errors="replace")
+            error = last_shadow_error(text.splitlines())
+    for row in shadow_status_lines(path, rows, error):
+        output.say(row)
+    return EXIT_OK
+
+
 def _start(
     config: BotConfig,
     output: Output,
@@ -1493,6 +1638,8 @@ def run(
         return _news(
             argv, news_config_path, config_path, console, clock, stop, wait, news_fetch, reporter
         )
+    if argv[0] == "shadow":
+        return _shadow_status(config_path, output)
     config = _config(config_path, output, clock)
     if config is None:
         return EXIT_REFUSED
@@ -1612,6 +1759,14 @@ def run(
             )
             if not passed:
                 return EXIT_REFUSED
+    shadow: ShadowParts | None = None
+    if argv[0] == "start" and not is_live and config.mode == "paper":
+        # spec 0052 R-1, R-8: paper only; refused before the log file and the lock
+        found = _shadow_config((config_path, news_config_path), config, output, clock)
+        if isinstance(found, str):
+            return EXIT_REFUSED
+        if found is not None:
+            shadow = ShadowParts(shadow_view(found), shadow_append(found.record_path))
 
     output = Output(console, config.log_path)
     lock = StoreLock(config.store_path)
@@ -1650,6 +1805,7 @@ def run(
                 pending=lambda: kill_flag_set(config.store_path),
                 consume=lambda: clear_kill_flag(config.store_path),
             ),
+            shadow,
         )
         if reporter is None:
             document = _load_toml(config_path)

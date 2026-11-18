@@ -5,6 +5,9 @@ isteği) `LoopParts` ile gelir. `app` saat çağırmaz, okuma işlevini import e
 kendisine verilen `read` ile çıkar. Her turun `now`'ı okumanın saatidir (`read.read_at`, 0017 trap);
 yasak süresince okuma yapılmaz, tur piyasa verisi olmadan saatle atılır (plan Risk 9).
 
+Gölge filtre kaydı (spec 0052): paper modda, `LoopParts.shadow` doluyken tamamlanan her turun
+sonunda, kararlar verildikten sonra yazılır; hatası turu ve döngüyü etkilemez.
+
 Durdurma: ilk istek yalnız işaret koyar; beklemedeyken döngü hemen çıkar, tur sürerken tur biter.
 İkinci istek `ForcedStop` fırlatır: `BaseException`'dır, `run_turn`'ün hata ağı onu yutmaz; depo
 yazımı atomiktir (spec 0011). Beklenmeyen hata döngüyü düşürmez: tip adıyla yazılır (R-15).
@@ -34,6 +37,8 @@ from crytobot.app._paper_proof import PaperProof
 from crytobot.app._result import BuyHalt, TurnOutcome, TurnResult
 from crytobot.app._schedule import Due, after_turn, boundary_at_or_before, due, seconds_until
 from crytobot.app._session import AppError, KillRequest
+from crytobot.app._shadow import STEP as SHADOW_STEP
+from crytobot.app._shadow import ShadowParts, shadow_rows
 from crytobot.app._start import read_pairs
 from crytobot.app._turn import run_turn
 from crytobot.execution import PAPER, Exchange, OrderStatus, PaperExchange
@@ -79,6 +84,7 @@ class LoopParts:
     write: Callable[[str], None]
     stop: StopRequest
     kill_request: KillRequest | None = None  # spec 0035 R-4: çalışan bota kill switch isteği
+    shadow: ShadowParts | None = None  # spec 0052: yalnız paper, `[shadow]` ayarıyla
 
 
 class ExitReason(Enum):
@@ -327,6 +333,7 @@ class _Loop:
         self.last = result
         self.turns += 1
         self.mark(result, at)
+        self.shadow(result, at)
 
         if self.memory.retry_after is not None:
             pause_time = self.memory.retry_after
@@ -481,6 +488,22 @@ class _Loop:
         marked = mark_turn(self.config.store_path, at)
         if marked.outcome is not StoreOutcome.SAVED:
             self.emit(at, "hata", f"tur işareti yazılamadı: {marked.message}")
+
+    def shadow(self, result: TurnResult, at: datetime) -> None:
+        """Spec 0052 R-1, R-6, R-7 (plan Risk 8): yalnız paper ve tamamlanan turda gölge satırlar.
+        Görünüm, satır kurma ya da yazma hatası turu değiştirmez: tip adıyla tek satır, o turun
+        satırları boşluk kalır, sonraki tur yine dener. Tur kararları bu adımdan önce
+        verilmiştir."""
+        parts = self.parts.shadow
+        if parts is None or self.config.mode != PAPER:
+            return
+        if result.outcome is not TurnOutcome.COMPLETED:
+            return
+        whitelist = tuple(self.config.turn.whitelist)
+        try:
+            parts.append(shadow_rows(result, at, whitelist, parts.view(at, whitelist)))
+        except Exception as error:
+            self.emit(at, "hata", error_text(SHADOW_STEP, error))
 
     # --- the loop -----------------------------------------------------------------------------
     def finish(self, reason: ExitReason) -> LoopExit:

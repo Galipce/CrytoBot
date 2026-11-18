@@ -7,6 +7,10 @@ süreç ortada öldürülürse çağrı sayılmış ve sonuçsuz kalır (günlü
 tek sonucu `results`'tadır (UNIQUE): "skorlandı", "şema dışı" ya da "bayat"; olay skorları ve ret
 nedenleri aynı işlemde yazılır. Günlük çağrı sayısı ve kota beklemesi kayıttan türetilir: yeniden
 başlatma onları sıfırlamaz. WAL kipi; `timeout=0` ve `closing` (conventions, spec 0011).
+
+`rounds` skorlayıcının canlılık izidir (spec 0052 R-5, plan Risk 3): her tur, çağrı yapmadan önce
+anını ve o anki engelini yazar. Tablo `open`'da `IF NOT EXISTS` ile eklenir; biçim sürümü "1" kalır,
+0051'de açılmış eski kayıtta tablo skorlayıcı yeniden açınca oluşur.
 """
 
 import sqlite3
@@ -18,7 +22,7 @@ from enum import StrEnum
 from pathlib import Path
 
 FORMAT_VERSION = "1"
-_TABLES = ("meta", "calls", "call_ends", "results", "event_scores", "rejections")
+_TABLES = ("meta", "calls", "call_ends", "results", "event_scores", "rejections", "rounds")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -61,6 +65,11 @@ CREATE TABLE IF NOT EXISTS rejections (
     reason TEXT NOT NULL,
     count INTEGER NOT NULL,
     PRIMARY KEY (news_id, reason)
+);
+CREATE TABLE IF NOT EXISTS rounds (
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL,
+    held TEXT
 );
 """ + "".join(
     f"CREATE TRIGGER IF NOT EXISTS {table}_no_update BEFORE UPDATE ON {table}"
@@ -223,6 +232,13 @@ class ScoreStore:
             if isinstance(error, sqlite3.Error):
                 raise ScoreStoreError("skor kaydı yazılamıyor") from None
             raise
+
+    def mark_round(self, at: datetime, held: str | None) -> None:
+        """Turun canlılık izi: an ve turun başındaki engel (spec 0052 R-5)."""
+        with self._transaction():
+            self._connection.execute(
+                "INSERT INTO rounds (at, held) VALUES (?, ?)", (_text(at), held)
+            )
 
     def begin_call(self, news_id: int, at: datetime) -> int:
         """Çağrı süreç başlamadan sayılır (plan Risk 6)."""

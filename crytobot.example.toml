@@ -119,6 +119,17 @@ r = "2"
 # paper_min_days = 14                      # asgari paper süresi, 24 saatlik gün (alt sınır 7)
 # paper_min_trades = 10                    # asgari tamamen kapanmış paper işlemi (alt sınır 5)
 
+# Gölge filtre kaydı (spec 0052): yalnız paper `start` (`--trial` ve kanıtlı) okur; bölüm yoksa kayıt tutulmaz.
+# Her tamamlanan turda beyaz listedeki her çift için, skor kaydını (`news score`) ve haber kaydını yalnız okuyarak,
+# filtre açık olsaydı alımın bastırılıp bastırılmayacağını JSON Lines olarak yalnız ekler; bot kararları değişmez.
+# Durum: `python -m crytobot shadow status`. Bölüm varsa üç yol zorunludur; gölge kaydın yolu bot deposu, kayıt
+# dosyası, skor ya da haber kaydı, ayar dosyaları ya da haber ayarının kayıtları olamaz. Skorlayıcı aynı makinede
+# çalışmalıdır: son tur izi 30 dakikadan eskiyse satırlar `filtre yok: skorlayıcı durmuş` olur.
+# [shadow]
+# record_path = "crytobot-shadow.jsonl"  # gölge kayıt; yalnız eklenir, UTF-8
+# score_path = "crytobot-score.db"       # crytobot-news.toml [score] store_path
+# news_path = "crytobot-news.db"         # crytobot-news.toml [news] store_path
+
 # Geçmiş veri indirme (`python -m crytobot download`, spec 0023): beyaz listedeki çiftlerin kapanmış
 # mumları, ısınma için `candle_count` kadar önceki mumlarla, herkese açık veriden anahtarsız indirilir.
 # Mum aralığı, çiftler ve çağrı süresi yukarıdaki ayarlardır. Var olan dosyanın üzerine yazılmaz.

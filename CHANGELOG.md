@@ -7,6 +7,13 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
+- **Gölge filtre: "bastırılırdı" kaydı** (spec 0052): paper bot `[shadow]` ayarıyla her tamamlanan turda beyaz
+  listedeki her çift için filtre durumunu (`bastırılırdı` / `bastırılmazdı` / eksik bilgiyle / `filtre yok`
+  nedeniyle), eşleşen olumsuz olayları, eksik bilgi sayılarını, teknik al ve risk sonucunu JSON Lines gölge kayda
+  yalnız ekler. Skor ve haber kaydı yalnız okunur, look-ahead yok (skor anı ≤ tur anı, 24 saatlik pencere); bot
+  kararları ve deposu değişmez, kayıt hatası turu etkilemez. Skorlayıcı her turun başında canlılık izini yazar,
+  tur aralığı en çok 15 dakika. `shadow status` ağsız, LLM'siz, kilitsiz durumu gösterir. Yeni sözleşme R-3k:
+  `app` `news`'i ve `llm`'i import etmez.
 - **LLM olay skoru, gölge mod** (spec 0051): `python -m crytobot news score` ileriye dönük haber kaydındaki yeni
   Binance duyurularını ve RSS haberlerini sahibin Claude aboneliğiyle (`claude -p` alt süreci; API anahtarı yok)
   okur; coin başına şemalı, haberden birebir alıntılı olay skorunu (tür, yön, şiddet) kendi yalnız eklenen skor
