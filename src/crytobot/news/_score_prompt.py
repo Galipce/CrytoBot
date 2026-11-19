@@ -100,10 +100,16 @@ PROMPT_FINGERPRINT: Final = prompt_fingerprint()
 
 
 def context_fingerprint(
-    report_sha256: str, library_sha256: str, rules_fingerprint: str = RULES_FINGERPRINT
+    report_sha256: str,
+    library_sha256: str,
+    rules_fingerprint: str = RULES_FINGERPRINT,
+    *,
+    examples: bool = True,
 ) -> str:
-    """Bağlam: iki dosya ve örnek seçen etiket kuralları (review L-1)."""
-    return _sha(f"{report_sha256}\n{library_sha256}\n{rules_fingerprint}")
+    """Bağlam: iki dosya ve örnek seçen etiket kuralları (review L-1). Örneksiz bağlam (spec 0055
+    CB-3, plan Risk 4) ayrı bir parmak izidir; örnekli parmak izi değişmez."""
+    text = f"{report_sha256}\n{library_sha256}\n{rules_fingerprint}"
+    return _sha(text if examples else f"{text}\nörneksiz")
 
 
 @dataclass(frozen=True)
@@ -195,9 +201,16 @@ def _examples(library: str) -> dict[str, tuple[Example, ...]]:
 
 
 def load_context(
-    report: bytes, report_sha256: str, library: bytes, library_sha256: str
+    report: bytes,
+    report_sha256: str,
+    library: bytes,
+    library_sha256: str,
+    *,
+    examples: bool,
 ) -> ScoreContext:
-    """Dosyaların parmak izi ayardakiyle uyuşmalı (R-4, AC-6); uyuşmazsa `ContextError`."""
+    """Dosyaların parmak izi ayardakiyle uyuşmalı (R-4, AC-6); uyuşmazsa `ContextError`.
+    `examples` `False` (spec 0055 CB-3: izinli `binance-duyuru` kaynağı yok): kütüphane yine
+    denetlenir ama prompta örnek girmez."""
     if hashlib.sha256(report).hexdigest() != report_sha256:
         raise ContextError(
             "bağlam dosyasının parmak izi uyuşmuyor: score.calibration_report_sha256"
@@ -210,8 +223,8 @@ def load_context(
         raise ContextError("bağlam dosyası UTF-8 değil") from None
     return ScoreContext(
         _table(report_text),
-        _examples(library_text),
-        context_fingerprint(report_sha256, library_sha256),
+        _examples(library_text) if examples else {},
+        context_fingerprint(report_sha256, library_sha256, examples=examples),
     )
 
 

@@ -140,7 +140,7 @@ class Harness:
     def parts(self) -> ScoreParts:
         report = (FIXTURES / "report.txt").read_bytes()
         library = (FIXTURES / "library.jsonl").read_bytes()
-        context = load_context(report, sha(report), library, sha(library))
+        context = load_context(report, sha(report), library, sha(library), examples=True)
         return ScoreParts(
             lambda: self.now,
             lambda seconds: None,
