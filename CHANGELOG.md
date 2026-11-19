@@ -7,6 +7,9 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
+- **Süreç ağacı sonlandırma konsol penceresi açmaz** (spec 0058, B-102): zaman aşımı, durdurma ya da çıktı sınırında
+  Claude alt sürecini sonlandıran `taskkill` de `CREATE_NO_WINDOW` ile başlar; bayraklar tek yardımcıda
+  (`llm._claude.hidden_flags`). Sonlandırma davranışı aynı.
 - **Claude alt süreci konsol penceresi açmaz** (spec 0057): Windows'ta `claude -p` alt süreci ve onun açtığı
   süreçler `CREATE_NO_WINDOW` ile başlar; skorlayıcı zamanlanmış görevde (konsolsuz) çalışırken her çağrıda
   pencere açılmaz. Yalıtım, zaman aşımı ve ağaç sonlandırma aynı.
