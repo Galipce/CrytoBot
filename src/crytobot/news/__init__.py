@@ -153,6 +153,7 @@ from crytobot.news._store import (
     SourceState,
     StoreError,
     StoreSnapshot,
+    StreamState,
     read_forward,
     read_snapshot,
 )
@@ -238,6 +239,7 @@ __all__: list[str] = [
     "SourceState",
     "StoreError",
     "StoreSnapshot",
+    "StreamState",
     "archive_status_lines",
     "base_of",
     "build_prompt",

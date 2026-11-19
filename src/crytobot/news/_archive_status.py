@@ -12,7 +12,7 @@ from crytobot.news._archive_store import (
     forward_binance_ids,
     read_archive,
 )
-from crytobot.news._config import ArchiveConfig
+from crytobot.news._config import BINANCE_KINDS, ArchiveConfig
 from crytobot.news._store import store_size
 
 ARCHIVE_EMPTY = "arşiv boş"
@@ -39,7 +39,8 @@ def _catalog_line(summary: CatalogSummary) -> str:
 
 
 def _overlap(config: ArchiveConfig, snapshot: ArchiveSnapshot) -> str:
-    sources = [source.name for source in config.news.sources if source.kind == "binance-duyuru"]
+    # spec 0056 AC-9: the stream is a Binance announcement source too
+    sources = [source.name for source in config.news.sources if source.kind in BINANCE_KINDS]
     forward = forward_binance_ids(config.news.store_path, sources)
     if forward is None:
         return NO_FORWARD
