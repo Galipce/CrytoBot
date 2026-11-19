@@ -7,6 +7,8 @@
 - Source: spec 0055 (Binance kararı A: `bapi` yolu kapalı, izinli kaynak kalmadı; ileriye dönük ölçüm durdu);
   kaynak araştırması 2026-11-19 (Binance resmi duyuru WebSocket API'si; SEC basın RSS)
 - Sensitive area: API anahtarları / sırlar (`docs/domain.md`)
+- Supersedes: 0018/CB-1, CB-2, CB-3 (tek runtime bağımlılığı `ccxt` idi; `websocket-client` ikinci onaylı bağımlılık
+  olur: AC-12) — R-08, Galip Badem, 2026-11-19 ("a"). `specs/done/` dosyaları değişmez.
 
 ## Intent
 Sahip, ileriye dönük haber hattının (0046 toplayıcı → 0051 Claude skoru → 0053 ölçüm) yeniden çalışmasını istiyor.
@@ -132,6 +134,10 @@ none — no user interface (komut satırı; satır biçimleri Requirements ve kr
 - [ ] AC-11 — Örnek ayar: akış kaynağı kapalı ve izin kaydısız; yorumda iki ortam değişkeninin adı, yalnız okuma
   yetkisi kuralı ve izin kaydının sahibe ait olduğu yazar; örnek ayar yükleyiciden geçer; `.env.example` iki
   değişkenin yalnız adını taşır.
+- [ ] AC-12 — Bağımlılık (R-08, 2026-11-19): projenin doğrudan runtime bağımlılıkları tam olarak `ccxt` ve
+  `websocket-client`'tır (`pyproject.toml` ve `uv.lock`); izin listesi yine kesin ad listesidir — başka bir ad
+  eklenince ya da biri çıkınca test kırmızıdır; ikisi de kilitte sürüm ve hash ile sabittir; CI `pip-audit`
+  (`--strict`) ikisini ve dolaylılarını denetler (kanıt: ship PR'ının `audit` işi).
 
 ## Preserved behavior
 - [ ] PB-1 — `rss` ve `binance-duyuru` türleri, tur satırları, kesinti kuralı ve haber kaydı biçimi değişmez (0046);

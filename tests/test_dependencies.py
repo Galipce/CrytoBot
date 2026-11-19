@@ -1,6 +1,7 @@
 """AC-10: doğrudan bağımlılıklar yalnızca onaylı araçlar ve runtime'da ccxt'dir.
 
-Kaynak: spec 0001, R-8; spec 0018 (Supersedes: 0001/AC-10).
+Kaynak: spec 0001, R-8; spec 0018 (Supersedes: 0001/AC-10); spec 0056 AC-12 (Supersedes:
+0018/CB-1…CB-3: `websocket-client` resmi duyuru akışı için ikinci onaylı runtime bağımlılığı).
 """
 
 import re
@@ -17,7 +18,7 @@ APPROVED_DEV_TOOLS = {
     "pytest-socket",
     "ruff",
 }
-APPROVED_RUNTIME = ["ccxt"]
+APPROVED_RUNTIME = ["ccxt", "websocket-client"]
 
 
 def requirement_name(requirement: str) -> str:
@@ -41,6 +42,7 @@ def test_lockfile_direct_dependencies_are_only_approved_dev_tools() -> None:
 
 
 def test_runtime_dependency_is_only_ccxt() -> None:
+    """Ad 0018 planının kanıtı olduğu için korunur; liste spec 0056 AC-12 ile iki addır."""
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     declared = sorted(requirement_name(r) for r in pyproject["project"]["dependencies"])
     assert declared == APPROVED_RUNTIME
