@@ -138,3 +138,6 @@ def test_stream_source_requires_permission() -> None:
             None,
             f"ayar eksik: news.sources[1].{key}",
         )
+    # VERIFY F-2: an open stream source with no permission record at all is refused
+    bare: dict[str, object] = {"name": "b", "type": "binance-akış", "url": "wss://x.org/w"}
+    assert load(bare) == (None, "ayar eksik: news.sources[1].ai_permission_by")

@@ -15,7 +15,12 @@ import websocket
 from crytobot.news import _stream_ws
 from crytobot.news._secrets import StreamKeys
 from crytobot.news._stream import CONTROL_FRAME, ConnectionLost
-from crytobot.news._stream_ws import WsConnection, fetch_restrictions, open_stream
+from crytobot.news._stream_ws import (
+    WsConnection,
+    fetch_restrictions,
+    fetch_server_time,
+    open_stream,
+)
 
 KEY = "FAKEKEY-abcdefghijklmnop0123"
 SECRET = "FAKESECRET-qrstuvwxyz456789"
@@ -164,35 +169,68 @@ def test_restrictions_request_signed(monkeypatch: pytest.MonkeyPatch) -> None:
     clean(request.full_url)
 
 
+def http_error(status: int, body: bytes) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(URL, status, LEAK, {}, io.BytesIO(body))  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize(
-    "error",
+    ("error", "name"),
     [
-        urllib.error.HTTPError(URL, 401, LEAK, {}, None),  # type: ignore[arg-type]
-        urllib.error.HTTPError(URL, 302, LEAK, {}, None),  # type: ignore[arg-type]
-        urllib.error.URLError(LEAK),
-        http.client.BadStatusLine(LEAK),
-        http.client.IncompleteRead(b"x"),
-        http.client.LineTooLong(LEAK),
-        TimeoutError(LEAK),
-        OSError(LEAK),
+        (http_error(400, b'{"code":-1021,"msg":"' + LEAK.encode() + b'"}'), "http_400/-1021"),
+        (http_error(401, LEAK.encode()), "http_401"),
+        (http_error(302, b""), "http_302"),
+        (urllib.error.URLError(LEAK), "bağlanamadı"),
+        (http.client.BadStatusLine(LEAK), "bağlanamadı"),
+        (http.client.IncompleteRead(b"x"), "bağlanamadı"),
+        (http.client.LineTooLong(LEAK), "bağlanamadı"),
+        (TimeoutError(LEAK), "timeout"),
+        (OSError(LEAK), "bağlanamadı"),
     ],
 )
 def test_restrictions_failures_unverified(
-    monkeypatch: pytest.MonkeyPatch, error: Exception
+    monkeypatch: pytest.MonkeyPatch, error: Exception, name: str
 ) -> None:
-    """M-1: `HTTPException` (`URLError`'a sarılmaz, `OSError` değil) da doğrulanamadı olur."""
+    """M-1: `HTTPException` (`URLError`'a sarılmaz, `OSError` değil) da doğrulanamadı olur. Plan
+    A-7: nedenin sırsız adı döner; Binance'in ya da kütüphanenin metni girmez."""
 
     def fail(*_args: object, **_kwargs: object) -> None:
         raise error
 
     monkeypatch.setattr(_stream_ws._OPENER, "open", fail)
-    assert fetch_restrictions(URL, KEYS, 7) is None
+    reason = fetch_restrictions(URL, KEYS, 7)
+    assert reason == name
+    assert isinstance(reason, str)
+    clean(reason)
+
+
+def test_server_time_keyless(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Plan A-7: sunucu saati anahtarsız istekle; hata ya da bozuk yanıt `None`."""
+    seen: list[urllib.request.Request] = []
+    answers = iter([b'{"serverTime":1795000000999}', b"<html>", b"x" * 5000])
+
+    def answer(request: urllib.request.Request, timeout: float) -> FakeResponse:
+        seen.append(request)
+        return FakeResponse(next(answers))
+
+    monkeypatch.setattr(_stream_ws._OPENER, "open", answer)
+    assert fetch_server_time(URL) == 1795000000999
+    assert fetch_server_time(URL) is None
+    assert fetch_server_time(URL) is None  # oversized
+    assert seen[0].full_url == "https://api.binance.com/api/v3/time"
+    assert seen[0].get_header("X-mbx-apikey") is None
+    assert fetch_server_time("wss:///x") is None
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise http.client.BadStatusLine(LEAK)
+
+    monkeypatch.setattr(_stream_ws._OPENER, "open", fail)
+    assert fetch_server_time(URL) is None
 
 
 def test_restrictions_oversized_or_hostless(monkeypatch: pytest.MonkeyPatch) -> None:
     """Review round 2 I-3: sunucusuz adres ve sınırı aşan yanıt doğrulanamadı olur; tam sınır
     geçer."""
-    assert fetch_restrictions("wss:///sapi/wss", KEYS, 7) is None
+    assert fetch_restrictions("wss:///sapi/wss", KEYS, 7) == "bağlanamadı"
     limit = _stream_ws.RESTRICTIONS_LIMIT
     sizes = iter([limit + 1, limit])
 
@@ -200,7 +238,7 @@ def test_restrictions_oversized_or_hostless(monkeypatch: pytest.MonkeyPatch) -> 
         return FakeResponse(b"x" * next(sizes))
 
     monkeypatch.setattr(_stream_ws._OPENER, "open", answer)
-    assert fetch_restrictions(URL, KEYS, 7) is None
+    assert fetch_restrictions(URL, KEYS, 7) == "yanıt geçersiz"
     assert fetch_restrictions(URL, KEYS, 7) == b"x" * limit
 
 

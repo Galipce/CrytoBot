@@ -160,7 +160,7 @@ from crytobot.news._store import (
     read_snapshot,
 )
 from crytobot.news._stream import Connection, ConnectionLost, StreamParts, StreamRunner
-from crytobot.news._stream_ws import fetch_restrictions, open_stream
+from crytobot.news._stream_ws import fetch_restrictions, fetch_server_time, open_stream
 
 __all__: list[str] = [
     "ARCHIVE_EMPTY",
@@ -258,6 +258,7 @@ __all__: list[str] = [
     "check_reply",
     "context_fingerprint",
     "fetch_restrictions",
+    "fetch_server_time",
     "fetch_source",
     "filter_view",
     "judge_permissions",

@@ -94,8 +94,11 @@ class World:
     hold: threading.Event | None = None
     restrictions_block: threading.Event | None = None
     restrictions_error: Exception | None = None
+    restrictions_reply: str | None = None  # plan A-7: a reason name instead of a body
     check_timeout_s: float = 40.0
     first_fetch_at: float | None = None
+    server_ms: int | None = None  # plan A-7: the fake Binance clock (`None`: unreadable)
+    stamps: list[int] = field(default_factory=list)
     stuck: threading.Event = field(default_factory=threading.Event)
 
     def __post_init__(self) -> None:
@@ -137,16 +140,20 @@ class World:
             self.stop.request("SIGINT")
         return Fetched(body=(FIXTURES / "coindesk.xml").read_bytes())
 
-    def restrictions(self, url: str, keys: StreamKeys, now_ms: int) -> bytes | None:
+    def restrictions(self, url: str, keys: StreamKeys, now_ms: int) -> bytes | str | None:
         assert keys.values == (KEY, SECRET) and url.startswith("wss://")
         self.restriction_calls += 1
+        self.stamps.append(now_ms)
         if self.restrictions_block is not None:
             self.restrictions_block.wait(10)  # a stuck request (name lookup)
         if self.restrictions_error is not None:
             raise self.restrictions_error
+        if self.restrictions_reply is not None:
+            return self.restrictions_reply
         return json.dumps(self.permissions).encode()
 
     def connect(self, url: str, keys: StreamKeys, now_ms: int) -> FakeSocket:
+        self.stamps.append(now_ms)
         if self.connect_error is not None:
             raise ConnectionLost(self.connect_error)
         socket_ = FakeSocket(list(self.script), hold=self.hold, stuck=self.stuck)
@@ -172,6 +179,7 @@ class World:
                 None,
                 first_wait_s=2.0,
                 check_timeout_s=self.check_timeout_s,
+                server_time=lambda url: self.server_ms,
             ),
         )
         return code, out.getvalue()
@@ -321,3 +329,27 @@ def test_stream_kind_requires_wss_in_entry(tmp_path: Path, kind: str) -> None:
         EXIT_REFUSED,
         "news: reddedildi: ayar geçersiz: news.sources[1].url (wss değil)",
     )
+
+
+def test_signed_requests_use_server_time(tmp_path: Path) -> None:
+    """Plan A-7 (VERIFY F-1): imzalı istekler Binance'in saatini taşır; okunamazsa yerel saat."""
+    world = World(tmp_path / "w", server_ms=1795000000777)
+    code, console = world.run("news")
+    assert code == EXIT_OK, console
+    # start-up check, the stream's own check and the connection all carry the server time
+    assert len(world.stamps) == 3 and set(world.stamps) == {1795000000777}
+    world = World(tmp_path / "w2", server_ms=None)
+    code, console = world.run("news")
+    assert code == EXIT_OK, console
+    local = int(START.timestamp() * 1000)
+    assert world.stamps and all(local <= stamp < local + 3_600_000 for stamp in world.stamps)
+
+
+def test_unverified_reason_shown(tmp_path: Path) -> None:
+    """Plan A-7: doğrulanamayan yetkinin sırsız nedeni satırda (ör. saat farkı reddi)."""
+    world = World(tmp_path / "w", sources=stream_block() + rss_block())
+    world.restrictions_reply = "http_400/-1021"
+    code, console = world.run("news")
+    assert code == EXIT_OK, console
+    assert "haber kaynak=akış hata=anahtar yetkisi doğrulanamadı (http_400/-1021)" in console
+    assert world.sockets == []

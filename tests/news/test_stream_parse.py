@@ -62,8 +62,9 @@ def test_control_messages_are_not_announcements() -> None:
     [
         "not json",
         "[]",
-        '{"type":"DATA","topic":"com_announcement_zh","data":"{}"}',
-        '{"type":"PUSH","topic":"com_announcement_en","data":"{}"}',
+        # VERIFY F-3: a valid payload, so only the topic or the type can refuse it
+        message().replace("com_announcement_en", "com_announcement_zh"),
+        message().replace('"type": "DATA"', '"type": "PUSH"'),
         '{"type":"DATA","topic":"com_announcement_en","data":{"title":"x"}}',
         '{"type":"DATA","topic":"com_announcement_en","data":"not json"}',
         message(title=5),

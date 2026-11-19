@@ -62,7 +62,8 @@
   durur (çıkış 1). Yetki okunamazsa yetkisi doğrulanmamış anahtarla bağlanılmaz. Değerler hiçbir satıra, durum
   çıktısına, hata mesajına (dış kütüphanenin hata metni dahil, maskelenir), bildirime, haber kaydına ve LLM
   promptuna girmez; anahtar tipi yazdırılınca maskelidir. İmza HMAC-SHA256; bağlantı yalnız `wss`; yönlendirme
-  izlenmez (anahtar başlığı başka adrese taşınmaz).
+  izlenmez (anahtar başlığı başka adrese taşınmaz). Zaman damgası Binance'in sunucu saatinden, anahtarsız istekle
+  (plan A-7); doğrulanamayan yetkinin satırı yalnız sırsız neden adı taşır (HTTP durumu, Binance'in sayısal kodu).
 
 ## AuthN / AuthZ
 - Tek kullanıcı. **Varsayılan: reddet.**

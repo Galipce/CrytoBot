@@ -253,6 +253,7 @@ from crytobot.news import (
     archive_status_lines,
     base_of,
     fetch_restrictions,
+    fetch_server_time,
     fetch_source,
     judge_permissions,
     load_archive_config,
@@ -814,17 +815,27 @@ class NewsStreamIO:
     """Spec 0056: akışın gerçek etkileri; testler sahtelerini verir. `env_file`: göreli `.env`."""
 
     connect: Callable[[str, StreamKeys, int], Connection] = open_stream
-    restrictions: Callable[[str, StreamKeys, int], bytes | None] = fetch_restrictions
+    restrictions: Callable[[str, StreamKeys, int], bytes | str | None] = fetch_restrictions
     env: Mapping[str, str] | None = None
     env_file: Path | None = Path(".env")
     first_wait_s: float = 15.0  # plan A-5: the first round waits for the first registration
     check_timeout_s: float = 40.0  # review L-3: the start-up permission check, name lookup included
+    # plan A-7: Binance's time (ms) stamps every signed request; `None`: the local clock
+    server_time: Callable[[str], int | None] = fetch_server_time
     monotonic: Callable[[], float] = time.monotonic
     sleep: Callable[[float], None] = time.sleep
 
 
 def _ms(clock: Clock) -> int:
     return int(clock().timestamp() * 1000)
+
+
+def _signed_ms(io: "NewsStreamIO", url: str, clock: Clock) -> int:
+    """Plan A-7 (VERIFY F-1): imzalı isteğin zaman damgası Binance'in saati; okunamazsa yerel."""
+    found: int | None = None
+    with suppress(Exception):
+        found = io.server_time(url)
+    return _ms(clock) if found is None else found
 
 
 def _stream_sources(config: NewsConfig) -> list[NewsSource]:
@@ -863,7 +874,8 @@ def _bounded_check(
 
     def attempt() -> None:
         with suppress(Exception):
-            found.append(judge_permissions(io.restrictions(source.url, keys, _ms(clock))))
+            stamp = _signed_ms(io, source.url, clock)
+            found.append(judge_permissions(io.restrictions(source.url, keys, stamp)))
 
     thread = threading.Thread(target=attempt, name="akış-yetki", daemon=True)
     thread.start()
@@ -904,10 +916,11 @@ class _Streams:
         io = self.io
 
         def connect() -> Connection:
-            return io.connect(source.url, keys, _ms(clock))
+            return io.connect(source.url, keys, _signed_ms(io, source.url, clock))
 
         def check() -> PermissionCheck:
-            return judge_permissions(io.restrictions(source.url, keys, _ms(clock)))
+            stamp = _signed_ms(io, source.url, clock)
+            return judge_permissions(io.restrictions(source.url, keys, stamp))
 
         def tell(text: str) -> None:
             with suppress(Exception):  # a log failure never kills the stream; the round says it
