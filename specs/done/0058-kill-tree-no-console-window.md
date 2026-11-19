@@ -1,6 +1,6 @@
 # Spec 0058 — Süreç ağacı sonlandırma konsol penceresi açmaz (mini)
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0058-plan.md`
 - Self-critique: done
@@ -23,24 +23,33 @@ Self-critique kararları (Galip Badem, 2026-11-19, "devam"):
 - **G-4:** `docs/security.md` 0057 satırına "sonlandırma da", CHANGELOG; B-102 ship'te kapanır.
 
 ## Changed behavior
-- [ ] CB-1 — Windows'ta Claude alt süreç ağacının sonlandırılması (zaman aşımı, durdurma, zorla durdurma, çıktı sınırı),
+- [x] CB-1 — Windows'ta Claude alt süreç ağacının sonlandırılması (zaman aşımı, durdurma, zorla durdurma, çıktı sınırı),
   çağıran süreç konsolsuz olsa da konsol penceresi açmaz.
 
 ## Preserved behavior
-- [ ] PB-1 — Ağaçla sonlandırma aynı (0051 AC-5): zaman aşımında, durdurmada ve zorla durdurmada alt süreç torunlarıyla
+- [x] PB-1 — Ağaçla sonlandırma aynı (0051 AC-5): zaman aşımında, durdurmada ve zorla durdurmada alt süreç torunlarıyla
   sonlanır; torun süreç kalmaz; sonlandırma bekleme sınırı aynı.
-- [ ] PB-2 — 0057 aynı: Claude alt süreci ve torunları pencere almaz.
-- [ ] PB-3 — Windows dışı platformlarda sonlandırma (`killpg`) değişmez.
+- [x] PB-2 — 0057 aynı: Claude alt süreci ve torunları pencere almaz.
+- [x] PB-3 — Windows dışı platformlarda sonlandırma (`killpg`) değişmez.
 
 ## Out of scope
 - Toplayıcı, bot ya da başka komutların süreç başlatması.
 - Sonlandırmanın sırası ve süreleri (yalnız pencere davranışı).
 
 ## Definition of Done
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Criterion ↔ evidence table complete for CB-* **and** PB-* (UI: before/after screenshots, agent-captured, judged at SHIP)
-- [ ] Spec moved to `specs/done/` (immutable there)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Criterion ↔ evidence table complete for CB-* **and** PB-* (UI: before/after screenshots, agent-captured, judged at SHIP)
+- [x] Spec moved to `specs/done/` (immutable there)
 
 ## Handoff
-Next: PLAN — Developer runs /plan 0058
+Shipped — Galip Badem, 2026-11-20. B-102 kapandı.
+
+## Scorecard
+| Metric | Value |
+|---|---|
+| Spec revisions | 0 |
+| Fix rounds | 0 |
+| Review findings: real / noise / deferred | 0 / 2 / 0 |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (ship anında) |
