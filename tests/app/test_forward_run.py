@@ -55,7 +55,21 @@ from crytobot.news import (
     SourceState,
 )
 from tests.app.test_events_run import ROOT, candle_row, config_text
-from tests.main.test_news_entry import PERMISSION_TOML, TEST_SOURCES
+
+# Spec 0055 (plan Risk 5): the example has no permitted source; these tests run three permitted
+# ones. Kept here, not imported from tests/main: tests/app runs on its own (tooling tests copy it).
+PERMISSION_TOML = """ai_permission_by = "Test"
+ai_permission_on = 2026-11-15
+ai_permission_basis = "test koşulu"
+"""
+TEST_SOURCES = "".join(
+    f'\n[[news.sources]]\nname = "{name}"\ntype = "{kind}"\nurl = "{url}"\n{PERMISSION_TOML}'
+    for name, kind, url in (
+        ("binance-duyuru", "binance-duyuru", "https://example.org/binance"),
+        ("coindesk", "rss", "https://www.coindesk.com/arc/outboundfeeds/rss"),
+        ("cointelegraph", "rss", "https://cointelegraph.com/rss"),
+    )
+)
 
 ONLY_BINANCE = (
     '\n[[news.sources]]\nname = "binance-duyuru"\ntype = "binance-duyuru"\n'
