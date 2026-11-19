@@ -1,6 +1,6 @@
 # Spec 0057 — Claude alt süreci konsol penceresi açmaz (mini)
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0057-plan.md`
 - Self-critique: done
@@ -23,18 +23,18 @@ Self-critique kararları (Galip Badem, 2026-11-19, "tamam onaylıyorum"):
 - **G-4:** `docs/security.md` "`claude -p` yalıtımı" maddesine pencere satırı.
 
 ## Changed behavior
-- [ ] CB-1 — Windows'ta skorlayıcının başlattığı `claude -p` alt süreci, çağıran süreç konsolsuz olsa da konsol penceresi
+- [x] CB-1 — Windows'ta skorlayıcının başlattığı `claude -p` alt süreci, çağıran süreç konsolsuz olsa da konsol penceresi
   almaz: alt süreç içinden `GetConsoleWindow()` sıfır döner.
-- [ ] CB-2 — Alt sürecin kendi başlattığı süreçler (Windows'ta `claude.cmd` → Node) da pencere açmaz: torun süreçte de
+- [x] CB-2 — Alt sürecin kendi başlattığı süreçler (Windows'ta `claude.cmd` → Node) da pencere açmaz: torun süreçte de
   `GetConsoleWindow()` sıfırdır.
 
 ## Preserved behavior
-- [ ] PB-1 — Süreç ağacıyla sonlandırma aynı (0051 AC-5, R-5): zaman aşımında, durdurma isteğinde ve zorla durdurmada
+- [x] PB-1 — Süreç ağacıyla sonlandırma aynı (0051 AC-5, R-5): zaman aşımında, durdurma isteğinde ve zorla durdurmada
   alt süreç torunlarıyla sonlanır; torun süreç kalmaz.
-- [ ] PB-2 — Yalıtım ve iletişim aynı (0051 R-5): argv ve ortam değişkenleri, boş geçici klasör, istemin stdin'den
+- [x] PB-2 — Yalıtım ve iletişim aynı (0051 R-5): argv ve ortam değişkenleri, boş geçici klasör, istemin stdin'den
   gitmesi, stdout'un en çok 64 KB okunması ve stderr değişmez; çağrı sonucu (yanıt, hata, kota) aynı sınıflanır.
-- [ ] PB-3 — Windows dışı platformlarda süreç başlatma değişmez.
-- [ ] PB-4 — Terminalden (konsollu) çalışırken de çağrı aynı biçimde sonuçlanır (G-3).
+- [x] PB-3 — Windows dışı platformlarda süreç başlatma değişmez.
+- [x] PB-4 — Terminalden (konsollu) çalışırken de çağrı aynı biçimde sonuçlanır (G-3).
 
 ## Out of scope
 - Skorlayıcıyı zamanlanmış göreve kurmak (işletim adımı; görev komutu sahibe verilir).
@@ -42,10 +42,19 @@ Self-critique kararları (Galip Badem, 2026-11-19, "tamam onaylıyorum"):
 - Toplayıcı ya da başka komutların süreç başlatması.
 
 ## Definition of Done
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Criterion ↔ evidence table complete for CB-* **and** PB-* (UI: before/after screenshots, agent-captured, judged at SHIP)
-- [ ] Spec moved to `specs/done/` (immutable there)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Criterion ↔ evidence table complete for CB-* **and** PB-* (UI: before/after screenshots, agent-captured, judged at SHIP)
+- [x] Spec moved to `specs/done/` (immutable there)
 
 ## Handoff
-Next: PLAN — Developer runs /plan 0057
+Shipped — Galip Badem, 2026-11-19. İşletim: `news-runner` güncellenir; skorlayıcı zamanlanmış göreve sahip kurar.
+
+## Scorecard
+| Metric | Value |
+|---|---|
+| Spec revisions | 0 |
+| Fix rounds | 1 (yalnız belge/kanıt: A-1) |
+| Review findings: real / noise / deferred | 2 / 1 / 1 (F-1, F-3 real; F-4 noise; F-2 → B-102) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (ship anında) |
