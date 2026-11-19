@@ -560,3 +560,44 @@ def test_future_permission_date_refused(tmp_path: Path) -> None:
         "forward report: reddedildi: ayar geçersiz: news.sources[1].ai_permission_on (gelecekte)"
     )
     assert not world.report.exists()
+
+
+def test_unknown_news_source_not_permitted(tmp_path: Path) -> None:
+    """Spec 0055 CB-4, review M-1: haber kaydında olmayan haberin skoru (kaynağı kanıtlanamaz)
+    örnek olmaz; `bilinmiyor` adıyla sayılır."""
+    world = World(tmp_path)
+    store = ScoreStore.open(str(world.root / "score.db"), FIRST)
+    try:
+        store.write_result(
+            ScoreResult(
+                99,
+                ResultKind.SCORED,
+                SCORED_2,
+                MODEL,
+                "pp",
+                "cc",
+                (EventScore("BTC", "Bitcoin", "hack", "olumsuz", 3, "q"),),
+            )
+        )
+    finally:
+        store.close()
+    assert world.run("forward", "download") == 0, world.text
+    assert 'forward download: başladı: örnek=4 teknik "al"=1 coin=3' in world.text
+    assert world.run("forward", "report", "--at", REPORT_AT.isoformat()) == 0, world.text
+    text = world.report.read_text(encoding="utf-8")
+    assert "izinsiz kaynak, hüküm dışı: bilinmiyor=1" in text
+    rows = [json.loads(row) for row in world.samples.read_text(encoding="utf-8").splitlines()]
+    assert 99 not in {row.get("news_id") for row in rows[1:]}
+
+
+def test_no_news_record_nothing_permitted(tmp_path: Path) -> None:
+    """Review M-1: haber kaydı yoksa hiçbir skorun kaynağı kanıtlanamaz: örnek yok, hüküm yok."""
+    world = World(tmp_path)
+    (world.root / "news.db").unlink()
+    assert world.run("forward", "download") == 0, world.text
+    assert 'forward download: başladı: örnek=0 teknik "al"=1' in world.text
+    assert world.run("forward", "report", "--at", REPORT_AT.isoformat()) == 0, world.text
+    text = world.report.read_text(encoding="utf-8")
+    assert "izinsiz kaynak, hüküm dışı: bilinmiyor=4" in text
+    assert "hüküm: hüküm yok: skor yok" in text
+    assert "güncel üçlü: yok" in text

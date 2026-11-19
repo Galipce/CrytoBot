@@ -356,6 +356,7 @@ _EVENTS_EXIT_CODES = {
     EventsOutcome.NOT_WRITTEN: EXIT_REPORT_NOT_WRITTEN,
 }
 FORWARD_BUSY = "fiyat verisi başka bir indirme komutunda açık"
+UNKNOWN_SOURCE_NAME = "bilinmiyor"  # news missing from the news record (spec 0055, review M-1)
 FORWARD_AT_INVALID = "rapor anı geçersiz (saat dilimli ISO an: YYYY-MM-DDTHH:MM:SSZ)"
 _FORWARD_EXIT_CODES = {
     ForwardOutcome.COMPLETED: EXIT_OK,
@@ -1469,11 +1470,6 @@ def _forward_sources(
             if names is None
             else {news_id: kinds.get(name, "bilinmiyor") for news_id, name in names.items()}
         )
-        # spec 0055 CB-4: a name missing from the config is not permitted either
-        permitted = score.news.permitted_names
-        unpermitted = {
-            news_id: name for news_id, name in (names or {}).items() if name not in permitted
-        }
         rows: list[object] | None = None
         if shadow is not None:
             try:
@@ -1503,6 +1499,15 @@ def _forward_sources(
             )
         )
         kept = None if turns is None else tuple(turn for turn in turns if turn is not None)
+        # spec 0055 CB-4, closed by default (review M-1): a name missing from the config, and a
+        # result whose news is not in the news record (or no record at all), is not permitted
+        permitted = score.news.permitted_names
+        found = names or {}
+        unpermitted = {
+            row.news_id: found.get(row.news_id, UNKNOWN_SOURCE_NAME)
+            for row in (record.results if record is not None else ())
+            if found.get(row.news_id) not in permitted
+        }
         return ForwardSources(
             ForwardInputs(results, events, sources, kept, whitelist, unpermitted),
             score.store_path,
