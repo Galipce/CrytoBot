@@ -158,8 +158,18 @@ def settle(outcome: CallOutcome, stopping: bool) -> CallOutcome:
     return outcome
 
 
+def hidden_flags(*, group: bool) -> int:
+    """Windows'ta konsol penceresi açmayan başlatma bayrakları (spec 0057, 0058); `group`: kendi
+    süreç grubunda. Başka platformda `0`."""
+    if sys.platform != "win32":
+        return 0
+    flags = subprocess.CREATE_NO_WINDOW
+    return flags | subprocess.CREATE_NEW_PROCESS_GROUP if group else flags
+
+
 def kill_tree(process: "subprocess.Popen[bytes]") -> None:
-    """Sürecin bütün ağacını sonlandırır (Windows `taskkill /T /F`, POSIX `killpg`)."""
+    """Sürecin bütün ağacını sonlandırır (Windows `taskkill /T /F`, POSIX `killpg`). `taskkill`
+    de penceresiz başlar (spec 0058: konsolsuz skorlayıcıda sonlandırma pencere açmaz)."""
     if process.poll() is None:
         if sys.platform == "win32":
             with contextlib.suppress(OSError, subprocess.TimeoutExpired):
@@ -169,6 +179,7 @@ def kill_tree(process: "subprocess.Popen[bytes]") -> None:
                     stderr=subprocess.DEVNULL,
                     timeout=_KILL_WAIT_S,
                     check=False,
+                    creationflags=hidden_flags(group=False),
                 )
         else:
             with contextlib.suppress(OSError):
@@ -189,7 +200,7 @@ def _spawn(argv: list[str], cwd: str, env: dict[str, str]) -> "subprocess.Popen[
             cwd=cwd,
             env=env,
             # spec 0057: no console window, even when the caller has none (pythonw, scheduled task)
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW,
+            creationflags=hidden_flags(group=True),
         )
     return subprocess.Popen(
         argv,

@@ -241,3 +241,50 @@ def test_no_console_window_for_child_and_grandchild(tmp_path: Path) -> None:
     stdout, _, stderr = out.read_text(encoding="utf-8").partition("|")
     own, grandchild = stdout.split()
     assert (own, grandchild) == ("0", "0"), stderr
+
+
+FLAGS_PARENT = """
+import subprocess, sys
+from crytobot.llm._claude import hidden_flags
+out = sys.argv[1]
+python = sys.executable.replace("pythonw.exe", "python.exe")
+code = "import ctypes; print(ctypes.windll.kernel32.GetConsoleWindow())"
+hidden = subprocess.run([python, "-c", code], capture_output=True, text=True,
+                        creationflags=hidden_flags(group=False))
+plain = subprocess.run([python, "-c", code], capture_output=True, text=True)
+open(out, "w", encoding="utf-8").write(hidden.stdout.strip() + " " + plain.stdout.strip())
+"""
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="console windows exist only on Windows")
+def test_hidden_flags_give_no_console_window(tmp_path: Path) -> None:
+    """Spec 0058 CB-1 (G-1 (1)): from a process without a console (pythonw), a process started
+    with the shared hidden flags gets no console window; started without them, it gets one."""
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    out = tmp_path / "flags.txt"
+    subprocess.run([str(pythonw), "-c", FLAGS_PARENT, str(out)], timeout=90, check=True)
+    hidden, plain = out.read_text(encoding="utf-8").split()
+    assert hidden == "0"
+    assert plain != "0"  # the measurement tells the difference
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="taskkill is the Windows tree kill")
+def test_kill_tree_starts_taskkill_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spec 0058 CB-1 (G-1 (2), close to the implementation by design): `taskkill` lives a few
+    milliseconds, so its window cannot be measured; the tree kill starts it with the shared hidden
+    flags that the test above proves."""
+    from crytobot.llm import _claude
+
+    seen: list[tuple[list[str], int]] = []
+    real_run = subprocess.run
+
+    def recording_run(argv: list[str], **kwargs: object) -> object:
+        seen.append((argv, int(kwargs.get("creationflags", 0))))  # type: ignore[call-overload]
+        return real_run(argv, **kwargs)  # type: ignore[call-overload]
+
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    monkeypatch.setattr(subprocess, "run", recording_run)  # the module `_claude` calls
+    _claude.kill_tree(child)
+    assert child.poll() is not None
+    (_argv, flags) = next(item for item in seen if item[0] and item[0][0] == "taskkill")
+    assert flags == _claude.hidden_flags(group=False) and flags != 0
