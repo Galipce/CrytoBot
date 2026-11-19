@@ -130,6 +130,9 @@
 - `urlopen` `http.client.HTTPException`'ı (`BadStatusLine`, `IncompleteRead`, `LineTooLong`) `URLError`'a sarmaz ve o
   `OSError` değildir: yalnız `URLError`/`OSError` yakalayan istek traceback'le kaçar, iş parçacığında sessizce
   ölür — ayrıca yakalanır — from spec 0056, review round 1 M-1
+- Daemon iş parçacığı beklenmeden dönülüyorsa (zorla durdurma) test, iş parçacığının yan etkisini dönüşten hemen sonra
+  değil sınırlı yoklamayla ya da `threading.Event` ile doğrular; "beklenmedi" ayrıca, takılı tutulan bir sahteyle
+  gösterilir — from spec 0056, review round 2 M-1
 - ccxt binance emir doğrulama reddinin çoğunu `InvalidOrder` değil `BadRequest` olarak fırlatır: `-1013`
   (`Filter failure: NOTIONAL`/`MIN_NOTIONAL`), `-1100…-1106`, `-1111`, `-1114…-1121` (`-1121`: `BadSymbol`);
   yalnız `LOT_SIZE`/`PRICE_FILTER` gibi birkaçı `InvalidOrder` olur — kesin ret yanıt gövdesindeki koddan

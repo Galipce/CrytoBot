@@ -52,9 +52,12 @@ class FakeSocket:
 
     script: list[str]
     closed: bool = False
+    hold: threading.Event | None = None  # set: recv hangs until released (a stuck connection)
 
     def recv(self, timeout: float) -> str | None:
         time.sleep(0.01)
+        if self.hold is not None and not self.script:
+            self.hold.wait(10)
         if self.closed:
             raise ConnectionLost("kapandı")
         return self.script.pop(0) if self.script else None
@@ -85,6 +88,11 @@ class World:
     fetched: list[str] = field(default_factory=list)
     waits: int = 0
     lock: threading.Lock = field(default_factory=threading.Lock)
+    hold: threading.Event | None = None
+    restrictions_block: threading.Event | None = None
+    restrictions_error: Exception | None = None
+    check_timeout_s: float = 40.0
+    first_fetch_at: float | None = None
 
     def __post_init__(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -114,6 +122,8 @@ class World:
 
     def fetch(self, source: NewsSource, max_bytes: int, stopped: object) -> Fetched:
         self.fetched.append(source.name)
+        if self.first_fetch_at is None:
+            self.first_fetch_at = time.monotonic()
         if self.force:
             self.stop.request("SIGINT")
             self.stop.request("SIGINT")
@@ -122,12 +132,16 @@ class World:
     def restrictions(self, url: str, keys: StreamKeys, now_ms: int) -> bytes | None:
         assert keys.values == (KEY, SECRET) and url.startswith("wss://")
         self.restriction_calls += 1
+        if self.restrictions_block is not None:
+            self.restrictions_block.wait(10)  # a stuck request (name lookup)
+        if self.restrictions_error is not None:
+            raise self.restrictions_error
         return json.dumps(self.permissions).encode()
 
     def connect(self, url: str, keys: StreamKeys, now_ms: int) -> FakeSocket:
         if self.connect_error is not None:
             raise ConnectionLost(self.connect_error)
-        socket_ = FakeSocket(list(self.script))
+        socket_ = FakeSocket(list(self.script), hold=self.hold)
         self.sockets.append(socket_)
         return socket_
 
@@ -144,7 +158,12 @@ class World:
             wait=self.wait,
             news_fetch=self.fetch,
             news_stream=NewsStreamIO(
-                self.connect, self.restrictions, self.env, None, first_wait_s=2.0
+                self.connect,
+                self.restrictions,
+                self.env,
+                None,
+                first_wait_s=2.0,
+                check_timeout_s=self.check_timeout_s,
             ),
         )
         return code, out.getvalue()
@@ -224,11 +243,48 @@ def test_status_no_network_no_key(tmp_path: Path) -> None:
 
 
 def test_stop_and_forced_stop(tmp_path: Path) -> None:
-    """AC-10: ikinci Ctrl+C zorla durdurur (130); bağlantı yine kapanır."""
-    world = World(tmp_path / "w", sources=stream_block() + rss_block(), force=True)
+    """AC-10, review round 1 L-4 / round 2 M-1: ikinci Ctrl+C zorla durdurur (130) ve takılı bir
+    bağlantıyı beklemez; bağlantı, akış iş parçacığı serbest kalınca yine kapanır."""
+    hold = threading.Event()
+    world = World(tmp_path / "w", sources=stream_block() + rss_block(), force=True, hold=hold)
+    started = time.monotonic()
     code, _ = world.run("news")
-    assert code == EXIT_FORCED
-    assert len(world.sockets) == 1 and world.sockets[0].closed
+    elapsed = time.monotonic() - started
+    try:
+        assert code == EXIT_FORCED
+        # a join would wait 5 s on the stuck connection; the forced stop returns at once
+        assert elapsed < 4.0, elapsed
+        assert len(world.sockets) == 1 and not world.sockets[0].closed  # still stuck: not joined
+    finally:
+        hold.set()
+    deadline = time.monotonic() + 3.0
+    while not world.sockets[0].closed and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert world.sockets[0].closed  # the stream thread closes it once released
+
+
+def test_startup_check_bounded_and_failure_unverified(tmp_path: Path) -> None:
+    """Review round 1 L-3 / round 2 L-1: başlangıç yetki denetimi takılırsa ya da istisna atarsa
+    doğrulanamadı sayılır — çıkış 1 değil; diğer kaynakların turu sürer."""
+    block = threading.Event()
+    world = World(tmp_path / "w", sources=stream_block() + rss_block(), check_timeout_s=0.2)
+    world.restrictions_block = block
+    started = time.monotonic()
+    try:
+        code, console = world.run("news")
+    finally:
+        block.set()
+    assert code == EXIT_OK, console
+    # the stuck check blocks for 10 s; bounded at 0.2 s (+ 2 s first wait) the round starts early
+    assert world.first_fetch_at is not None and world.first_fetch_at - started < 6.0
+    assert "haber kaynak=coindesk yeni=3" in console
+    assert "news: reddedildi" not in console
+    world = World(tmp_path / "w2", sources=stream_block() + rss_block())
+    world.restrictions_error = RuntimeError("library failure")
+    code, console = world.run("news")
+    assert code == EXIT_OK, console
+    assert "haber kaynak=akış hata=anahtar yetkisi doğrulanamadı" in console
+    assert "haber kaynak=coindesk yeni=3" in console and world.sockets == []
 
 
 def test_no_secret_in_any_output(tmp_path: Path) -> None:

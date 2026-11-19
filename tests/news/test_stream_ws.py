@@ -189,8 +189,19 @@ def test_restrictions_failures_unverified(
     assert fetch_restrictions(URL, KEYS, 7) is None
 
 
-def test_restrictions_oversized_or_hostless() -> None:
+def test_restrictions_oversized_or_hostless(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review round 2 I-3: sunucusuz adres ve sınırı aşan yanıt doğrulanamadı olur; tam sınır
+    geçer."""
     assert fetch_restrictions("wss:///sapi/wss", KEYS, 7) is None
+    limit = _stream_ws.RESTRICTIONS_LIMIT
+    sizes = iter([limit + 1, limit])
+
+    def answer(request: urllib.request.Request, timeout: float) -> FakeResponse:
+        return FakeResponse(b"x" * next(sizes))
+
+    monkeypatch.setattr(_stream_ws._OPENER, "open", answer)
+    assert fetch_restrictions(URL, KEYS, 7) is None
+    assert fetch_restrictions(URL, KEYS, 7) == b"x" * limit
 
 
 def test_redirects_not_followed() -> None:
