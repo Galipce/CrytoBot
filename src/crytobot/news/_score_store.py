@@ -88,6 +88,7 @@ class ResultKind(StrEnum):
     SCORED = "skorlandı"
     SCHEMA = "şema dışı"
     STALE = "bayat"
+    UNPERMITTED = "izinsiz kaynak"  # spec 0055 CB-2: çağrısız, yeniden denenmez
 
 
 @dataclass(frozen=True)
@@ -102,7 +103,8 @@ class EventScore:
 
 @dataclass(frozen=True)
 class ScoreResult:
-    """Bir haberin tek sonucu. "bayat"ta çağrı, model ve parmak izleri yoktur."""
+    """Bir haberin tek sonucu. "bayat" ve "izinsiz kaynak"ta çağrı, model ve parmak izleri
+    yoktur."""
 
     news_id: int
     kind: ResultKind
@@ -313,6 +315,7 @@ class ScoreSnapshot:
     started_at: datetime
     results: dict[str, int]
     resulted_ids: frozenset[int]
+    unpermitted_ids: frozenset[int]
     scores: dict[tuple[str, int], int]
     rejections: dict[str, int]
     calls_today: int
@@ -345,6 +348,12 @@ def read_score_snapshot(path: str, today: date) -> ScoreSnapshot | None:
             ids = frozenset(
                 int(row[0]) for row in connection.execute("SELECT news_id FROM results")
             )
+            unpermitted = frozenset(
+                int(row[0])
+                for row in connection.execute(
+                    "SELECT news_id FROM results WHERE kind = ?", (ResultKind.UNPERMITTED.value,)
+                )
+            )
             scores = {
                 (str(direction), int(severity)): int(count)
                 for direction, severity, count in connection.execute(
@@ -376,6 +385,7 @@ def read_score_snapshot(path: str, today: date) -> ScoreSnapshot | None:
                 datetime.fromisoformat(str(started[0])),
                 {str(kind): int(count) for kind, count in results.items()},
                 ids,
+                unpermitted,
                 scores,
                 {str(reason): int(count) for reason, count in rejections.items()},
                 int(calls[0]),

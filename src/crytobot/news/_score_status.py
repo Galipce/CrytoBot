@@ -1,6 +1,8 @@
 """Skorlayıcının durumu (spec 0051 R-9, AC-9). Saf: kayıtların okunmuş hâlini satırlara çevirir;
-ağa, LLM'e ve kilide dokunmaz. Kayıt yoksa "henüz skor yok"."""
+ağa, LLM'e ve kilide dokunmaz. Kayıt yoksa "henüz skor yok". Spec 0055 CB-2: izinsiz
+kaynak sayısı kaynak adına göre (ileriye dönük haberin kaynak adından)."""
 
+from collections import Counter
 from collections.abc import Sequence
 from datetime import datetime
 
@@ -32,6 +34,14 @@ def score_status_lines(
         for direction in DIRECTIONS
         for severity in SEVERITIES
     )
+    unpermitted = counts[ResultKind.UNPERMITTED]
+    if forward is None:
+        by_source = " kaynak=bilinmiyor (haber kaydı yok)" if unpermitted else ""
+    else:
+        found = Counter(
+            item.source for item in forward if item.record_id in snapshot.unpermitted_ids
+        )
+        by_source = "".join(f" {name}={count}" for name, count in sorted(found.items()))
     rejected = sum(snapshot.rejections.values())
     reasons = "".join(f" {reason}={count}" for reason, count in sorted(snapshot.rejections.items()))
     last: datetime | None = snapshot.last_scored_at
@@ -40,6 +50,7 @@ def score_status_lines(
         f"başlangıç anı: {snapshot.started_at.isoformat()}",
         f"haber: skorlandı={counts[ResultKind.SCORED]} şema_dışı={counts[ResultKind.SCHEMA]}"
         f" bayat={counts[ResultKind.STALE]} bekleyen={pending}",
+        f"izinsiz kaynak: toplam={unpermitted}{by_source}",
         f"olay skoru: toplam={scores} {grid}",
         f"reddedilen olay skoru: toplam={rejected}{reasons}",
         f"bugünkü çağrı (UTC): {snapshot.calls_today}/{config.daily_call_limit}",

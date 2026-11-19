@@ -11,10 +11,16 @@ onları tanır ama kullanmaz ve denetlemez; `load_archive_config` önce dosyanı
 
 Spec 0051 (plan A-1): `[score]` bölümü skorlayıcınındır; aynı kalıpla tanınır ama burada
 kullanılmaz ve denetlenmez (`_score_config.py`).
+
+Spec 0055 (CB-1; plan Risk 1, 2): açık kaynak AI kullanım izni kaydı ister — `ai_permission_by`,
+`ai_permission_on` (TOML tarihi), `ai_permission_basis`; kapalı kaynakta isteğe bağlıdır ama varsa
+üçü birden ve geçerli olmalıdır. Kod izin kararı vermez, yalnız kaydın varlığını ve biçimini
+denetler. Yükleyici saat bilmez: gelecek tarih `permission_in_future` ile giriş noktasında.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date, datetime
 from urllib.parse import urlsplit
 
 SECTION = "news"
@@ -25,10 +31,21 @@ _NAME_LIMIT = 64
 _URL_LIMIT = 2048
 _DEFAULTS = {"interval_minutes": 15, "max_response_kb": 2048, "source_alert_hours": 6}
 _PATHS = ("store_path", "log_path")
-_SOURCE_KEYS = ("name", "type", "url", "enabled")
+_PERMISSION_KEYS = ("ai_permission_by", "ai_permission_on", "ai_permission_basis")
+_SOURCE_KEYS = ("name", "type", "url", "enabled", *_PERMISSION_KEYS)
+_BASIS_LIMIT = 1024
 ARCHIVE_KEYS = ("archive_store_path", "archive_log_path", "archive_url", "archive_request_gap_s")
 MIN_ARCHIVE_GAP_S = 1
 _ARCHIVE_GAP_DEFAULT = 1
+
+
+@dataclass(frozen=True)
+class Permission:
+    """Spec 0055: sahibin, kaynağın koşullarının AI ile işlemeye izin verdiğini yazdığı kayıt."""
+
+    by: str
+    on: date
+    basis: str
 
 
 @dataclass(frozen=True)
@@ -37,6 +54,12 @@ class NewsSource:
     kind: str
     url: str
     enabled: bool
+    permission: Permission | None = None
+
+    @property
+    def permitted(self) -> bool:
+        """Spec 0055 Tanımlar: açık ve izin kaydı olan kaynak."""
+        return self.enabled and self.permission is not None
 
 
 @dataclass(frozen=True)
@@ -51,6 +74,19 @@ class NewsConfig:
     @property
     def max_response_bytes(self) -> int:
         return self.max_response_kb * 1024  # plan Risk 6: KB = 1024 bayt
+
+    @property
+    def permitted_names(self) -> frozenset[str]:
+        """İzinli kaynakların adları; ayarda olmayan ad izinli değildir (spec 0055 Tanımlar)."""
+        return frozenset(source.name for source in self.sources if source.permitted)
+
+
+def permission_in_future(config: NewsConfig, today: date) -> str | None:
+    """Spec 0055 CB-1, plan Risk 2: tarihi `today`'den (UTC) sonra olan ilk izin kaydının mesajı."""
+    for index, source in enumerate(config.sources, start=1):
+        if source.permission is not None and source.permission.on > today:
+            return f"ayar geçersiz: {SECTION}.sources[{index}].ai_permission_on (gelecekte)"
+    return None
 
 
 @dataclass(frozen=True)
@@ -118,7 +154,23 @@ def _source(raw: object, index: int) -> NewsSource:
     enabled = raw.get("enabled", True)
     if not isinstance(enabled, bool):
         raise _invalid(f"{prefix}.enabled")
-    return NewsSource(name, str(kind), url, enabled)
+    return NewsSource(name, str(kind), url, enabled, _permission(raw, prefix, enabled))
+
+
+def _permission(raw: Mapping[str, object], prefix: str, enabled: bool) -> Permission | None:
+    """Spec 0055 CB-1: açık kaynakta zorunlu; biri varsa üçü de; biçim kapalıda da denetlenir."""
+    if not enabled and not any(key in raw for key in _PERMISSION_KEYS):
+        return None
+    for key in _PERMISSION_KEYS:
+        if key not in raw:
+            raise _missing(f"{prefix}.{key}")
+    by = _text(raw["ai_permission_by"], f"{prefix}.ai_permission_by", _NAME_LIMIT)
+    on = raw["ai_permission_on"]
+    # tomllib gives a local date as `date`; a datetime is a `date` too and is refused
+    if not isinstance(on, date) or isinstance(on, datetime):
+        raise _invalid(f"{prefix}.ai_permission_on", "tarih değil")
+    basis = _text(raw["ai_permission_basis"], f"{prefix}.ai_permission_basis", _BASIS_LIMIT)
+    return Permission(by, on, basis)
 
 
 def _load(document: Mapping[str, object]) -> NewsConfig:

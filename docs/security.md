@@ -51,6 +51,10 @@
   girdidir: 16 KB, JSON, tam şema; her olay skorunun alıntısı LLM'e verilen metinde ve coinin adı alıntıda birebir,
   coinin USDT çifti borsa bilgisinde olmalıdır. Kayıt dosyasına haber metni, prompt ve yanıt yazılmaz. Skorlar
   hiçbir kararın girdisi değildir (gölge mod).
+- **Kaynakta AI kullanım izni (spec 0055):** haber ayarında açık ve izin kaydı (doğrulayan, tarih, dayanak) olan
+  kaynak dışında hiçbir kaynağın haberi toplanmaz, LLM'e verilmez, prompt örneği olmaz (izinli `binance-duyuru`
+  yoksa prompt örneksizdir) ve ölçüm hükmüne girmez; izinsiz kaynağın haberi çağrısız `izinsiz kaynak` sonucu
+  alır. Kod izin kararı vermez, kaydı sahip doğrular; koşullar değişirse kayıt silinip kaynak kapatılır.
 
 ## AuthN / AuthZ
 - Tek kullanıcı. **Varsayılan: reddet.**

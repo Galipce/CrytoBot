@@ -23,22 +23,32 @@ archive_request_gap_s = 1                         # iki istek arası en az saniy
 
 # Kaynaklar: `type` "binance-duyuru" (JSON) ya da "rss" (RSS 2.0 ve Atom); yalnız https.
 # `enabled = false` olan kaynak sorgulanmaz. Kaynak çıkarılınca eski kayıtları kalır.
-# Binance duyuru ucu belgelenmiş değildir ve değişebilir: değişirse kaynak hatası olur.
+# AI kullanım izni (spec 0055): açık her kaynak, sahibin o kaynağın koşullarını içeriğin AI ile
+# işlenmesine izin verir bulduğunu yazan üç alanı taşır; yoksa toplayıcı ve skorlayıcı başlamaz.
+#   ai_permission_by    = doğrulayan (ad)
+#   ai_permission_on    = doğrulama tarihi, TOML tarihi (tırnaksız: 2026-11-19); gelecekte olamaz
+#   ai_permission_basis = dayanak: koşul belgesi ve maddesi (adres ve madde no.)
+# Kod izin kararı vermez; koşullar değişirse kaydı silip kaynağı kapatın. İzni olmayan kaynağın
+# haberi Claude'a verilmez, ölçüm hükmüne girmez. Adı yeniden kullanmayın: eski kayıtlar adla
+# eşlenir ve yeni iznin altına girer.
+# Binance duyuru ucu belgelenmiş değildir ve değişebilir: değişirse kaynak hatası olur. Kapalı:
+# binance.com/robots.txt `*/bapi/` yolunu AI tarayıcıları dahil bütün ajanlara kapatıyor; AI
+# kullanımına izin veren dayanak bulunmadı (spec 0055, 2026-11-19).
 [[news.sources]]
 name = "binance-duyuru"
 type = "binance-duyuru"
 url = "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=20"
+enabled = false
 
-[[news.sources]]
-name = "coindesk"
-type = "rss"
-url = "https://www.coindesk.com/arc/outboundfeeds/rss"
-
-[[news.sources]]
-name = "cointelegraph"
-type = "rss"
-url = "https://cointelegraph.com/rss"
-enabled = true
+# RSS kaynağı örneği (yorumda; adres yok): koşulları AI kullanımına izin veren bir akış bulunca
+# açın ve üç alanı kendi doğrulamanızla doldurun.
+# [[news.sources]]
+# name = "<akış adı>"
+# type = "rss"
+# url = "https://<akış adresi>"
+# ai_permission_by = "<ad>"
+# ai_permission_on = <YYYY-AA-GG>
+# ai_permission_basis = "<koşul belgesinin adresi, madde>"
 
 # LLM olay skoru, gölge mod (spec 0051): `python -m crytobot news score` ileriye dönük haber
 # kaydındaki yeni haberleri sahibin Claude aboneliğiyle (`claude -p` alt süreci; API anahtarı yok)

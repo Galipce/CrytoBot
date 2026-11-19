@@ -8,6 +8,8 @@ Tur: başlangıç anından sonra (ya da eşit) görülmüş, sonucu olmayan habe
 ilk görme anı ve kimlik sırasıyla (tekrar tekrar başarısız olan haber kuyruğu tüketmez, M-1). Önce
 çağrısız geçiş: ilk görme anından 24 saatten çok geçmiş haber "bayat" olur. Sonra çağrılar; her
 çağrıdan önce durdurma, tur sınırı, kota beklemesi ve UTC günlük sınır denetlenir.
+Spec 0055 CB-2: kaynağı izinli olmayan sonuçsuz haber, bayat denetiminden önce, çağrısız
+"izinsiz kaynak" sonucu alır; sonucu olduğu için kaynak sonradan izinli olsa da yeniden denenmez.
 Çağrı süreç başlamadan sayılır. `ok` yanıt doğrulanır: "skorlandı" ya da "şema dışı" (yinelenmez).
 Geçici hata (zaman aşımı, oturum yok, kota, tanınmayan) sonuç yazmaz, turu bitirir; haber sonraki
 turda yeniden denenir. Kayıt dosyasına haber metni, prompt ve yanıt yazılmaz: yalnız kimlik, sonuç,
@@ -90,6 +92,7 @@ class _Tally:
     scored: int = 0
     schema: int = 0
     stale: int = 0
+    unpermitted: int = 0
     failure: str | None = None
     held: str | None = None
 
@@ -97,7 +100,7 @@ class _Tally:
     def line(self) -> str:
         text = (
             f"tur: bekleyen={self.pending} çağrı={self.calls} skorlandı={self.scored}"
-            f" şema_dışı={self.schema} bayat={self.stale}"
+            f" şema_dışı={self.schema} bayat={self.stale} izinsiz={self.unpermitted}"
         )
         if self.failure is not None:
             text += f" hata={self.failure}"
@@ -186,11 +189,17 @@ def run_score_round(config: ScoreConfig, store: ScoreStore, parts: ScoreParts) -
     if items is None:
         raise StoreError("haber kaydı yok")
     done = store.resulted()
+    permitted = config.news.permitted_names
     pending: list[ForwardItem] = []
     for item in items:
         if item.record_id in done:
             continue
         now = parts.clock()
+        if item.source not in permitted:
+            store.write_result(ScoreResult(item.record_id, ResultKind.UNPERMITTED, now))
+            tally.unpermitted += 1
+            parts.say(f"izinsiz: haber={item.record_id} kaynak={item.source} çağrı yok")
+            continue
         if now - item.first_seen > STALE_AFTER:
             store.write_result(ScoreResult(item.record_id, ResultKind.STALE, now))
             tally.stale += 1

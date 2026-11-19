@@ -26,6 +26,7 @@ from crytobot.news import (
     run_collection,
     run_round,
 )
+from tests.news.test_source_permission import PERMISSION
 
 FIXTURES = Path(__file__).parent / "fixtures"
 START = datetime(2026, 11, 15, 9, 0, tzinfo=UTC)
@@ -37,7 +38,13 @@ def fixture(name: str) -> bytes:
 
 
 def source_table(name: str, kind: str = "rss", **extra: object) -> dict[str, object]:
-    return {"name": name, "type": kind, "url": f"https://{name}.example.org/feed", **extra}
+    return {
+        "name": name,
+        "type": kind,
+        "url": f"https://{name}.example.org/feed",
+        **PERMISSION,
+        **extra,
+    }
 
 
 def make_config(root: Path, *sources: dict[str, object], **settings: object) -> NewsConfig:
@@ -310,7 +317,9 @@ def test_error_name_and_time_recorded(harness: Harness) -> None:
 
 def test_no_secret_in_store_or_lines(tmp_path: Path) -> None:
     """AC-5: sorgu dizgesindeki sır ne kayda ne satırlara girer (hata yalnız adıyla)."""
-    config = make_config(tmp_path, {"name": "gizli", "type": "rss", "url": SECRET_URL})
+    config = make_config(
+        tmp_path, {"name": "gizli", "type": "rss", "url": SECRET_URL, **PERMISSION}
+    )
     harness = Harness(tmp_path, config)
     harness.responses["gizli"] = Fetched(error="http_401")
     harness.collect()

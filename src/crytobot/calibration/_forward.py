@@ -20,6 +20,9 @@ dosya, saat ve ağ kullanmaz.
   ve sayılmaz.
 - Hüküm (R-3, plan Risk 3): güncel üçlünün, skor anındaki beyaz listede olan, ölçülmüş ve
   örtüşmeyen örnekleriyle; olağandışılar dahil. Eşik kesin: `fark ≥ 5/100`.
+- İzinsiz kaynak (spec 0055 CB-4): `unpermitted`'teki haberlerin sonuçları hiçbir yere girmez
+  (örnek, üçlü, ilk an, fiyat ihtiyacı); olumsuz (şiddet ≥ 2) coin örnekleri yalnız kaynak adına
+  göre sayılır (`ForwardMeasured.unpermitted`).
 
 Oranlar `Fraction`'dır.
 """
@@ -28,7 +31,7 @@ import math
 from bisect import bisect_left
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from fractions import Fraction
@@ -133,13 +136,15 @@ class ShadowTurn:
 @dataclass(frozen=True)
 class ForwardInputs:
     """`results` `None`: skor kaydı yok. `shadow` `None`: gölge kayıt yok. `sources`: haber
-    kimliği → kaynak türü. `whitelist`: bot ayarındaki beyaz liste."""
+    kimliği → kaynak türü. `whitelist`: bot ayarındaki beyaz liste. `unpermitted`: kaynağı izinli
+    olmayan haberin kimliği → kaynak adı (spec 0055 CB-4)."""
 
     results: tuple[ScoredNews, ...] | None
     events: tuple[ForwardEvent, ...]
     sources: Mapping[int, str]
     shadow: tuple[ShadowTurn, ...] | None
     whitelist: tuple[str, ...]
+    unpermitted: Mapping[int, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -246,7 +251,8 @@ class ShadowSection:
 @dataclass(frozen=True)
 class ForwardMeasured:
     """Bütün ölçüm. `overlapping`: örnek başına birincil tablodaki örtüşme (beyaz listedeyse
-    üçlüsünün tablosu, değilse güncel üçlünün yardımcı tablosu); hiçbir tabloda değilse `None`."""
+    üçlüsünün tablosu, değilse güncel üçlünün yardımcı tablosu); hiçbir tabloda değilse `None`.
+    `unpermitted`: izinsiz kaynaktan gelen, sayılmayan coin örnekleri, kaynak adına göre."""
 
     report_at: datetime
     costs: Costs
@@ -260,6 +266,7 @@ class ForwardMeasured:
     old: tuple[ForwardTable, ...]
     side: ForwardTable | None
     shadow: ShadowSection | None
+    unpermitted: Counts = ()
 
 
 def base_of(pair: str) -> str:
@@ -278,12 +285,49 @@ def is_pending(reference: datetime, report_at: datetime) -> bool:
     return floor_hour(reference) + PENDING_AFTER > report_at
 
 
-def _scored(inputs: ForwardInputs, report_at: datetime) -> list[ScoredNews]:
+def _all_scored(inputs: ForwardInputs, report_at: datetime) -> list[ScoredNews]:
     return [
         item
         for item in inputs.results or ()
         if item.kind == SCORED and item.triple is not None and item.at <= report_at
     ]
+
+
+def _scored(inputs: ForwardInputs, report_at: datetime) -> list[ScoredNews]:
+    """İzinli kaynakların "skorlandı" sonuçları; bütün ölçüm bunlardan türer (CB-4)."""
+    return [
+        item for item in _all_scored(inputs, report_at) if item.news_id not in inputs.unpermitted
+    ]
+
+
+def _chosen(
+    events: Iterable[ForwardEvent], news_ids: Iterable[int]
+) -> dict[tuple[int, str], ForwardEvent]:
+    """Olumsuz (şiddet ≥ 2) olay skorları, (haber, coin) başına tek: şiddet en yüksek, eşitlikte
+    tür alfabesi."""
+    wanted = set(news_ids)
+    chosen: dict[tuple[int, str], ForwardEvent] = {}
+    for event in events:
+        if event.news_id not in wanted:
+            continue
+        if event.direction != NEGATIVE or event.severity < MIN_SEVERITY:
+            continue
+        key = (event.news_id, event.coin)
+        held = chosen.get(key)
+        if held is None or (-event.severity, event.event_type) < (-held.severity, held.event_type):
+            chosen[key] = event
+    return chosen
+
+
+def unpermitted_counts(inputs: ForwardInputs, report_at: datetime) -> Counts:
+    """CB-4: izinsiz kaynaktan gelen olumsuz coin örnekleri, kaynak adına göre."""
+    news_ids = {
+        item.news_id
+        for item in _all_scored(inputs, report_at)
+        if item.news_id in inputs.unpermitted
+    }
+    chosen = _chosen(inputs.events, news_ids)
+    return _counts(inputs.unpermitted[news_id] for news_id, _ in chosen)
 
 
 def current_triple(inputs: ForwardInputs, report_at: datetime) -> Triple | None:
@@ -326,16 +370,7 @@ def whitelist_at(turns: Sequence[ShadowTurn], at: datetime, fallback: tuple[str,
 def forward_samples(inputs: ForwardInputs, report_at: datetime) -> tuple[ForwardSample, ...]:
     """R-2, AC-1: rapor anına kadarki olumsuz (şiddet ≥ 2) olay skorları, coin başına tek örnek."""
     scored = {item.news_id: item for item in _scored(inputs, report_at)}
-    chosen: dict[tuple[int, str], ForwardEvent] = {}
-    for event in inputs.events:
-        if event.news_id not in scored:
-            continue
-        if event.direction != NEGATIVE or event.severity < MIN_SEVERITY:
-            continue
-        key = (event.news_id, event.coin)
-        held = chosen.get(key)
-        if held is None or (-event.severity, event.event_type) < (-held.severity, held.event_type):
-            chosen[key] = event
+    chosen = _chosen(inputs.events, scored)
     turns = _turns(inputs, report_at)
     samples = []
     for (news_id, coin), event in chosen.items():
@@ -700,4 +735,5 @@ def measure_forward(
         old,
         side,
         _shadow(inputs, report_at, priced),
+        unpermitted_counts(inputs, report_at),
     )

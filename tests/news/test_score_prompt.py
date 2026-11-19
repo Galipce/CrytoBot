@@ -35,7 +35,7 @@ def sha(data: bytes) -> str:
 def context() -> ScoreContext:
     report = (FIXTURES / "report.txt").read_bytes()
     library = (FIXTURES / "library.jsonl").read_bytes()
-    return load_context(report, sha(report), library, sha(library))
+    return load_context(report, sha(report), library, sha(library), examples=True)
 
 
 def data_part(text: str) -> str:
@@ -142,7 +142,13 @@ def test_context_refused(
     report = (FIXTURES / "report.txt").read_bytes() if report is None else report
     library = (FIXTURES / "library.jsonl").read_bytes() if library is None else library
     with pytest.raises(ContextError, match=message):
-        load_context(report, report_sha or sha(report), library, library_sha or sha(library))
+        load_context(
+            report,
+            report_sha or sha(report),
+            library,
+            library_sha or sha(library),
+            examples=True,
+        )
 
 
 def test_fingerprints_cover_types_and_rules() -> None:
@@ -151,3 +157,30 @@ def test_fingerprints_cover_types_and_rules() -> None:
     assert prompt_fingerprint(fewer) != PROMPT_FINGERPRINT  # the type list is instruction too
     assert context_fingerprint("r", "l") == context_fingerprint("r", "l", RULES_FINGERPRINT)
     assert context_fingerprint("r", "l", "0" * 64) != context_fingerprint("r", "l")
+
+
+def test_no_permitted_binance_no_examples() -> None:
+    """Spec 0055 CB-3: izinli `binance-duyuru` kaynağı yoksa prompta örnek girmez; tablo kalır."""
+    report = (FIXTURES / "report.txt").read_bytes()
+    library = (FIXTURES / "library.jsonl").read_bytes()
+    bare = load_context(report, sha(report), library, sha(library), examples=False)
+    assert bare.examples == {}
+    assert bare.table == context().table
+    prompt = build_prompt(bare, "Binance Will Delist ABC", "metin")
+    assert prompt.rule_type == "listeden çıkarma"
+    assert "(örnek yok)" in prompt.text
+    assert "NEW4" not in prompt.text and "NEW2" not in prompt.text
+    assert "isabet=60.00% taban=30.00% fark=+30.00" in prompt.text
+
+
+def test_examples_flag_changes_context_fingerprint() -> None:
+    """Spec 0055 plan Risk 4: örneksiz bağlam ayrı bir parmak izidir; örnekli olan değişmez."""
+    report = (FIXTURES / "report.txt").read_bytes()
+    library = (FIXTURES / "library.jsonl").read_bytes()
+    bare = load_context(report, sha(report), library, sha(library), examples=False)
+    assert bare.fingerprint == context_fingerprint(sha(report), sha(library), examples=False)
+    assert bare.fingerprint != context().fingerprint
+    assert context().fingerprint == context_fingerprint(sha(report), sha(library))
+    # a wrong library digest is still refused without examples
+    with pytest.raises(ContextError):
+        load_context(report, sha(report), library, "0" * 64, examples=False)

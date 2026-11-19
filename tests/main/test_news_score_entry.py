@@ -39,6 +39,11 @@ from tests.main.test_entry import config_text
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "news" / "fixtures" / "score"
 START = datetime(2026, 11, 17, 10, 0, tzinfo=UTC)
+PERMISSION_ROWS = (
+    'ai_permission_by = "Test"',
+    "ai_permission_on = 2026-11-17",
+    'ai_permission_basis = "test koşulu"',
+)
 
 
 def sha(path: Path) -> str:
@@ -116,11 +121,13 @@ class Scorer:
             'name = "binance"',
             'type = "binance-duyuru"',
             'url = "https://example.org/b"',
+            *PERMISSION_ROWS,
             "",
             "[[news.sources]]",
             'name = "coindesk"',
             'type = "rss"',
             'url = "https://example.org/r"',
+            *PERMISSION_ROWS,
             "",
             "[score]",
             *(f"{key} = {toml_value(value)}" for key, value in self.score_table.items()),
@@ -314,3 +321,35 @@ def test_status_without_record(scorer: Scorer) -> None:
     assert code == EXIT_OK
     assert console.strip().splitlines()[-1] == "henüz skor yok"
     assert not (scorer.root / "score.db").exists()
+
+
+def test_future_permission_date_refused(scorer: Scorer) -> None:
+    """Spec 0055 CB-1: izin tarihi UTC bugünden sonraysa skorlayıcı ve durumu reddeder; çağrı ve
+    kayıt yok."""
+    scorer.now = START - timedelta(days=1)
+    message = "news score: reddedildi: ayar geçersiz: news.sources[1].ai_permission_on (gelecekte)"
+    assert refuse(scorer) == message
+    assert refuse(scorer, "news", "score", "status") == message
+
+
+@pytest.mark.parametrize("binance_permitted", [True, False])
+def test_examples_only_with_permitted_binance(scorer: Scorer, binance_permitted: bool) -> None:
+    """Spec 0055 CB-3 (VERIFY F-1): giriş noktası örnek bayrağını ayardan kurar. İzinli
+    `binance-duyuru` yoksa (yalnız izinli `rss` varken de) gerçek prompt örneksizdir; varsa
+    kütüphane örnekleri gelir."""
+    source = "binance"
+    if not binance_permitted:
+        text = scorer.news_config.read_text(encoding="utf-8")
+        permitted = 'url = "https://example.org/b"\n' + "\n".join(PERMISSION_ROWS) + "\n"
+        assert permitted in text
+        scorer.news_config.write_text(
+            text.replace(permitted, 'url = "https://example.org/b"\nenabled = false\n'),
+            encoding="utf-8",
+        )
+        source = "coindesk"  # an rss source that is permitted
+    scorer.add(source, "id:1", "Binance Will Delist ABC", "Binance will delist ABC.", START)
+    code, _ = scorer.run("news", "score")
+    assert code == EXIT_OK
+    (prompt,) = scorer.prompts
+    assert ("NEW4" in prompt) is binance_permitted
+    assert ("(örnek yok)" in prompt) is not binance_permitted

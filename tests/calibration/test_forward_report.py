@@ -210,3 +210,25 @@ def test_samples_file_has_all_fields() -> None:
     no_pair = next(row for row in rows if row["coin"] == "ZZZ")
     assert no_pair["reason"] == "çift yok" and no_pair["overlapping"] is None
     assert no_pair["whitelisted"] is False
+
+
+def test_unpermitted_line_per_source() -> None:
+    """Spec 0055 CB-4: başlıkta kaynak adına göre "izinsiz kaynak, hüküm dışı"; hüküm tablosu
+    yalnız izinli kaynağın örneğiyle."""
+    hours, prices = spaced(2)
+    results, events = spaced_inputs(hours)
+    events += [event(1, "ETH"), event(2, "ETH")]
+    report = at(hours[-1] + 25)
+    measured = _measured(
+        inputs(results, events, sources={1: "rss", 2: "rss"}, unpermitted={2: "coindesk"}),
+        report,
+        {"BTC": prices, "ETH": priced(hours[-1] + 30)},
+    )
+    text = forward_report_text(measured, FACTS)
+    assert "izinsiz kaynak, hüküm dışı: coindesk=2" in text
+    assert "kaynak: rss=2" in text and "coin: BTC=1 ETH=1" in text
+    clean = forward_report_text(
+        _measured(inputs(results, events), report, {"BTC": prices, "ETH": priced(hours[-1] + 30)}),
+        FACTS,
+    )
+    assert "izinsiz kaynak, hüküm dışı: yok" in clean

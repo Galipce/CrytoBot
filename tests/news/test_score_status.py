@@ -13,7 +13,7 @@ from crytobot.news import (
     score_status_lines,
 )
 from tests.main.test_news_score_entry import Scorer
-from tests.news.test_score_run import START, Harness, event, events, failed, ok
+from tests.news.test_score_run import CLOSED_RSS, START, Harness, event, events, failed, ok
 
 
 def test_all_items(tmp_path: Path) -> None:
@@ -43,6 +43,7 @@ def test_all_items(tmp_path: Path) -> None:
         f"skor kaydı: {config.store_path} model=claude-sonnet-5-5",
         f"başlangıç anı: {START.isoformat()}",
         "haber: skorlandı=1 şema_dışı=1 bayat=0 bekleyen=3",
+        "izinsiz kaynak: toplam=0",
         "olay skoru: toplam=1 olumlu/1=0 olumlu/2=0 olumlu/3=0 olumsuz/1=0 olumsuz/2=1"
         " olumsuz/3=0 belirsiz/1=0 belirsiz/2=0 belirsiz/3=0",
         "reddedilen olay skoru: toplam=2 alıntı birebir değil=1 yinelenen coin=1",
@@ -88,3 +89,22 @@ def test_status_no_call_no_lock(tmp_path: Path) -> None:
     assert code == EXIT_OK
     assert len(scorer.prompts) == calls  # no LLM call
     assert "haber: skorlandı=1 şema_dışı=0 bayat=0 bekleyen=0" in console.getvalue()
+
+
+def test_unpermitted_counted_per_source(tmp_path: Path) -> None:
+    """Spec 0055 CB-2: durum kaynak başına "izinsiz kaynak" sayısını gösterir."""
+    run_ = Harness(tmp_path, sources=CLOSED_RSS)
+    run_.add("coindesk", "link:1", "A", "t", START)
+    run_.add("coindesk", "link:2", "B", "t", START)
+    run_.add("cointelegraph", "link:3", "C", "t", START)
+    run_.add("binance", "id:1", "D", "t", START)
+    run_.now = START + timedelta(minutes=1)
+    assert run_.round()
+    config = run_.config
+    snapshot = read_score_snapshot(config.store_path, run_.now.date())
+    lines = score_status_lines(config, snapshot, read_forward(config.news.store_path, START))
+    assert "haber: skorlandı=1 şema_dışı=0 bayat=0 bekleyen=0" in lines
+    assert "izinsiz kaynak: toplam=3 coindesk=2 cointelegraph=1" in lines
+    assert "izinsiz kaynak: toplam=3 kaynak=bilinmiyor (haber kaydı yok)" in score_status_lines(
+        config, snapshot, None
+    )

@@ -4,9 +4,15 @@ arşiv anahtarlarını tanır ama kullanmaz (plan Risk 1)."""
 import pytest
 
 from crytobot.news import load_archive_config, load_news_config
+from tests.news.test_source_permission import PERMISSION
 
 URL = "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query"
-SOURCE = {"name": "coindesk", "type": "rss", "url": "https://www.coindesk.com/rss"}
+SOURCE = {
+    "name": "coindesk",
+    "type": "rss",
+    "url": "https://www.coindesk.com/rss",
+    **PERMISSION,
+}
 
 
 def document(**changes: object) -> dict[str, object]:
