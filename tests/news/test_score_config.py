@@ -10,6 +10,7 @@ import pytest
 
 from crytobot.news import load_archive_config, load_news_config
 from crytobot.news._score_config import DAILY_CALL_HARD_CAP, load_score_config
+from tests.news.test_source_permission import PERMISSION
 
 SHA = "a" * 64
 
@@ -21,7 +22,14 @@ def news_table() -> dict[str, Any]:
         "archive_store_path": "archive.db",
         "archive_log_path": "archive.log",
         "archive_url": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query",
-        "sources": [{"name": "binance", "type": "binance-duyuru", "url": "https://example.org/a"}],
+        "sources": [
+            {
+                "name": "binance",
+                "type": "binance-duyuru",
+                "url": "https://example.org/a",
+                **PERMISSION,
+            }
+        ],
     }
 
 

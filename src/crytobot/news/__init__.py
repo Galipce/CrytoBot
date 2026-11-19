@@ -64,8 +64,10 @@ from crytobot.news._config import (
     NewsConfig,
     NewsConfigResult,
     NewsSource,
+    Permission,
     load_archive_config,
     load_news_config,
+    permission_in_future,
 )
 from crytobot.news._fetch import USER_AGENT, Fetched, Hop, fetch_source
 from crytobot.news._items import TEXT_LIMIT_BYTES, NewsItem, RawItem
@@ -206,6 +208,7 @@ __all__: list[str] = [
     "NewsSource",
     "NewsStore",
     "ParseError",
+    "Permission",
     "RawItem",
     "ResultKind",
     "ScoreCall",
@@ -242,6 +245,7 @@ __all__: list[str] = [
     "outage_notice",
     "page_url",
     "parse_binance_page",
+    "permission_in_future",
     "prepare_archive",
     "read_archive",
     "read_filter_view",

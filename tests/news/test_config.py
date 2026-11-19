@@ -3,11 +3,13 @@
 import pytest
 
 from crytobot.news import load_news_config
+from tests.news.test_source_permission import PERMISSION
 
 SOURCE = {
     "name": "coindesk",
     "type": "rss",
     "url": "https://www.coindesk.com/arc/outboundfeeds/rss",
+    **PERMISSION,
 }
 
 

@@ -39,21 +39,43 @@ BODIES = {
 }
 
 
+PERMISSION_TOML = """ai_permission_by = "Test"
+ai_permission_on = 2026-11-15
+ai_permission_basis = "test koşulu"
+"""
+# Spec 0055 (plan Risk 5): the example has no permitted source; the tests run three permitted ones
+# (adresler sahte getirmeye gider, ağ yok)
+TEST_SOURCES = "".join(
+    f'\n[[news.sources]]\nname = "{name}"\ntype = "{kind}"\nurl = "{url}"\n{PERMISSION_TOML}'
+    for name, kind, url in (
+        ("binance-duyuru", "binance-duyuru", "https://example.org/binance"),
+        ("coindesk", "rss", "https://www.coindesk.com/arc/outboundfeeds/rss"),
+        ("cointelegraph", "rss", "https://cointelegraph.com/rss"),
+    )
+)
+
+
 def news_text(root: Path, **changes: str) -> str:
-    """Örnek dosya; yollar `root`'ta. `changes`: `[news]` anahtarı → TOML değeri."""
+    """Örnek dosya; yollar `root`'ta. `changes`: `[news]` anahtarı → TOML değeri. Örneğin
+    kaynakları çıkarılır, yerine `TEST_SOURCES` (üç izinli kaynak) eklenir."""
     values = {
         "store_path": f'"{(root / "news.db").as_posix()}"',
         "log_path": f'"{(root / "news.log").as_posix()}"',
         **changes,
     }
     rows = []
-    in_news = False
+    section = ""
     for row in EXAMPLE.read_text(encoding="utf-8").splitlines():
         if row.startswith("["):
-            in_news = row == "[news]"
+            section = row
+            if row == "[[news.sources]]":
+                continue
+        if section == "[[news.sources]]" and "=" in row and not row.startswith("#"):
+            continue
         key = row.split("=", 1)[0].strip()
+        in_news = section == "[news]"
         rows.append(f"{key} = {values[key]}" if in_news and key in values and "=" in row else row)
-    return "\n".join(rows) + "\n"
+    return "\n".join(rows) + "\n" + TEST_SOURCES
 
 
 @dataclass
@@ -133,7 +155,25 @@ def test_example_news_config_is_valid() -> None:
     with EXAMPLE.open("rb") as file:
         result = load_news_config(tomllib.load(file))
     assert result.config is not None, result.message
-    assert [source.kind for source in result.config.sources] == ["binance-duyuru", "rss", "rss"]
+    # spec 0055 CB-5 supersedes the old "binance-duyuru, rss, rss" list (0046/AC-9)
+    assert [(source.name, source.kind) for source in result.config.sources] == [
+        ("binance-duyuru", "binance-duyuru")
+    ]
+
+
+def test_example_config_has_no_unverified_open_source() -> None:
+    """Spec 0055 CB-5: CoinDesk ve Cointelegraph yok, izinsiz açık kaynak yok, alanlar yorumda,
+    yorumdaki RSS örneği adres içermez."""
+    text = EXAMPLE.read_text(encoding="utf-8")
+    with EXAMPLE.open("rb") as file:
+        result = load_news_config(tomllib.load(file))
+    assert result.config is not None, result.message
+    assert all(not source.enabled for source in result.config.sources)
+    assert result.config.permitted_names == frozenset()
+    assert "coindesk" not in text.lower() and "cointelegraph" not in text.lower()
+    for key in ("ai_permission_by", "ai_permission_on", "ai_permission_basis"):
+        assert f"#   {key}" in text and f"# {key} = " in text
+    assert '# url = "https://<akış adresi>"' in text
 
 
 def test_real_news_config_is_ignored_by_git() -> None:

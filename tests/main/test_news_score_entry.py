@@ -39,6 +39,11 @@ from tests.main.test_entry import config_text
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "news" / "fixtures" / "score"
 START = datetime(2026, 11, 17, 10, 0, tzinfo=UTC)
+PERMISSION_ROWS = (
+    'ai_permission_by = "Test"',
+    "ai_permission_on = 2026-11-17",
+    'ai_permission_basis = "test koşulu"',
+)
 
 
 def sha(path: Path) -> str:
@@ -116,11 +121,13 @@ class Scorer:
             'name = "binance"',
             'type = "binance-duyuru"',
             'url = "https://example.org/b"',
+            *PERMISSION_ROWS,
             "",
             "[[news.sources]]",
             'name = "coindesk"',
             'type = "rss"',
             'url = "https://example.org/r"',
+            *PERMISSION_ROWS,
             "",
             "[score]",
             *(f"{key} = {toml_value(value)}" for key, value in self.score_table.items()),

@@ -30,6 +30,7 @@ from crytobot.news import (
     page_url,
     run_archive,
 )
+from tests.news.test_source_permission import PERMISSION
 
 BASE = "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query"
 START = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
@@ -120,7 +121,7 @@ class Harness:
                 "archive_log_path": str(self.root / "archive.log"),
                 "archive_url": self.url,
                 "archive_request_gap_s": self.gap,
-                "sources": [{"name": "b", "type": "binance-duyuru", "url": BASE}],
+                "sources": [{"name": "b", "type": "binance-duyuru", "url": BASE, **PERMISSION}],
             }
         }
         result = load_archive_config(document)

@@ -34,6 +34,7 @@ from crytobot.news import (
     run_score_round,
     run_scoring,
 )
+from tests.news.test_source_permission import PERMISSION
 
 FIXTURES = Path(__file__).parent / "fixtures" / "score"
 START = datetime(2026, 11, 17, 10, 0, tzinfo=UTC)
@@ -87,8 +88,13 @@ def score_document(root: Path, **score: object) -> dict[str, Any]:
             "store_path": str(root / "news.db"),
             "log_path": str(root / "news.log"),
             "sources": [
-                {"name": "binance", "type": "binance-duyuru", "url": "https://example.org/b"},
-                {"name": "coindesk", "type": "rss", "url": "https://example.org/r"},
+                {
+                    "name": "binance",
+                    "type": "binance-duyuru",
+                    "url": "https://example.org/b",
+                    **PERMISSION,
+                },
+                {"name": "coindesk", "type": "rss", "url": "https://example.org/r", **PERMISSION},
             ],
         },
         "score": table,
