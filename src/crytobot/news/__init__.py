@@ -57,8 +57,12 @@ from crytobot.news._collect import (
     run_round,
 )
 from crytobot.news._config import (
+    BINANCE_KINDS,
+    DEFAULT_KEY_ENV,
+    DEFAULT_SECRET_ENV,
     MIN_ARCHIVE_GAP_S,
     MIN_INTERVAL_MINUTES,
+    STREAM_KIND,
     ArchiveConfig,
     ArchiveConfigResult,
     NewsConfig,
@@ -155,7 +159,10 @@ from crytobot.news._store import (
 
 __all__: list[str] = [
     "ARCHIVE_EMPTY",
+    "BINANCE_KINDS",
     "DAILY_CALL_HARD_CAP",
+    "DEFAULT_KEY_ENV",
+    "DEFAULT_SECRET_ENV",
     "EMPTY",
     "EVENT_TYPES",
     "FROM_ARCHIVE",
@@ -172,6 +179,7 @@ __all__: list[str] = [
     "POSSIBLE_MISS",
     "PROMPT_FINGERPRINT",
     "RULES_FINGERPRINT",
+    "STREAM_KIND",
     "SYSTEM_PROMPT",
     "TEXT_LIMIT_BYTES",
     "USER_AGENT",
