@@ -95,6 +95,7 @@ def inputs(
     shadow: Sequence[ShadowTurn] | None = None,
     whitelist: tuple[str, ...] = WHITELIST,
     sources: Mapping[int, str] | None = None,
+    unpermitted: Mapping[int, str] | None = None,
 ) -> ForwardInputs:
     return ForwardInputs(
         None if results is None else tuple(results),
@@ -102,6 +103,7 @@ def inputs(
         dict(sources or {}),
         None if shadow is None else tuple(shadow),
         whitelist,
+        dict(unpermitted or {}),
     )
 
 

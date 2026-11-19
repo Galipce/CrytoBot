@@ -127,6 +127,7 @@ def _header(measured: ForwardMeasured, facts: ForwardReportFacts) -> list[str]:
         shadow = f"{NO_SHADOW}: {facts.shadow_path}"
     else:
         shadow = f"gölge kayıt: {facts.shadow_path} bozuk satır={facts.shadow_broken}"
+    unpermitted = _counts(measured.unpermitted) if measured.unpermitted else "yok"
     return [
         "# İleriye dönük ölçüm raporu — LLM olay skoru, gölge mod (spec 0053)",
         f"{GENERATED_PREFIX}{_iso(facts.generated_at)}",
@@ -141,6 +142,7 @@ def _header(measured: ForwardMeasured, facts: ForwardReportFacts) -> list[str]:
         f"hedef mesafesinin alt sınırı giriş fiyatının {costs.factor() * 100:.4f}%'i",
         f"güncel üçlü: {_triple(measured.current)} ilk sonuç={_iso(measured.current_first)}",
         f"hüküm: {measured.verdict.line}",
+        f"izinsiz kaynak, hüküm dışı: {unpermitted}",
         f"örnek: olumsuz yön, şiddet ≥ {MIN_SEVERITY}; giriş = açılışı skor anından kesin sonra "
         f"olan ilk 1h mum (en geç {int(LATEST_ENTRY.total_seconds() // 3600)} saat sonra); "
         f"hedef max({TARGET_ATR}xATR, maliyet), stop {STOP_ATR}xATR, ATR({ATR_PERIOD}) giriş "
