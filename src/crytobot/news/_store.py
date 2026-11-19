@@ -47,7 +47,15 @@ CREATE TABLE IF NOT EXISTS source_state (
     outage_started_at TEXT,
     alert_sent INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS stream_state (
+    source TEXT PRIMARY KEY,
+    connected INTEGER NOT NULL,
+    last_connected_at TEXT,
+    gap_started_at TEXT,
+    gap_total_s INTEGER NOT NULL
+);
 """
+# Spec 0056 (plan Risk 4): `stream_state` is additive; `news`, `source_state` and the format stay
 
 
 class StoreError(Exception):
@@ -64,9 +72,20 @@ class SourceState:
 
 
 @dataclass(frozen=True)
+class StreamState:
+    """Spec 0056 R-9, AC-8: akış kaynağının bağlantı durumu (tur yazar, durum komutu okur)."""
+
+    connected: bool
+    last_connected_at: datetime | None
+    gap_started_at: datetime | None
+    gap_total_s: int
+
+
+@dataclass(frozen=True)
 class SourceSummary:
     state: SourceState
     records: int
+    stream: StreamState | None = None
 
 
 @dataclass(frozen=True)
@@ -143,8 +162,15 @@ class NewsStore:
             raise StoreError("haber kaydı okunamıyor") from None
         return _state(row)
 
-    def write(self, source: str, items: Sequence[NewsItem], state: SourceState) -> list[bool]:
-        """Kaynağın kayıtları ve durumu tek işlemde; öğe başına yazıldı mı (tekrar: `False`)."""
+    def write(
+        self,
+        source: str,
+        items: Sequence[NewsItem],
+        state: SourceState,
+        stream: StreamState | None = None,
+    ) -> list[bool]:
+        """Kaynağın kayıtları ve durumu (akış kaynağında bağlantı durumu da) tek işlemde; öğe başına
+        yazıldı mı (tekrar: `False`)."""
         connection = self._connection
         try:
             connection.execute("BEGIN IMMEDIATE")
@@ -164,6 +190,18 @@ class NewsStore:
                     int(state.alert_sent),
                 ),
             )
+            if stream is not None:
+                connection.execute(
+                    "INSERT OR REPLACE INTO stream_state (source, connected, last_connected_at,"
+                    " gap_started_at, gap_total_s) VALUES (?, ?, ?, ?, ?)",
+                    (
+                        source,
+                        int(stream.connected),
+                        _text(stream.last_connected_at),
+                        _text(stream.gap_started_at),
+                        stream.gap_total_s,
+                    ),
+                )
             connection.execute("COMMIT")
         except BaseException as error:  # a forced stop as well: nothing half-written (AC-8)
             if connection.in_transaction:
@@ -202,6 +240,22 @@ def store_size(path: str) -> int:
     return total
 
 
+def _streams(connection: sqlite3.Connection) -> dict[str, StreamState]:
+    """Kayıt eski koddan kalmışsa tablo yoktur: boş (plan Risk 4)."""
+    found = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'stream_state'"
+    ).fetchone()
+    if found is None:
+        return {}
+    rows = connection.execute(
+        "SELECT source, connected, last_connected_at, gap_started_at, gap_total_s FROM stream_state"
+    ).fetchall()
+    return {
+        str(source): StreamState(bool(connected), _moment(last), _moment(gap), int(total))
+        for source, connected, last, gap, total in rows
+    }
+
+
 def read_snapshot(path: str) -> StoreSnapshot | None:
     """Durum komutu: depo yoksa `None` (dosya oluşturulmaz); okunamıyorsa `StoreError`.
 
@@ -224,11 +278,16 @@ def read_snapshot(path: str) -> StoreSnapshot | None:
                     f"SELECT source, {_STATE_COLUMNS} FROM source_state"
                 ).fetchall()
             }
-    except (sqlite3.Error, ValueError):
+            streams = _streams(connection)
+    except (sqlite3.Error, ValueError, TypeError):
         raise StoreError("haber kaydı okunamıyor") from None
     names = set(counts) | set(states)
     sources = {
-        str(name): SourceSummary(states.get(str(name), SourceState()), int(counts.get(name, 0)))
+        str(name): SourceSummary(
+            states.get(str(name), SourceState()),
+            int(counts.get(name, 0)),
+            streams.get(str(name)),
+        )
         for name in names
     }
     return StoreSnapshot(sources, sum(int(each) for each in counts.values()), store_size(path))

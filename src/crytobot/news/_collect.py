@@ -6,21 +6,29 @@ görme anı yanıtın tamamı okunduktan sonra saatten alınır (G-2). Kaynak ha
 etkiler. Kesinti başı başarıdan sonraki ilk hatanın anıdır; `şimdi - başı > source_alert_hours`
 olunca, bildirim gitmediyse tek giriş bildirimi; ilk başarıda, giriş bildirimi gittiyse tek çıkış
 bildirimi. Bildirim `reporting`'e verilince (kuyruk dahil) kayıt aynı işlemde işaretlenir.
+
+Spec 0056 (plan Risk 5, 6): akış kaynağı (`binance-akış`) sorgulanmaz; tur, akış yöneticisinin
+kuyruğunu beklemeden boşaltır (diğer kaynaklar gecikmez). İlk görme anı iletinin alınma anıdır.
+Kuyruk boş ve bağlantı kopuksa tur hatası `kopuk`tur: kesinti kuralı aynen işler. Bağlantı durumu
+kaynağın durumuyla aynı işlemde yazılır. Akış yöneticisi fazla yetki gördüyse toplama durur
+(`KEY_REFUSED`).
 """
 
-from collections.abc import Callable
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import Enum
 
-from crytobot.news._config import NewsConfig, NewsSource
+from crytobot.news._config import STREAM_KIND, NewsConfig, NewsSource
 from crytobot.news._fetch import Fetched
 from crytobot.news._items import NewsItem, prepare
-from crytobot.news._parse import PARSERS, ParseError
-from crytobot.news._store import NewsStore, SourceState, StoreError
+from crytobot.news._parse import CONTROL, PARSERS, ParseError, parse_stream_message
+from crytobot.news._store import NewsStore, SourceState, StoreError, StreamState
+from crytobot.news._stream import StreamStatus, StreamView
 from crytobot.reporting import escape_html
 
 POSSIBLE_MISS = "uyarı=olası kaçırma"
+DISCONNECTED = "kopuk"
 
 
 @dataclass(frozen=True)
@@ -40,11 +48,13 @@ class CollectParts:
     drain: Callable[[], list[str]] | None = None
     dropped: Callable[[], list[str]] | None = None
     disabled_reason: Callable[[], str | None] | None = None
+    streams: Mapping[str, StreamView] = field(default_factory=dict)  # spec 0056: by source name
 
 
 class CollectionExit(Enum):
     STOPPED = "stopped"
     STORE_FAILED = "store_failed"
+    KEY_REFUSED = "key_refused"  # spec 0056 AC-2: excess permission seen while running
 
 
 @dataclass(frozen=True)
@@ -116,7 +126,14 @@ class _Round:
         telegram_lines(self.parts)
         return True
 
-    def _failed(self, source: NewsSource, previous: SourceState, error: str, at: datetime) -> None:
+    def _failed(
+        self,
+        source: NewsSource,
+        previous: SourceState,
+        error: str,
+        at: datetime,
+        stream: StreamState | None = None,
+    ) -> None:
         started = previous.outage_started_at or at
         state = replace(previous, last_error=error, last_error_at=at, outage_started_at=started)
         threshold = timedelta(hours=self.config.source_alert_hours)
@@ -126,11 +143,16 @@ class _Round:
                 f"kaynak={source.name} kesinti: başlangıç={_stamp(started)} bildirim=giriş",
             )
             state = replace(state, alert_sent=sent)
-        self.store.write(source.name, [], state)
+        self.store.write(source.name, [], state, stream)
         self.parts.say(SourceRound(source.name, error=error).line)
 
     def _succeeded(
-        self, source: NewsSource, previous: SourceState, items: list[NewsItem | None], at: datetime
+        self,
+        source: NewsSource,
+        previous: SourceState,
+        items: list[NewsItem | None],
+        at: datetime,
+        stream: StreamState | None = None,
     ) -> None:
         valid = [item for item in items if item is not None]
         state = replace(previous, last_success_at=at, outage_started_at=None, alert_sent=False)
@@ -140,7 +162,7 @@ class _Round:
                 f"kaynak={source.name} kesinti bitti: başlangıç="
                 f"{_stamp(previous.outage_started_at)} bildirim=çıkış",
             )
-        written = self.store.write(source.name, valid, state)
+        written = self.store.write(source.name, valid, state, stream)
         seen: set[str] = set()
         earlier = 0  # duplicates of records stored before this response (not within it)
         for item, was_written in zip(valid, written, strict=True):
@@ -168,6 +190,28 @@ class _Round:
             source.name, [], replace(previous, outage_started_at=None, alert_sent=False)
         )
         self.parts.say(f"kaynak={source.name} kapalı: kesinti sayacı sıfırlandı")
+
+    def stream(self, source: NewsSource) -> None:
+        """Spec 0056: kuyruk beklemeden boşaltılır; boş ve kopuksa `kopuk` hatası."""
+        runner = self.parts.streams.get(source.name)
+        at = self.parts.clock()
+        previous = self.store.state(source.name)
+        if runner is None:
+            self._failed(source, previous, DISCONNECTED, at)
+            return
+        received = runner.drain()
+        status = runner.status()
+        stream = stream_state(status)
+        if not received and not status.connected:
+            self._failed(source, previous, DISCONNECTED, at, stream)
+            return
+        items: list[NewsItem | None] = []
+        for text, seen in received:
+            raw = parse_stream_message(text, self.config.max_response_bytes)
+            if raw == CONTROL:
+                continue
+            items.append(None if raw is None or isinstance(raw, str) else prepare(raw, seen))
+        self._succeeded(source, previous, items, at, stream)
 
     def source(self, source: NewsSource) -> bool:
         """Kaynağı toplar; durdurma isteğiyle terk edildiyse `False`."""
@@ -205,9 +249,30 @@ def run_round(config: NewsConfig, store: NewsStore, parts: CollectParts) -> bool
         if not source.enabled:
             current.paused(source)
             continue
-        if parts.stopped() or not current.source(source):
+        if parts.stopped():
+            return False
+        if source.kind == STREAM_KIND:
+            current.stream(source)
+        elif not current.source(source):
             return False
     return True
+
+
+def stream_state(status: StreamStatus) -> StreamState:
+    return StreamState(
+        status.connected,
+        status.last_connected_at,
+        status.gap_started_at,
+        int(status.gap_total.total_seconds()),
+    )
+
+
+def _refused(parts: CollectParts) -> str | None:
+    for runner in parts.streams.values():
+        fatal = runner.status().fatal
+        if fatal is not None:
+            return fatal.message
+    return None
 
 
 def run_collection(config: NewsConfig, store: NewsStore, parts: CollectParts) -> CollectionExit:
@@ -221,6 +286,10 @@ def run_collection(config: NewsConfig, store: NewsStore, parts: CollectParts) ->
     rounds = 0
     try:
         while not parts.stopped():
+            refused = _refused(parts)
+            if refused is not None:
+                parts.say(f"reddedildi: {refused} tur_sayısı={rounds}")
+                return CollectionExit.KEY_REFUSED
             started = parts.clock()
             finished = run_round(config, store, parts)
             if finished:

@@ -65,6 +65,14 @@ class StreamStatus:
     fatal: PermissionCheck | None = None
 
 
+class StreamView(Protocol):
+    """Turun gördüğü yüz: kuyruğu boşaltmak ve durumu okumak."""
+
+    def drain(self) -> list[tuple[str, datetime]]: ...
+
+    def status(self) -> StreamStatus: ...
+
+
 def seconds(span: timedelta) -> str:
     return f"{int(span.total_seconds())}s"
 
