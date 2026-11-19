@@ -1,6 +1,6 @@
 # Spec 0056 — Binance duyurularının resmi duyuru akışından toplanması
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0056-plan.md`
 - Self-critique: done
@@ -100,66 +100,66 @@ none — no user interface (komut satırı; satır biçimleri Requirements ve kr
   karşılaştırılır; belgeyle uyuşmazsa R-10.
 
 ## Acceptance criteria
-- [ ] AC-1 — Ayar: akış kaynağı açıksa izin kaydı ve iki anahtar değişkeninin adı zorunludur; eksik ya da geçersizse
+- [x] AC-1 — Ayar: akış kaynağı açıksa izin kaydı ve iki anahtar değişkeninin adı zorunludur; eksik ya da geçersizse
   ret, alan adıyla (`news.sources[<sıra>].<alan>`). Ortamda değişken yoksa ya da boşsa toplayıcı hiçbir kaynağa
   istek göndermeden `ortam değişkeni yok: <ad>` ile reddeder (değer yazılmaz). Kapalı akış kaynağı anahtar istemez
   ve bağlantı kurulmaz.
-- [ ] AC-2 — Yetki denetimi: yalnız okuma yetkili anahtarla akış kaynağı bağlanır. İşlem, para çekme ya da transfer
+- [x] AC-2 — Yetki denetimi: yalnız okuma yetkili anahtarla akış kaynağı bağlanır. İşlem, para çekme ya da transfer
   yetkisinden biri açıksa toplayıcı `reddedildi: anahtar yetkisi fazla: <yetki adları>` ile hiçbir kaynak
   sorgulanmadan durur (çıkış 1); bu denetim yeniden bağlanmada da yapılır ve fazla yetki görülürse toplayıcı aynı
   retle durur. Yetki okunamazsa `kaynak=<ad> hata=anahtar yetkisi doğrulanamadı` yazılır, akış kaynağı bağlanmaz,
   denetim AC-5 beklemesiyle yeniden denenir ve diğer kaynakların turları sürer.
-- [ ] AC-3 — Toplama: bağlıyken gelen İngilizce duyuru haber kaydına bir kez yazılır (kaynak adı, başlık, metin,
+- [x] AC-3 — Toplama: bağlıyken gelen İngilizce duyuru haber kaydına bir kez yazılır (kaynak adı, başlık, metin,
   yayın anı, ilk görülme anı); aynı duyuru yeniden gelirse `tekrar`; tur satırı `kaynak=<ad> yeni=<n> tekrar=<n>
   geçersiz=<n>` biçimindedir; bir turda hiç ileti gelmemesi hata değildir (`yeni=0`).
-- [ ] AC-4 — Geçersiz ileti: şemaya uymayan, sınırı aşan ya da İngilizce olmadığını belirten ileti yazılmaz,
+- [x] AC-4 — Geçersiz ileti: şemaya uymayan, sınırı aşan ya da İngilizce olmadığını belirten ileti yazılmaz,
   `geçersiz` sayılır; yayın anı geçersizse duyuru yazılır, yayın anı bilinmiyor olur;
   sonraki geçerli ileti yazılır; toplayıcı çalışmayı sürdürür.
-- [ ] AC-5 — Kopukluk: bağlantı koptuğunda, süresi dolduğunda ya da kurulamadığında toplayıcı yeniden bağlanır;
+- [x] AC-5 — Kopukluk: bağlantı koptuğunda, süresi dolduğunda ya da kurulamadığında toplayıcı yeniden bağlanır;
   bekleme 5 sn, 10 sn, 20 sn… diye iki katına çıkar, 15 dakikada sabitlenir ve başarılı bağlantıda 5 sn'ye döner; her kopukluk bitince kayda
   `kaynak=<ad> kopukluk=<süre>` yazılır; diğer kaynakların turları bu sırada gecikmez.
-- [ ] AC-6 — Kesinti bildirimi: kopukluk `source_alert_hours`'tan uzun sürerse tek Telegram bildirimi, ilk başarılı
+- [x] AC-6 — Kesinti bildirimi: kopukluk `source_alert_hours`'tan uzun sürerse tek Telegram bildirimi, ilk başarılı
   bağlantıda tek çıkış bildirimi gider (0046 kuralı aynen); kapalıysa yalnız satır.
-- [ ] AC-7 — Sır sızmaz: anahtar ve gizli anahtar değerleri hiçbir kayıt satırında, durum çıktısında, hata
+- [x] AC-7 — Sır sızmaz: anahtar ve gizli anahtar değerleri hiçbir kayıt satırında, durum çıktısında, hata
   mesajında (bağlantı hatası ve ret dahil), bildirimde, haber kaydında ve LLM promptunda geçmez (değerleri bilinen
   sahte anahtarla taranarak kanıtlanır).
-- [ ] AC-8 — Durum: `news status` akış kaynağı için bugünkü satırı ve haber kaydındaki kaynak durumundan
+- [x] AC-8 — Durum: `news status` akış kaynağı için bugünkü satırı ve haber kaydındaki kaynak durumundan
   `bağlantı=<bağlı|kopuk|hiç bağlanmadı> son_bağlantı=<an|yok> kopukluk_başı=<an|yok> kopukluk_toplam=<süre>`
   bilgisini gösterir; ağa çıkmaz, anahtar okumaz, kilit almaz; kayıt yoksa bugünkü `haber kaydı boş` davranışı.
-- [ ] AC-9 — Binance duyurusu sayılır: izinli bir akış kaynağı varken skorlayıcının gerçek promptunda kütüphane
+- [x] AC-9 — Binance duyurusu sayılır: izinli bir akış kaynağı varken skorlayıcının gerçek promptunda kütüphane
   örnekleri bulunur; akış kaynağı kapalıyken (ve izinli `binance-duyuru` yokken) prompt örneksizdir (0055 CB-3);
   `news archive status` örtüşme sayımı akış kaynağının kayıtlarını da sayar.
-- [ ] AC-10 — Durdurma: Ctrl+C bağlantıyı kapatır ve toplayıcı temiz durur (çıkış 0); ikinci Ctrl+C zorla durdurur
+- [x] AC-10 — Durdurma: Ctrl+C bağlantıyı kapatır ve toplayıcı temiz durur (çıkış 0); ikinci Ctrl+C zorla durdurur
   (çıkış 130); yarım kayıt kalmaz.
-- [ ] AC-11 — Örnek ayar: akış kaynağı kapalı ve izin kaydısız; yorumda iki ortam değişkeninin adı, yalnız okuma
+- [x] AC-11 — Örnek ayar: akış kaynağı kapalı ve izin kaydısız; yorumda iki ortam değişkeninin adı, yalnız okuma
   yetkisi kuralı ve izin kaydının sahibe ait olduğu yazar; örnek ayar yükleyiciden geçer; `.env.example` iki
   değişkenin yalnız adını taşır.
-- [ ] AC-12 — Bağımlılık (R-08, 2026-11-19): projenin doğrudan runtime bağımlılıkları tam olarak `ccxt` ve
+- [x] AC-12 — Bağımlılık (R-08, 2026-11-19): projenin doğrudan runtime bağımlılıkları tam olarak `ccxt` ve
   `websocket-client`'tır (`pyproject.toml` ve `uv.lock`); izin listesi yine kesin ad listesidir — başka bir ad
   eklenince ya da biri çıkınca test kırmızıdır; ikisi de kilitte sürüm ve hash ile sabittir; CI `pip-audit`
   (`--strict`) ikisini ve dolaylılarını denetler (kanıt: ship PR'ının `audit` işi).
 
 ## Preserved behavior
-- [ ] PB-1 — `rss` ve `binance-duyuru` türleri, tur satırları, kesinti kuralı ve haber kaydı biçimi değişmez (0046);
+- [x] PB-1 — `rss` ve `binance-duyuru` türleri, tur satırları, kesinti kuralı ve haber kaydı biçimi değişmez (0046);
   akış kaynağı olmayan ayarla toplayıcı bugünkü gibi çalışır, Binance'e bağlanmaz ve anahtar istemez.
-- [ ] PB-2 — 0055 kuralları aynen: izinsiz kaynak toplanmaz, Claude'a gitmez, hükme girmez; gelecek tarihli izin
+- [x] PB-2 — 0055 kuralları aynen: izinsiz kaynak toplanmaz, Claude'a gitmez, hükme girmez; gelecek tarihli izin
   reddedilir.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed (`docs/commands.md`, `docs/security.md`, `docs/architecture.md`, örnek ayar, `.env.example`)
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed (`docs/commands.md`, `docs/security.md`, `docs/architecture.md`, örnek ayar, `.env.example`)
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 2 (S-1 kararı satırı; R-08: AC-12 ve Supersedes 0018/CB-1…CB-3) |
+| Fix rounds | 5 (fix-1…fix-3 review; R-06 → A-7 re-plan, fix-4; fix-5 yalnız belge) |
+| Review findings: real / noise / deferred | 22 / 4 / 1 (review 5 tur + VERIFY 2 tur; B-101; 2 investigate canlı koşuyla kapandı) |
+| Regressions introduced | 1 (fix-1'in kararsız testi, fix-2/fix-3'te kapandı) |
+| Bugs escaped to production | 0 (ship anında) |
 
 ## Handoff
-Next: PLAN — Developer runs /plan 0056 (önce S-1: sahip Binance izin dayanağını netleştirir; izin yoksa spec geri çekilir)
+Shipped — Galip Badem, 2026-11-19. İşletim: `news-runner` yeni koda güncellenmeden akış kaynağı orada çalışmaz; kaynak açılırken izin kaydını sahip yazar.
