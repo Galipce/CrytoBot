@@ -10,11 +10,15 @@ veride yeniden ayar ya da aday aramayı veri gözetleme olarak reddetti; ADR 000
 LLM hattı 2026-11-19'da ileriye dönük çalışmaya başladı (0046 toplayıcı, 0051 skorlayıcı, 0053 ölçüm, 0056 resmi
 Binance duyuru akışı), ama 0052'nin gölge filtre kaydı yalnız paper bot turlarında tutulur ve paper bot hiç
 başlatılmadı. Geçmiş veride yeni bir şey denemek gözetleme olacağından teknik taraftaki tek temiz bilgi kaynağı
-ileriye dönük, görülmemiş veridir. Aşama onayı (`[stage]`, Galip Badem, 2026-11-12) S0'ın bugünkü ayarı için vardır.
+ileriye dönük, görülmemiş veridir. Aşama onayı (`[stage]`, Galip Badem, 2026-11-12) S0'ın bugünkü ayarı için vardır,
+ama sıradan bir backtest raporuna bağlıdır; spec 0042'den beri kanıtlı başlatma (`start`) yalnız son değerlendirme
+raporu kabul eder (denendi: `başlatma reddedildi: rapor son değerlendirme değil`) ve 0044'ün son değerlendirmesi
+"aday yok" dedi. Yani bugün hiçbir aday kanıtlı başlatmadan geçemez — BR-10 bunu engellemek için vardır.
 
 ## Decision
 Bugünkü S0 (EMA 12/26, RSI 14 eşik 70, ATR 14, k 2, r 2; 4h mum ve tur; BTC/USDT ve ETH/USDT; bugünkü risk ayarları;
-100 USDT paper bakiye) paper modda, kanıtlı başlatmayla (`start`) ve gölge filtre kaydı (`[shadow]`) açık olarak
+100 USDT paper bakiye) paper modda, deneme başlatmasıyla (`start --trial`; sahip onayı 2026-11-19, "evet") ve gölge
+filtre kaydı (`[shadow]`) açık olarak
 2026-11-19'dan en az 2027-02-17'ye kadar (90 gün) koşar; bu sürede strateji ve ayar değişmez, sonuç 90 günün sonunda
 rapor olarak yazılır ve live kararı vermez.
 
@@ -45,8 +49,9 @@ rapor olarak yazılır ve live kararı vermez.
   ayrıca aşama onayı yalnız S0 için var.
 - **Birden çok adayı aynı anda paper'da koşmak:** bot tek strateji ve tek depoyla çalışır; çoklu koşu yeni kod ister ve
   çoklu karşılaştırma sorununu (en iyi görüneni sonradan seçmek) geri getirir.
-- **`start --trial` ile başlatmak:** BR-10 kapısını atlar; mevcut aşama onayı S0 için geçerli olduğundan kanıtlı
-  başlatma kullanılabilir.
+- **Kanıtlı başlatma (`start`):** son değerlendirme raporu ister; 0044'ün raporu "aday yok" olduğundan kapı
+  reddeder. Kapıyı gevşetmek BR-10'u boşa çıkarır. `--trial` koşuyu deneme diye işaretler; deneme koşusunun sonuçları
+  live için kanıt sayılmaz — bu ADR zaten live kararı vermez (kural 4).
 
 ## Revisit triggers
 - Bot 90 gün dolmadan sürekli çalışamıyorsa (makine, uyku): koşunun bir sunucuya taşınması ayrı karar olarak açılır.
