@@ -70,7 +70,15 @@ def event(coin: str, name: str, quote: str, **changes: object) -> dict[str, Any]
     return item
 
 
-def score_document(root: Path, **score: object) -> dict[str, Any]:
+SOURCES: list[dict[str, object]] = [
+    {"name": "binance", "type": "binance-duyuru", "url": "https://example.org/b", **PERMISSION},
+    {"name": "coindesk", "type": "rss", "url": "https://example.org/r", **PERMISSION},
+]
+
+
+def score_document(
+    root: Path, *, sources: list[dict[str, object]] | None = None, **score: object
+) -> dict[str, Any]:
     report = (FIXTURES / "report.txt").read_bytes()
     library = (FIXTURES / "library.jsonl").read_bytes()
     table: dict[str, Any] = {
@@ -87,15 +95,7 @@ def score_document(root: Path, **score: object) -> dict[str, Any]:
         "news": {
             "store_path": str(root / "news.db"),
             "log_path": str(root / "news.log"),
-            "sources": [
-                {
-                    "name": "binance",
-                    "type": "binance-duyuru",
-                    "url": "https://example.org/b",
-                    **PERMISSION,
-                },
-                {"name": "coindesk", "type": "rss", "url": "https://example.org/r", **PERMISSION},
-            ],
+            "sources": [dict(source) for source in (SOURCES if sources is None else sources)],
         },
         "score": table,
     }
@@ -114,13 +114,14 @@ class Harness:
     lines: list[str] = field(default_factory=list)
     stop_after_calls: int | None = None
     call_seconds: float = 1.0
+    sources: list[dict[str, object]] | None = None
 
     def __post_init__(self) -> None:
         self.news = NewsStore.open(str(self.root / "news.db"))
 
     @property
     def config(self) -> ScoreConfig:
-        result = load_score_config(score_document(self.root, **self.score))
+        result = load_score_config(score_document(self.root, sources=self.sources, **self.score))
         assert result.config is not None, result.message
         return result.config
 
@@ -459,3 +460,85 @@ def test_failing_news_moves_behind(tmp_path: Path) -> None:
     # the poison fails once, then every other news is scored before it is tried again
     assert titles == ["Poison", "News 0", "News 1", "News 2", "Poison", "Poison"]
     assert run.rows("SELECT COUNT(*) FROM results WHERE kind = 'skorlandı'") == [(3,)]
+
+
+CLOSED_RSS: list[dict[str, object]] = [
+    SOURCES[0],
+    {"name": "coindesk", "type": "rss", "url": "https://example.org/r", "enabled": False},
+]
+
+
+def test_unpermitted_source_written_without_call(tmp_path: Path) -> None:
+    """Spec 0055 CB-2: kapalı, kayıtsız ya da ayarda olmayan kaynağın haberi için çağrı yok;
+    "izinsiz kaynak" sonucu yazılır, skor yazılmaz; kayıtta zaten var olan satıra da uygulanır."""
+    run = Harness(tmp_path, sources=CLOSED_RSS)
+    run.add("binance", "id:1", BINANCE_TITLE, BINANCE_TEXT, START + timedelta(minutes=1))
+    run.add("coindesk", "link:r", RSS_TITLE, RSS_TEXT, START + timedelta(minutes=2))
+    run.add("cointelegraph", "link:t", RSS_TITLE, RSS_TEXT, START + timedelta(minutes=3))
+    # a closed source's item older than 24 h is "izinsiz kaynak", not "bayat"
+    run.add("coindesk", "link:old", "Old", "t", START)
+    run.now = START + timedelta(hours=25)
+    run.add("binance", "id:2", BINANCE_TITLE, BINANCE_TEXT, run.now)
+    assert run.round()
+    assert len(run.prompts) == 1  # only the permitted Binance item within 24 h
+    assert BINANCE_TITLE in run.prompts[0]
+    assert run.rows("SELECT news_id, kind, call_id, model FROM results ORDER BY news_id") == [
+        (1, "bayat", None, None),
+        (2, "izinsiz kaynak", None, None),
+        (3, "izinsiz kaynak", None, None),
+        (4, "izinsiz kaynak", None, None),
+        (5, "skorlandı", 1, MODEL),
+    ]
+    assert run.rows("SELECT news_id FROM event_scores WHERE news_id IN (2, 3, 4)") == []
+    assert "izinsiz: haber=2 kaynak=coindesk çağrı yok" in run.lines
+    assert "izinsiz: haber=3 kaynak=cointelegraph çağrı yok" in run.lines
+    assert run.lines[-1].startswith("tur: bekleyen=1 çağrı=1 skorlandı=1 şema_dışı=0 bayat=1")
+    assert run.lines[-1].endswith(" izinsiz=3")
+
+
+def test_unpermitted_not_retried_after_permission(tmp_path: Path) -> None:
+    """Spec 0055 CB-2: kaynak sonradan izinli olsa da "izinsiz kaynak" haberi yeniden denenmez."""
+    run = Harness(tmp_path, sources=CLOSED_RSS)
+    run.add("coindesk", "link:r", RSS_TITLE, RSS_TEXT, START + timedelta(minutes=1))
+    run.now = START + timedelta(minutes=2)
+    assert run.round()
+    run.sources = None  # coindesk is permitted now
+    run.add("coindesk", "link:s", RSS_TITLE, "new text", START + timedelta(minutes=3))
+    run.now = START + timedelta(minutes=4)
+    assert run.round()
+    assert len(run.prompts) == 1 and "new text" in run.prompts[0]
+    assert run.rows("SELECT news_id, kind FROM results ORDER BY news_id") == [
+        (1, "izinsiz kaynak"),
+        (2, "skorlandı"),
+    ]
+
+
+def test_permitted_binance_and_rss_scored(tmp_path: Path) -> None:
+    """Spec 0055 PB-1: izinli bir `binance-duyuru` ve izinli bir `rss` kaynağı bugünkü gibi."""
+    run = Harness(tmp_path)
+    run.add("binance", "id:1", BINANCE_TITLE, BINANCE_TEXT, START + timedelta(minutes=1))
+    run.add("coindesk", "link:r", RSS_TITLE, RSS_TEXT, START + timedelta(minutes=2))
+    run.now = START + timedelta(minutes=3)
+    assert run.round()
+    assert len(run.prompts) == 2
+    assert run.rows("SELECT kind FROM results ORDER BY news_id") == [("skorlandı",), ("skorlandı",)]
+    assert run.lines[-1].endswith(" izinsiz=0")
+
+
+def test_existing_results_unchanged(tmp_path: Path) -> None:
+    """Spec 0055 PB-2: kaynak kapanınca geçmiş skor ve haber satırı silinmez, değişmez."""
+    run = Harness(tmp_path)
+    run.add("coindesk", "link:r", RSS_TITLE, RSS_TEXT, START + timedelta(minutes=1))
+    run.now = START + timedelta(minutes=2)
+    run.replies = [ok(events(event("ETH", "Ethereum", "ETH rose", direction="olumlu")))]
+    assert run.round()
+    query = "SELECT * FROM results ORDER BY news_id"
+    before = (run.rows(query), run.rows("SELECT * FROM event_scores"))
+    with sqlite3.connect(tmp_path / "news.db") as connection:
+        news_before = connection.execute("SELECT * FROM news").fetchall()
+    run.sources = CLOSED_RSS
+    run.now = START + timedelta(minutes=3)
+    assert run.round()
+    assert (run.rows(query), run.rows("SELECT * FROM event_scores")) == before
+    with sqlite3.connect(tmp_path / "news.db") as connection:
+        assert connection.execute("SELECT * FROM news").fetchall() == news_before

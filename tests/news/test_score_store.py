@@ -150,3 +150,29 @@ def test_read_forward_since_and_order(tmp_path: Path) -> None:
         "title late",
     ]
     assert {each.source for each in items} == {"rss", "binance"}
+
+
+def test_unpermitted_kind_same_format(tmp_path: Path) -> None:
+    """Spec 0055 PB-2 (plan Risk 3): "izinsiz kaynak" sonucu çağrısız yazılır; şema ve biçim
+    sürümü aynıdır, eski sonuçlar yanında okunur."""
+    path = str(tmp_path / "score.db")
+    store = ScoreStore.open(path, START)
+    store.write_result(scored(1), store.begin_call(1, START), CallEnd("ok", 1.0, START))
+    store.write_result(ScoreResult(2, ResultKind.UNPERMITTED, START + timedelta(minutes=1)))
+    store.close()
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT value FROM meta WHERE name = 'format'").fetchone() == (
+            "1",
+        )
+        assert connection.execute(
+            "SELECT news_id, kind, call_id, model, rejected FROM results ORDER BY news_id"
+        ).fetchall() == [
+            (1, "skorlandı", 1, "claude-sonnet-5-5", 2),
+            (2, "izinsiz kaynak", None, None, 0),
+        ]
+    snapshot = read_score_snapshot(path, START.date())
+    assert snapshot is not None
+    assert snapshot.results == {"skorlandı": 1, "izinsiz kaynak": 1}
+    assert snapshot.resulted_ids == frozenset({1, 2})
+    assert snapshot.unpermitted_ids == frozenset({2})
+    assert snapshot.calls_today == 1
