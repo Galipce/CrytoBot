@@ -133,6 +133,9 @@
 - Daemon iş parçacığı beklenmeden dönülüyorsa (zorla durdurma) test, iş parçacığının yan etkisini dönüşten hemen sonra
   değil sınırlı yoklamayla ya da `threading.Event` ile doğrular; "beklenmedi" ayrıca, takılı tutulan bir sahteyle
   gösterilir — from spec 0056, review round 2 M-1
+- `tests/llm/test_claude_process.py` modülü `slow` (`pytestmark`): oraya eklenen test `--fast`'ta koşmaz; Windows'a
+  özelse CI'da (Linux) da atlanır — kanıtı yerel Windows `pytest -m slow tests/llm` koşusudur. Konsol penceresi
+  ölçümü konsollu pytest altından ayırt edici değildir, `pythonw` ara süreç gerekir — from spec 0057, review round 1 F-1
 - ccxt binance emir doğrulama reddinin çoğunu `InvalidOrder` değil `BadRequest` olarak fırlatır: `-1013`
   (`Filter failure: NOTIONAL`/`MIN_NOTIONAL`), `-1100…-1106`, `-1111`, `-1114…-1121` (`-1121`: `BadSymbol`);
   yalnız `LOT_SIZE`/`PRICE_FILTER` gibi birkaçı `InvalidOrder` olur — kesin ret yanıt gövdesindeki koddan
