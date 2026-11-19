@@ -7,6 +7,13 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
+- **Haber kaynağında AI kullanım izni** (spec 0055): açık her haber kaynağı `ai_permission_by`,
+  `ai_permission_on`, `ai_permission_basis` izin kaydı ister (gelecek tarih reddedilir). İzinsiz kaynağın haberi
+  toplanmaz; skorlayıcıda çağrısız `izinsiz kaynak` sonucu alır (`news score status` kaynak adına göre sayar),
+  izinli `binance-duyuru` yoksa prompt örneksizdir (bağlam parmak izi değişir); `forward report` bu haberleri
+  hükme sokmaz, başlıkta `izinsiz kaynak, hüküm dışı` satırında sayar. Örnek ayardan `coindesk` ve
+  `cointelegraph` çıktı, `binance-duyuru` kapalı (koşulları AI kullanımına izin vermiyor). Çıkış adımı: sahip
+  makinesindeki `crytobot-news.toml`'da izinsiz kaynaklar kapatılmalı, yoksa toplayıcı açılışta reddeder.
 - **İleriye dönük ölçüm raporu ve hüküm** (spec 0053): `python -m crytobot forward download` skor kaydındaki
   olumsuz olay skorlarının ve gölge kayıttaki teknik "al"ların 1h mumlarını indirir; `forward report [--at <an>]`
   ağsız, LLM'siz, kilitsiz her olumsuz skorun ardından fiyatta ne olduğunu 0048'in düşüş isabeti ve 30 günlük taban
