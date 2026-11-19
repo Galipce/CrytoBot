@@ -203,3 +203,41 @@ def test_failure_under_stop_request_is_stopped(tmp_path: Path) -> None:
         environ=fake.environ,
     )
     assert reply.outcome is CallOutcome.STOPPED
+
+
+CONSOLE_PROBE = """
+import ctypes, subprocess, sys
+own = ctypes.windll.kernel32.GetConsoleWindow()
+code = "import ctypes; print(ctypes.windll.kernel32.GetConsoleWindow())"
+grandchild = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+print(own, grandchild.stdout.strip())
+"""
+
+# runs under pythonw (no console at all), like the scheduled scorer, and spawns the probe as the
+# scorer spawns `claude -p`
+HEADLESS_PARENT = """
+import os, sys
+from crytobot.llm._claude import _spawn
+probe, cwd, out = sys.argv[1], sys.argv[2], sys.argv[3]
+python = sys.executable.replace("pythonw.exe", "python.exe")
+process = _spawn([python, "-c", probe], cwd, dict(os.environ))
+stdout, stderr = process.communicate(timeout=60)
+open(out, "w", encoding="utf-8").write(stdout.decode() + "|" + stderr.decode())
+"""
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="console windows exist only on Windows")
+def test_no_console_window_for_child_and_grandchild(tmp_path: Path) -> None:
+    """Spec 0057 CB-1, CB-2: started from a process without a console (pythonw, the scheduled
+    scorer), the `claude -p` child and the processes it starts (claude.cmd → Node) get no console
+    window."""
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    out = tmp_path / "probe.txt"
+    subprocess.run(
+        [str(pythonw), "-c", HEADLESS_PARENT, CONSOLE_PROBE, str(tmp_path), str(out)],
+        timeout=90,
+        check=True,
+    )
+    stdout, _, stderr = out.read_text(encoding="utf-8").partition("|")
+    own, grandchild = stdout.split()
+    assert (own, grandchild) == ("0", "0"), stderr

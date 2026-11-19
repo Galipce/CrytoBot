@@ -7,6 +7,8 @@ kapalıdır; `--fallback-model` ve `--json-schema` verilmez. Ortam üst süreçt
 `ANTHROPIC_API_KEY`, adında KEY, TOKEN, SECRET ya da PASSWORD geçen değişkenler ve `CLAUDECODE`.
 
 Süreç kendi süreç grubunda başlar (Windows `CREATE_NEW_PROCESS_GROUP`, POSIX `start_new_session`);
+Windows'ta konsol penceresi de almaz (`CREATE_NO_WINDOW`, spec 0057: konsolsuz çalışan skorlayıcıda
+her çağrı pencere açıyordu);
 zaman aşımında, durdurmada ya da çıktı sınırı aşılınca bütün ağacıyla sonlandırılır (conventions,
 Known traps). stdout en çok `OUTPUT_LIMIT` bayt okunur. Sonuç sınıfları: `ok`, `timeout`,
 `no_session`, `quota`, `unknown`, `stopped`; hata metni sonuca girmez, yalnız sınıfı.
@@ -186,7 +188,8 @@ def _spawn(argv: list[str], cwd: str, env: dict[str, str]) -> "subprocess.Popen[
             stderr=subprocess.PIPE,
             cwd=cwd,
             env=env,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            # spec 0057: no console window, even when the caller has none (pythonw, scheduled task)
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW,
         )
     return subprocess.Popen(
         argv,

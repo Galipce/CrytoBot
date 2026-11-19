@@ -7,6 +7,10 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
+- **Claude alt süreci konsol penceresi açmaz** (spec 0057): Windows'ta `claude -p` alt süreci ve onun açtığı
+  süreçler `CREATE_NO_WINDOW` ile başlar; skorlayıcı zamanlanmış görevde (konsolsuz) çalışırken her çağrıda
+  pencere açılmaz. Yalıtım, zaman aşımı ve ağaç sonlandırma aynı.
+
 - **Binance resmi duyuru akışı** (spec 0056): yeni kaynak türü `binance-akış` Binance duyurularını resmi
   WebSocket duyuru akışından, sahibin yalnız okuma yetkili ayrı anahtarıyla (`BINANCE_NEWS_API_KEY/SECRET`,
   `.env`) toplar. Yetki her bağlantıdan önce denetlenir (fazlası kesin ret); kopunca artan beklemeyle yeniden
