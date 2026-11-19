@@ -285,6 +285,20 @@ PARSERS: dict[str, Callable[[bytes], list[RawItem]]] = {
 }
 
 CONTROL = "control"
+REGISTERED = "00000000"
+
+
+def register_code(text: str) -> str | None:
+    """Akışın kayıt iletisinin kodu (`REGISTER`); kayıt iletisi değilse `None` (review L-1)."""
+    try:
+        found = json.loads(text)
+    except (ValueError, RecursionError):
+        return None
+    if not isinstance(found, dict) or found.get("type") != "COMMAND":
+        return None
+    if found.get("subType") != "REGISTER":
+        return None
+    return str(found.get("code"))
 
 
 def _stream_id(publish: object, title: str) -> str:

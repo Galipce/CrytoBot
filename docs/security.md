@@ -52,7 +52,7 @@
   coinin USDT çifti borsa bilgisinde olmalıdır. Kayıt dosyasına haber metni, prompt ve yanıt yazılmaz. Skorlar
   hiçbir kararın girdisi değildir (gölge mod).
 - **Kaynakta AI kullanım izni (spec 0055):** haber ayarında açık ve izin kaydı (doğrulayan, tarih, dayanak) olan
-  kaynak dışında hiçbir kaynağın haberi toplanmaz, LLM'e verilmez, prompt örneği olmaz (izinli `binance-duyuru`
+  kaynak dışında hiçbir kaynağın haberi toplanmaz, LLM'e verilmez, prompt örneği olmaz (izinli `binance-duyuru` ya da `binance-akış`
   yoksa prompt örneksizdir) ve ölçüm hükmüne girmez; izinsiz kaynağın haberi çağrısız `izinsiz kaynak` sonucu
   alır. Kod izin kararı vermez, kaydı sahip doğrular; koşullar değişirse kayıt silinip kaynak kapatılır.
 - **Binance resmi duyuru akışı (spec 0056):** sahibin hesabına bağlı, bot anahtarlarından AYRI bir anahtar
@@ -61,7 +61,8 @@
   başka her `enable*`/`permits*` bayrağı — bilinmeyen yenisi de — açıksa toplayıcı başlamaz ya da çalışırken
   durur (çıkış 1). Yetki okunamazsa yetkisi doğrulanmamış anahtarla bağlanılmaz. Değerler hiçbir satıra, durum
   çıktısına, hata mesajına (dış kütüphanenin hata metni dahil, maskelenir), bildirime, haber kaydına ve LLM
-  promptuna girmez; anahtar tipi yazdırılınca maskelidir. İmza HMAC-SHA256; bağlantı yalnız `wss`.
+  promptuna girmez; anahtar tipi yazdırılınca maskelidir. İmza HMAC-SHA256; bağlantı yalnız `wss`; yönlendirme
+  izlenmez (anahtar başlığı başka adrese taşınmaz).
 
 ## AuthN / AuthZ
 - Tek kullanıcı. **Varsayılan: reddet.**

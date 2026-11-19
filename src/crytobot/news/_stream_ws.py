@@ -1,10 +1,13 @@
 """Akışın gerçek etkileri (spec 0056; plan Risk 1, 8, 10): `websocket-client` bağlantısı ve imzalı
-yetki isteği. Yalnız giriş noktası kurar; testler sahtelerini kullanır.
+yetki isteği. Yalnız giriş noktası kurar; birim testleri kütüphaneyi sahtesiyle değiştirir.
 
 Hata adları sabittir (`http_<kod>`, `timeout`, `bağlanamadı`, `bağlantı koptu`, `kapandı`): adres,
-imza ve anahtar hiçbir hata adına girmez.
+imza ve anahtar hiçbir hata adına girmez; kütüphanenin hata metni atılır. Yönlendirme izlenmez
+(anahtar başlığı başka adrese taşınmaz; review round 1 L-2). `urlopen` `http.client.HTTPException`'ı
+`URLError`'a sarmaz ve o `OSError` değildir: ayrıca yakalanır (review round 1 M-1).
 """
 
+import http.client
 import secrets
 import ssl
 import urllib.error
@@ -18,7 +21,7 @@ import websocket
 from crytobot.news._binance_auth import RESTRICTIONS_PATH, restrictions_query, stream_query
 from crytobot.news._fetch import USER_AGENT
 from crytobot.news._secrets import StreamKeys
-from crytobot.news._stream import ConnectionLost
+from crytobot.news._stream import CONTROL_FRAME, ConnectionLost
 
 CONNECT_TIMEOUT_S: Final = 30.0
 RESTRICTIONS_LIMIT: Final = 64 * 1024
@@ -37,13 +40,15 @@ class WsConnection:
             opcode, data = self._ws.recv_data(control_frame=True)
         except websocket.WebSocketTimeoutException:
             return None
-        except (websocket.WebSocketException, OSError):
+        except (websocket.WebSocketException, OSError, ValueError):
             raise ConnectionLost("bağlantı koptu") from None
         if opcode == websocket.ABNF.OPCODE_CLOSE:
             raise ConnectionLost("kapandı")
         if opcode != websocket.ABNF.OPCODE_TEXT:
-            return None  # ping is answered by the library; pong and binary are not announcements
-        return bytes(data).decode("utf-8", "replace") if not isinstance(data, str) else data
+            return CONTROL_FRAME  # ping (answered by the library), pong, binary: liveness only
+        if isinstance(data, str):
+            return data
+        return bytes(data).decode("utf-8", "replace")
 
     def ping(self) -> None:
         try:
@@ -57,11 +62,14 @@ class WsConnection:
 
 
 def open_stream(url: str, keys: StreamKeys, now_ms: int) -> WsConnection:
-    """İmzalı adresle bağlanır; anahtar başlıkta."""
+    """İmzalı adresle bağlanır; anahtar başlıkta; yönlendirme izlenmez."""
     address = f"{url}?{stream_query(keys.secret, now_ms, secrets.token_hex(16))}"
     try:
         socket_ = websocket.create_connection(
-            address, header=[f"{_HEADER}: {keys.key}"], timeout=CONNECT_TIMEOUT_S
+            address,
+            header=[f"{_HEADER}: {keys.key}"],
+            timeout=CONNECT_TIMEOUT_S,
+            redirect_limit=0,
         )
     except websocket.WebSocketBadStatusException as error:
         raise ConnectionLost(f"http_{int(error.status_code)}") from None
@@ -72,6 +80,14 @@ def open_stream(url: str, keys: StreamKeys, now_ms: int) -> WsConnection:
     return WsConnection(socket_)
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args: object, **kwargs: object) -> None:
+        return None  # a 3xx stays an HTTPError: the key header never travels to another address
+
+
+_OPENER: Final = urllib.request.build_opener(_NoRedirect)
+
+
 def fetch_restrictions(url: str, keys: StreamKeys, now_ms: int) -> bytes | None:
     """Anahtarın yetki yanıtı; alınamazsa `None` (yetki doğrulanamadı). Akış adresinin sunucusu."""
     host = urlsplit(url).hostname
@@ -80,8 +96,8 @@ def fetch_restrictions(url: str, keys: StreamKeys, now_ms: int) -> bytes | None:
     address = f"https://{host}{RESTRICTIONS_PATH}?{restrictions_query(keys.secret, now_ms)}"
     request = urllib.request.Request(address, headers={_HEADER: keys.key, "User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(request, timeout=CONNECT_TIMEOUT_S) as response:
-            body = response.read(RESTRICTIONS_LIMIT + 1)
-    except (urllib.error.URLError, OSError, ValueError):
+        with _OPENER.open(request, timeout=CONNECT_TIMEOUT_S) as response:
+            body: bytes = response.read(RESTRICTIONS_LIMIT + 1)
+    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError):
         return None
     return None if len(body) > RESTRICTIONS_LIMIT else body

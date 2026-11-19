@@ -369,3 +369,20 @@ def test_examples_with_permitted_stream(scorer: Scorer) -> None:
     assert code == EXIT_OK
     (prompt,) = scorer.prompts
     assert "NEW4" in prompt and "(örnek yok)" not in prompt
+
+
+def test_closed_stream_no_examples(scorer: Scorer) -> None:
+    """Review I-2 (AC-9 olumsuz kolu): akış kaynağı kapalı ve izinli `binance-duyuru` yokken, yalnız
+    izinli rss varken prompt örneksizdir."""
+    text = scorer.news_config.read_text(encoding="utf-8")
+    old = 'type = "binance-duyuru"\nurl = "https://example.org/b"\n' + "\n".join(PERMISSION_ROWS)
+    assert old in text
+    scorer.news_config.write_text(
+        text.replace(old, 'type = "binance-akış"\nurl = "wss://example.org/b"\nenabled = false'),
+        encoding="utf-8",
+    )
+    scorer.add("coindesk", "id:1", "Binance Will Delist ABC", "Binance will delist ABC.", START)
+    code, _ = scorer.run("news", "score")
+    assert code == EXIT_OK
+    (prompt,) = scorer.prompts
+    assert "NEW4" not in prompt and "(örnek yok)" in prompt

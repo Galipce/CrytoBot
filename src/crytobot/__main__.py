@@ -817,7 +817,8 @@ class NewsStreamIO:
     restrictions: Callable[[str, StreamKeys, int], bytes | None] = fetch_restrictions
     env: Mapping[str, str] | None = None
     env_file: Path | None = Path(".env")
-    first_wait_s: float = 15.0
+    first_wait_s: float = 15.0  # plan A-5: the first round waits for the first registration
+    check_timeout_s: float = 40.0  # review L-3: the start-up permission check, name lookup included
     monotonic: Callable[[], float] = time.monotonic
     sleep: Callable[[float], None] = time.sleep
 
@@ -846,11 +847,28 @@ def _stream_keys(
             output.say(f"news: reddedildi: {error.message}")
             return None
     for source in _stream_sources(config):
-        check = judge_permissions(io.restrictions(source.url, keys[source.name], _ms(clock)))
+        check = _bounded_check(io, source, keys[source.name], clock)
         if check.verdict is Verdict.EXCESS:
             output.say(f"news: reddedildi: {check.message}")
             return None
     return keys
+
+
+def _bounded_check(
+    io: NewsStreamIO, source: NewsSource, keys: StreamKeys, clock: Clock
+) -> PermissionCheck:
+    """Review round 1 L-3: istek zaman aşımı ad çözümlemeyi kapsamaz; denetim daemon iş
+    parçacığında, sınırlı bekleyişle. Süre dolarsa doğrulanamadı: akış bekler, diğerleri sürer."""
+    found: list[PermissionCheck] = []
+
+    def attempt() -> None:
+        with suppress(Exception):
+            found.append(judge_permissions(io.restrictions(source.url, keys, _ms(clock))))
+
+    thread = threading.Thread(target=attempt, name="akış-yetki", daemon=True)
+    thread.start()
+    thread.join(timeout=io.check_timeout_s)
+    return found[0] if found else PermissionCheck(Verdict.UNVERIFIED)
 
 
 class _Streams:
@@ -922,8 +940,11 @@ class _Streams:
                 return
             self.io.sleep(0.1)
 
-    def close(self) -> None:
+    def close(self, wait: bool = True) -> None:
+        """Bağlantıları kapattırır; zorla durdurmada beklemez (iş parçacıkları daemon, L-4)."""
         self.halt.set()
+        if not wait:
+            return
         for thread in self.threads:
             thread.join(timeout=5)
 
@@ -969,6 +990,7 @@ def _news(
         streams = _Streams(
             config, keys, io, clock, stop, lambda text: output(line(clock(), "haber", text)), store
         )
+        forced = False
         try:
             service = _news_reporter(bot_path, reporter)
             streams.start()
@@ -985,8 +1007,11 @@ def _news(
                 streams.runners,
             )
             exit_ = run_collection(config, store, parts)
+        except ForcedStop:
+            forced = True
+            raise
         finally:
-            streams.close()
+            streams.close(wait=not forced)
             store.close()
     except ForcedStop:
         return EXIT_FORCED
