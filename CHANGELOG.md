@@ -7,6 +7,12 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
+- **Binance resmi duyuru akışı** (spec 0056): yeni kaynak türü `binance-akış` Binance duyurularını resmi
+  WebSocket duyuru akışından, sahibin yalnız okuma yetkili ayrı anahtarıyla (`BINANCE_NEWS_API_KEY/SECRET`,
+  `.env`) toplar. Yetki her bağlantıdan önce denetlenir (fazlası kesin ret); kopunca artan beklemeyle yeniden
+  bağlanır, kopukluk kayda ve `news status`'a yazılır, kesinti bildirimi aynı kuralla çalışır. İzinli akış
+  kaynağı Binance duyurusu sayılır: skorlayıcının prompt örnekleri geri gelir. Yeni runtime bağımlılığı
+  `websocket-client` (Supersedes 0018/CB-1…CB-3). Örnek ayarda kaynak kapalı ve izin kaydısız.
 - **Haber kaynağında AI kullanım izni** (spec 0055): açık her haber kaynağı `ai_permission_by`,
   `ai_permission_on`, `ai_permission_basis` izin kaydı ister (gelecek tarih reddedilir). İzinsiz kaynağın haberi
   toplanmaz; skorlayıcıda çağrısız `izinsiz kaynak` sonucu alır (`news score status` kaynak adına göre sayar),

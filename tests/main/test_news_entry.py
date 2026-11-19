@@ -155,9 +155,11 @@ def test_example_news_config_is_valid() -> None:
     with EXAMPLE.open("rb") as file:
         result = load_news_config(tomllib.load(file))
     assert result.config is not None, result.message
-    # spec 0055 CB-5 supersedes the old "binance-duyuru, rss, rss" list (0046/AC-9)
+    # spec 0055 CB-5 supersedes the old "binance-duyuru, rss, rss" list (0046/AC-9); spec 0056
+    # AC-11 adds the closed official stream
     assert [(source.name, source.kind) for source in result.config.sources] == [
-        ("binance-duyuru", "binance-duyuru")
+        ("binance-duyuru", "binance-duyuru"),
+        ("binance-akış", "binance-akış"),
     ]
 
 
@@ -416,3 +418,30 @@ def test_future_permission_date_refused(collector: Collector) -> None:
         )
     assert collector.fetched == []
     assert not collector.store.exists()
+
+
+def test_example_config_stream_closed_documented() -> None:
+    """Spec 0056 AC-11: akış kaynağı kapalı ve izin kaydısız; yorumda iki değişkenin adı, yalnız
+    okuma kuralı ve iznin sahibe ait olduğu; `.env.example` yalnız adları taşır."""
+    text = EXAMPLE.read_text(encoding="utf-8")
+    with EXAMPLE.open("rb") as file:
+        result = load_news_config(tomllib.load(file))
+    assert result.config is not None, result.message
+    (stream,) = [s for s in result.config.sources if s.kind == "binance-akış"]
+    assert (stream.enabled, stream.permission, stream.url) == (
+        False,
+        None,
+        "wss://api.binance.com/sapi/wss",
+    )
+    for needle in ("BINANCE_NEWS_API_KEY", "BINANCE_NEWS_API_SECRET", "Enable Reading"):
+        assert needle in text
+    assert "izin kararı sahibindir" in text
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    values = {
+        name.strip(): value.strip()
+        for name, value in (
+            row.split("=", 1) for row in env_example.splitlines() if "=" in row and row[0] != "#"
+        )
+    }
+    assert values["BINANCE_NEWS_API_KEY"].startswith("your_")
+    assert values["BINANCE_NEWS_API_SECRET"].startswith("your_")

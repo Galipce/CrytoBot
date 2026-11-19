@@ -55,6 +55,13 @@
   kaynak dışında hiçbir kaynağın haberi toplanmaz, LLM'e verilmez, prompt örneği olmaz (izinli `binance-duyuru`
   yoksa prompt örneksizdir) ve ölçüm hükmüne girmez; izinsiz kaynağın haberi çağrısız `izinsiz kaynak` sonucu
   alır. Kod izin kararı vermez, kaydı sahip doğrular; koşullar değişirse kayıt silinip kaynak kapatılır.
+- **Binance resmi duyuru akışı (spec 0056):** sahibin hesabına bağlı, bot anahtarlarından AYRI bir anahtar
+  (`BINANCE_NEWS_API_KEY`, `BINANCE_NEWS_API_SECRET`; adlar ayarda, değerler yalnız ortamda ya da `.env`'de).
+  Her bağlantıdan önce yetkiler okunur: yalnız `enableReading` (ve salt okuma `enableFixReadOnly`) açık olabilir;
+  başka her `enable*`/`permits*` bayrağı — bilinmeyen yenisi de — açıksa toplayıcı başlamaz ya da çalışırken
+  durur (çıkış 1). Yetki okunamazsa yetkisi doğrulanmamış anahtarla bağlanılmaz. Değerler hiçbir satıra, durum
+  çıktısına, hata mesajına (dış kütüphanenin hata metni dahil, maskelenir), bildirime, haber kaydına ve LLM
+  promptuna girmez; anahtar tipi yazdırılınca maskelidir. İmza HMAC-SHA256; bağlantı yalnız `wss`.
 
 ## AuthN / AuthZ
 - Tek kullanıcı. **Varsayılan: reddet.**
