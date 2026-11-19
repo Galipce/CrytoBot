@@ -94,3 +94,14 @@ def test_future_publish_time_unknown_after_prepare() -> None:
     assert raw is not None and not isinstance(raw, str)
     item = prepare(raw, SEEN)
     assert item is not None and item.published is None and item.first_seen == SEEN
+
+
+def test_real_message_read() -> None:
+    """Plan A-2: yoklamada gelen gerçek ileti (2026-11-19) belgedeki biçimdedir."""
+    path = Path(__file__).parent / "fixtures" / "stream" / "real-2026-11-19.json"
+    raw = parse_stream_message(path.read_text(encoding="utf-8"), LIMIT)
+    assert raw is not None and not isinstance(raw, str)
+    assert raw.title.startswith("Updates on Tick Size for Multiple USD")
+    assert raw.item_id is not None and raw.item_id.startswith("akış:1795064401906:")
+    assert raw.published == datetime.fromtimestamp(1795064401906 / 1000, UTC)
+    assert len(raw.text) > 1000

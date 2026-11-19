@@ -46,6 +46,7 @@ from crytobot.news._archive_store import (
     prepare_archive,
     read_archive,
 )
+from crytobot.news._binance_auth import PermissionCheck, Verdict, judge_permissions
 from crytobot.news._collect import (
     POSSIBLE_MISS,
     CollectionExit,
@@ -135,6 +136,7 @@ from crytobot.news._score_store import (
     read_score_snapshot,
 )
 from crytobot.news._score_validate import Checked, check_reply
+from crytobot.news._secrets import SecretsError, StreamKeys, load_stream_keys, redact
 from crytobot.news._shadow_view import (
     CoinFilter,
     EventRef,
@@ -157,6 +159,8 @@ from crytobot.news._store import (
     read_forward,
     read_snapshot,
 )
+from crytobot.news._stream import Connection, ConnectionLost, StreamParts, StreamRunner
+from crytobot.news._stream_ws import fetch_restrictions, open_stream
 
 __all__: list[str] = [
     "ARCHIVE_EMPTY",
@@ -199,6 +203,8 @@ __all__: list[str] = [
     "CoinFilter",
     "CollectParts",
     "CollectionExit",
+    "Connection",
+    "ConnectionLost",
     "ContextError",
     "EventRef",
     "EventRow",
@@ -218,6 +224,7 @@ __all__: list[str] = [
     "NewsStore",
     "ParseError",
     "Permission",
+    "PermissionCheck",
     "RawItem",
     "ResultKind",
     "ScoreCall",
@@ -235,23 +242,32 @@ __all__: list[str] = [
     "ScoreSnapshot",
     "ScoreStore",
     "ScoreStoreError",
+    "SecretsError",
     "SourceRound",
     "SourceState",
     "StoreError",
     "StoreSnapshot",
+    "StreamKeys",
+    "StreamParts",
+    "StreamRunner",
     "StreamState",
+    "Verdict",
     "archive_status_lines",
     "base_of",
     "build_prompt",
     "check_reply",
     "context_fingerprint",
+    "fetch_restrictions",
     "fetch_source",
     "filter_view",
+    "judge_permissions",
     "label",
     "load_archive_config",
     "load_context",
     "load_news_config",
     "load_score_config",
+    "load_stream_keys",
+    "open_stream",
     "outage_notice",
     "page_url",
     "parse_binance_page",
@@ -267,6 +283,7 @@ __all__: list[str] = [
     "read_score_snapshot",
     "read_snapshot",
     "recovery_notice",
+    "redact",
     "run_archive",
     "run_collection",
     "run_round",

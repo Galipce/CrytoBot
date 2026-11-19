@@ -162,6 +162,13 @@ class NewsStore:
             raise StoreError("haber kaydı okunamıyor") from None
         return _state(row)
 
+    def stream_state(self, source: str) -> StreamState | None:
+        """Spec 0056: akış yöneticisi önceki toplamın üzerine yazmasın diye başlarken okur."""
+        try:
+            return _streams(self._connection).get(source)
+        except (sqlite3.Error, ValueError, TypeError):
+            raise StoreError("haber kaydı okunamıyor") from None
+
     def write(
         self,
         source: str,

@@ -103,7 +103,8 @@ import time
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
-from datetime import UTC, date, datetime
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import FrameType
 from typing import IO, TextIO
@@ -217,7 +218,9 @@ from crytobot.market_data import (
     read_prices,
 )
 from crytobot.news import (
+    BINANCE_KINDS,
     EVENT_TYPES,
+    STREAM_KIND,
     ArchiveConfig,
     ArchiveOutcome,
     ArchiveParts,
@@ -226,11 +229,13 @@ from crytobot.news import (
     CoinFilter,
     CollectionExit,
     CollectParts,
+    Connection,
     ContextError,
     Fetched,
     NewsConfig,
     NewsSource,
     NewsStore,
+    PermissionCheck,
     ScoreCall,
     ScoreConfig,
     ScoreContext,
@@ -239,14 +244,23 @@ from crytobot.news import (
     ScoreReply,
     ScoreStore,
     ScoreStoreError,
+    SecretsError,
     StoreError,
+    StreamKeys,
+    StreamParts,
+    StreamRunner,
+    Verdict,
     archive_status_lines,
     base_of,
+    fetch_restrictions,
     fetch_source,
+    judge_permissions,
     load_archive_config,
     load_context,
     load_news_config,
     load_score_config,
+    load_stream_keys,
+    open_stream,
     permission_in_future,
     read_filter_view,
     read_forward,
@@ -255,6 +269,7 @@ from crytobot.news import (
     read_score_record,
     read_score_snapshot,
     read_snapshot,
+    redact,
     run_archive,
     run_collection,
     run_scoring,
@@ -794,6 +809,125 @@ def _news_reporter(bot_path: Path, reporter: ReportingService | None) -> Reporti
     return ReportingService(config) if config.is_active else None
 
 
+@dataclass(frozen=True)
+class NewsStreamIO:
+    """Spec 0056: akışın gerçek etkileri; testler sahtelerini verir. `env_file`: göreli `.env`."""
+
+    connect: Callable[[str, StreamKeys, int], Connection] = open_stream
+    restrictions: Callable[[str, StreamKeys, int], bytes | None] = fetch_restrictions
+    env: Mapping[str, str] | None = None
+    env_file: Path | None = Path(".env")
+    first_wait_s: float = 15.0
+    monotonic: Callable[[], float] = time.monotonic
+    sleep: Callable[[float], None] = time.sleep
+
+
+def _ms(clock: Clock) -> int:
+    return int(clock().timestamp() * 1000)
+
+
+def _stream_sources(config: NewsConfig) -> list[NewsSource]:
+    return [s for s in config.sources if s.enabled and s.kind == STREAM_KIND]
+
+
+def _stream_keys(
+    config: NewsConfig, io: NewsStreamIO, output: Output, clock: Clock
+) -> dict[str, StreamKeys] | None:
+    """Spec 0056 AC-1, AC-2: anahtarlar ortamdan; başlangıçta fazla yetki kesin ret. Kilitten ve
+    kayıttan önce, hiçbir haber kaynağına istek gitmeden; değer mesaja girmez."""
+    keys: dict[str, StreamKeys] = {}
+    for source in _stream_sources(config):
+        assert source.key_env is not None and source.secret_env is not None  # stream kind
+        try:
+            keys[source.name] = load_stream_keys(
+                source.key_env, source.secret_env, io.env, io.env_file
+            )
+        except SecretsError as error:
+            output.say(f"news: reddedildi: {error.message}")
+            return None
+    for source in _stream_sources(config):
+        check = judge_permissions(io.restrictions(source.url, keys[source.name], _ms(clock)))
+        if check.verdict is Verdict.EXCESS:
+            output.say(f"news: reddedildi: {check.message}")
+            return None
+    return keys
+
+
+class _Streams:
+    """Spec 0056 (plan Risk 5, 6): akış iş parçacıkları — başlat, ilk denemeyi bekle, durdur."""
+
+    def __init__(
+        self,
+        config: NewsConfig,
+        keys: Mapping[str, StreamKeys],
+        io: NewsStreamIO,
+        clock: Clock,
+        stop: StopRequest,
+        say: Callable[[str], None],
+        store: NewsStore,
+    ) -> None:
+        self.io = io
+        self.stop = stop
+        self.halt = threading.Event()
+        self.runners: dict[str, StreamRunner] = {}
+        self.threads: list[threading.Thread] = []
+        for source in _stream_sources(config):
+            previous = store.stream_state(source.name)
+            self.runners[source.name] = StreamRunner(
+                source.name,
+                self._parts(source, keys[source.name], clock, say),
+                None if previous is None else previous.last_connected_at,
+                timedelta(seconds=0 if previous is None else previous.gap_total_s),
+            )
+
+    def _parts(
+        self, source: NewsSource, keys: StreamKeys, clock: Clock, say: Callable[[str], None]
+    ) -> StreamParts:
+        io = self.io
+
+        def connect() -> Connection:
+            return io.connect(source.url, keys, _ms(clock))
+
+        def check() -> PermissionCheck:
+            return judge_permissions(io.restrictions(source.url, keys, _ms(clock)))
+
+        def tell(text: str) -> None:
+            with suppress(Exception):  # a log failure never kills the stream; the round says it
+                say(redact(text, keys))
+
+        return StreamParts(clock, io.monotonic, self._wait, self._stopped, connect, check, tell)
+
+    def _stopped(self) -> bool:
+        return self.stop.requested or self.halt.is_set()
+
+    def _wait(self, seconds: float) -> bool:
+        end = self.io.monotonic() + seconds
+        while not self._stopped():
+            left = end - self.io.monotonic()
+            if left <= 0:
+                return False
+            self.halt.wait(min(1.0, left))
+        return True
+
+    def start(self) -> None:
+        for runner in self.runners.values():
+            thread = threading.Thread(target=runner.run, name=f"akış-{runner.name}", daemon=True)
+            self.threads.append(thread)
+            thread.start()
+        # the first round should not say `kopuk` while the first connection is being made
+        deadline = self.io.monotonic() + self.io.first_wait_s
+        while self.runners and not self.stop.requested and self.io.monotonic() < deadline:
+            states = [runner.status() for runner in self.runners.values()]
+            if all(state.connected or state.fatal is not None for state in states):
+                return
+            self.io.sleep(0.1)
+
+    def close(self) -> None:
+        self.halt.set()
+        for thread in self.threads:
+            thread.join(timeout=5)
+
+
 def _news(
     argv: Sequence[str],
     news_path: Path,
@@ -804,14 +938,20 @@ def _news(
     wait: Callable[[float], None] | None,
     fetch: NewsFetch,
     reporter: ReportingService | None,
+    stream_io: NewsStreamIO | None = None,
 ) -> int:
-    """Spec 0046: `news` toplar, `news status` gösterir. Ayar → kilit → depo sırası (AC-8, AC-9)."""
+    """Spec 0046: `news` toplar, `news status` gösterir. Ayar → kilit → depo sırası (AC-8, AC-9).
+    Spec 0056: açık akış kaynağında anahtarlar ve yetki kilitten önce; durum anahtar okumaz."""
+    io = NewsStreamIO() if stream_io is None else stream_io
     output = Output(console)
     config = _news_config(news_path, bot_path, output, clock)
     if config is None:
         return EXIT_REFUSED
     if list(argv[1:]) == ["status"]:
         return _news_status(config, output)
+    keys = _stream_keys(config, io, output, clock)
+    if keys is None:
+        return EXIT_REFUSED
     # one lock per file, however the path is spelled (plan Risk 3)
     lock = StoreLock(str(Path(config.store_path).resolve()))
     refused = lock.acquire()
@@ -826,8 +966,12 @@ def _news(
         except StoreError as error:
             output(line(clock(), "haber", f"reddedildi: {error}"))
             return EXIT_REFUSED
+        streams = _Streams(
+            config, keys, io, clock, stop, lambda text: output(line(clock(), "haber", text)), store
+        )
         try:
             service = _news_reporter(bot_path, reporter)
+            streams.start()
             parts = CollectParts(
                 clock,
                 make_wait(stop) if wait is None else wait,
@@ -838,9 +982,11 @@ def _news(
                 None if service is None else service.drain_queue,
                 None if service is None else service.take_dropped,
                 None if service is None else service.take_disabled_reason,
+                streams.runners,
             )
             exit_ = run_collection(config, store, parts)
         finally:
+            streams.close()
             store.close()
     except ForcedStop:
         return EXIT_FORCED
@@ -1033,8 +1179,7 @@ def _score_context(config: ScoreConfig) -> ScoreContext | str:
             library,
             config.library_sha256,
             examples=any(
-                source.permitted and source.kind == "binance-duyuru"
-                for source in config.news.sources
+                source.permitted and source.kind in BINANCE_KINDS for source in config.news.sources
             ),
         )
     except ContextError as error:
@@ -1968,6 +2113,7 @@ def run(
     root: Path | None = None,
     score_call: ScoreCall | None = None,
     forward_config_path: Path = Path(FORWARD_CONFIG_FILE),
+    news_stream: NewsStreamIO | None = None,
 ) -> int:
     """Komutu çalıştırır, çıkış kodunu döndürür. Ayar, kilit, depo sırası: borsaya ve depoya
     ayarlar denetlenmeden dokunulmaz (R-2); kilit depodan önce alınır (R-6)."""
@@ -2019,7 +2165,16 @@ def run(
         )
     if argv[0] == "news":
         return _news(
-            argv, news_config_path, config_path, console, clock, stop, wait, news_fetch, reporter
+            argv,
+            news_config_path,
+            config_path,
+            console,
+            clock,
+            stop,
+            wait,
+            news_fetch,
+            reporter,
+            news_stream,
         )
     if argv[0] == "shadow":
         return _shadow_status(config_path, output)
