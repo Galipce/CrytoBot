@@ -8,7 +8,7 @@ import io
 import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -402,3 +402,17 @@ def test_telegram_shutdown_reason_in_news_log(collector: Collector) -> None:
     assert "bildirim=giriş" in log
     assert "telegram devre dışı (" in log
     assert "SECRETTOKEN" not in log and "SECRETTOKEN" not in out.getvalue()
+
+
+def test_future_permission_date_refused(collector: Collector) -> None:
+    """Spec 0055 CB-1, plan Risk 2: izin tarihi UTC bugünden sonra olamaz; yerel saatte aynı gün
+    olsa bile. Ağa çıkılmaz, kayıt oluşmaz."""
+    collector.now = datetime(2026, 11, 15, 1, 0, tzinfo=timezone(timedelta(hours=3)))
+    for command in (("news",), ("news", "status")):
+        code, console = collector.run(*command)
+        assert (code, console.strip()) == (
+            EXIT_REFUSED,
+            "news: reddedildi: ayar geçersiz: news.sources[1].ai_permission_on (gelecekte)",
+        )
+    assert collector.fetched == []
+    assert not collector.store.exists()

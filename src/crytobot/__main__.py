@@ -103,7 +103,7 @@ import time
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from types import FrameType
 from typing import IO, TextIO
@@ -247,6 +247,7 @@ from crytobot.news import (
     load_context,
     load_news_config,
     load_score_config,
+    permission_in_future,
     read_filter_view,
     read_forward,
     read_library_sources,
@@ -741,10 +742,12 @@ def _bot_paths(path: Path) -> tuple[str, ...]:
     )
 
 
-def _news_config(news_path: Path, bot_path: Path, output: Output) -> NewsConfig | None:
+def _news_config(
+    news_path: Path, bot_path: Path, output: Output, clock: Clock
+) -> NewsConfig | None:
     """Spec 0046 AC-9: ağa çıkmadan ve hiçbir dosyaya dokunmadan önce, ilk sorun adıyla. Haber
     kaydı ve kayıt dosyası bot deposu ya da bot kaydı olamaz, birbirleri de olamaz: başka yazımla
-    da (plan Risk 2, 13)."""
+    da (plan Risk 2, 13). İzin tarihi UTC bugünden sonra olamaz (spec 0055 CB-1)."""
     document = _load_toml(news_path)
     if isinstance(document, str):
         output.say(f"news: reddedildi: {document}")
@@ -753,6 +756,10 @@ def _news_config(news_path: Path, bot_path: Path, output: Output) -> NewsConfig 
     config = result.config
     if config is None:
         output.say(f"news: reddedildi: {result.message}")
+        return None
+    future = permission_in_future(config, _utc_today(clock))
+    if future is not None:
+        output.say(f"news: reddedildi: {future}")
         return None
     bot = _bot_paths(bot_path)
     if any(_same_file(config.store_path, other) for other in bot):
@@ -799,7 +806,7 @@ def _news(
 ) -> int:
     """Spec 0046: `news` toplar, `news status` gösterir. Ayar → kilit → depo sırası (AC-8, AC-9)."""
     output = Output(console)
-    config = _news_config(news_path, bot_path, output)
+    config = _news_config(news_path, bot_path, output, clock)
     if config is None:
         return EXIT_REFUSED
     if list(argv[1:]) == ["status"]:
@@ -965,7 +972,7 @@ def _raw_paths(document: object, section: str, keys: Sequence[str]) -> tuple[str
 
 
 def _score_config(
-    news_path: Path, bot_path: Path, events_path: Path, output: Output
+    news_path: Path, bot_path: Path, events_path: Path, output: Output, clock: Clock
 ) -> ScoreConfig | None:
     """Spec 0051 AC-8: hiçbir kayda dokunmadan, ilk sorun adıyla. Skor kaydı ve kayıt dosyası
     haber kaydı, arşiv, bot deposu, fiyat deposu, bağlam dosyası ya da başka bir kayıt dosyası
@@ -978,6 +985,10 @@ def _score_config(
     config = result.config
     if config is None:
         output.say(f"news score: reddedildi: {result.message}")
+        return None
+    future = permission_in_future(config.news, _utc_today(clock))
+    if future is not None:
+        output.say(f"news score: reddedildi: {future}")
         return None
     events = _load_toml(events_path)
     others = (
@@ -1001,8 +1012,13 @@ def _score_config(
     return config
 
 
+def _utc_today(clock: Clock) -> date:
+    return clock().astimezone(UTC).date()
+
+
 def _score_context(config: ScoreConfig) -> ScoreContext | str:
-    """Bağlam dosyaları okunur, parmak izleri ayardakiyle karşılaştırılır (R-4, AC-6)."""
+    """Bağlam dosyaları okunur, parmak izleri ayardakiyle karşılaştırılır (R-4, AC-6). Örnekler
+    yalnız izinli bir `binance-duyuru` kaynağı varsa prompta girer (spec 0055 CB-3)."""
     report = file_bytes(config.calibration_report_path)
     if report is None:
         return "bağlam dosyası yok: score.calibration_report_path"
@@ -1011,7 +1027,14 @@ def _score_context(config: ScoreConfig) -> ScoreContext | str:
         return "bağlam dosyası yok: score.library_path"
     try:
         return load_context(
-            report, config.calibration_report_sha256, library, config.library_sha256
+            report,
+            config.calibration_report_sha256,
+            library,
+            config.library_sha256,
+            examples=any(
+                source.permitted and source.kind == "binance-duyuru"
+                for source in config.news.sources
+            ),
         )
     except ContextError as error:
         return str(error)
@@ -1061,7 +1084,7 @@ def _news_score(
     """Spec 0051: `news score` skorlar, `news score status` gösterir (AC-8, AC-9)."""
     news_path, bot_path, events_path = paths
     output = Output(console)
-    config = _score_config(news_path, bot_path, events_path, output)
+    config = _score_config(news_path, bot_path, events_path, output, clock)
     if config is None:
         return EXIT_REFUSED
     if list(argv[2:]) == ["status"]:
@@ -1346,6 +1369,10 @@ def _forward_config(
     if score is None:
         refuse(scored.message)
         return None
+    future = permission_in_future(score.news, _utc_today(clock))
+    if future is not None:
+        refuse(future)
+        return None
     bot_document = _load_toml(bot_path)
     if isinstance(bot_document, str):
         refuse(bot_document)
@@ -1442,6 +1469,11 @@ def _forward_sources(
             if names is None
             else {news_id: kinds.get(name, "bilinmiyor") for news_id, name in names.items()}
         )
+        # spec 0055 CB-4: a name missing from the config is not permitted either
+        permitted = score.news.permitted_names
+        unpermitted = {
+            news_id: name for news_id, name in (names or {}).items() if name not in permitted
+        }
         rows: list[object] | None = None
         if shadow is not None:
             try:
@@ -1472,7 +1504,7 @@ def _forward_sources(
         )
         kept = None if turns is None else tuple(turn for turn in turns if turn is not None)
         return ForwardSources(
-            ForwardInputs(results, events, sources, kept, whitelist),
+            ForwardInputs(results, events, sources, kept, whitelist, unpermitted),
             score.store_path,
             0 if record is None else record.skipped,
             score.news.store_path,

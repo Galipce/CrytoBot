@@ -321,3 +321,12 @@ def test_status_without_record(scorer: Scorer) -> None:
     assert code == EXIT_OK
     assert console.strip().splitlines()[-1] == "henüz skor yok"
     assert not (scorer.root / "score.db").exists()
+
+
+def test_future_permission_date_refused(scorer: Scorer) -> None:
+    """Spec 0055 CB-1: izin tarihi UTC bugünden sonraysa skorlayıcı ve durumu reddeder; çağrı ve
+    kayıt yok."""
+    scorer.now = START - timedelta(days=1)
+    message = "news score: reddedildi: ayar geçersiz: news.sources[1].ai_permission_on (gelecekte)"
+    assert refuse(scorer) == message
+    assert refuse(scorer, "news", "score", "status") == message

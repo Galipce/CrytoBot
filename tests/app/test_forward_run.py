@@ -55,6 +55,12 @@ from crytobot.news import (
     SourceState,
 )
 from tests.app.test_events_run import ROOT, candle_row, config_text
+from tests.main.test_news_entry import PERMISSION_TOML, TEST_SOURCES
+
+ONLY_BINANCE = (
+    '\n[[news.sources]]\nname = "binance-duyuru"\ntype = "binance-duyuru"\n'
+    f'url = "https://example.org/binance"\n{PERMISSION_TOML}'
+)
 
 H = timedelta(hours=1)
 FIRST = datetime(2026, 9, 1, tzinfo=UTC)
@@ -66,8 +72,9 @@ SCORED_3 = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)  # its 24th candle closes a
 MODEL = "claude-sonnet-5-5"
 
 
-def news_text(root: Path) -> str:
-    """Haber örnek ayarı; `[news]` ve `[score]` yolları `root`'ta."""
+def news_text(root: Path, sources: str = TEST_SOURCES) -> str:
+    """Haber örnek ayarı; `[news]` ve `[score]` yolları `root`'ta. Örneğin kaynakları çıkarılır,
+    yerine `sources` (öntanımlı: üç izinli kaynak, spec 0055 plan Risk 5) eklenir."""
     values = {
         "news": {
             "store_path": root / "news.db",
@@ -87,6 +94,12 @@ def news_text(root: Path) -> str:
     for row in (ROOT / "crytobot-news.example.toml").read_text(encoding="utf-8").splitlines():
         if row.startswith("["):
             section = row.strip("[]")
+            if section == "news.sources":
+                continue
+            if section == "score":  # the sources stay in front of `[score]`
+                rows.append(sources)
+        if section == "news.sources" and "=" in row and not row.startswith("#"):
+            continue
         key = row.split("=", 1)[0].strip()
         found = values.get(section, {})
         if "=" in row and key in found:
@@ -516,3 +529,34 @@ def test_download_without_needs_and_refused_sources() -> None:
     assert exit_.message == "tamam: indirilecek aralık yok" and fake.needs == []
     refused = Fake(found="haber kaydı okunamıyor")
     assert run_forward_download(CONFIG, refused.download_parts()).outcome is ForwardOutcome.REFUSED
+
+
+def test_unpermitted_from_config(tmp_path: Path) -> None:
+    """Spec 0055 CB-4: ayarda olmayan (`coindesk`) ya da kapalı (`binance-duyuru`) kaynağın haberi
+    örnek olmaz; raporda kaynak adına göre "izinsiz kaynak, hüküm dışı" satırında sayılır."""
+    world = World(tmp_path)
+    news = world.root / "crytobot-news.toml"
+    news.write_text(news_text(world.root, ONLY_BINANCE), encoding="utf-8")
+    assert world.run("forward", "download") == 0, world.text
+    assert 'forward download: başladı: örnek=3 teknik "al"=1 coin=3' in world.text
+    assert world.run("forward", "report", "--at", REPORT_AT.isoformat()) == 0, world.text
+    text = world.report.read_text(encoding="utf-8")
+    assert "izinsiz kaynak, hüküm dışı: coindesk=1" in text
+    rows = [json.loads(row) for row in world.samples.read_text(encoding="utf-8").splitlines()]
+    assert {row.get("source") for row in rows[1:]} == {"binance-duyuru"}
+    news.write_text(news_text(world.root, ONLY_BINANCE + "enabled = false\n"), encoding="utf-8")
+    assert world.run("forward", "report", "--at", REPORT_AT.isoformat()) == 0, world.text
+    text = world.report.read_text(encoding="utf-8")
+    assert "izinsiz kaynak, hüküm dışı: binance-duyuru=3 coindesk=1" in text
+    assert "güncel üçlü: yok" in text
+
+
+def test_future_permission_date_refused(tmp_path: Path) -> None:
+    """Spec 0055 CB-1: rapor da izin tarihi UTC bugünden sonraki ayarı reddeder."""
+    world = World(tmp_path)
+    early = datetime(2026, 11, 14, 23, 59, tzinfo=UTC)
+    assert world.run("forward", "report", clock=lambda: early) != 0
+    assert world.text.strip() == (
+        "forward report: reddedildi: ayar geçersiz: news.sources[1].ai_permission_on (gelecekte)"
+    )
+    assert not world.report.exists()
