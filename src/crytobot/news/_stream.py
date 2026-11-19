@@ -1,0 +1,235 @@
+"""Akış yöneticisi (spec 0056 R-2, R-5, R-6, AC-2, AC-5, AC-10; plan Risk 5, 6, 7, A-1, A-5).
+
+Kendi iş parçacığında koşar; gerçek etkiler (saat, bekleme, bağlantı, yetki okuma, durdurma)
+`StreamParts` ile gelir. Her bağlantıdan önce yetki denetlenir: fazla yetki ölümcüldür (koşu biter,
+toplayıcı durur); doğrulanamayan yetki bağlantısız beklemedir. Bağlı sayılmak için el sıkışma
+yetmez: sağlayıcının kayıt iletisi (`REGISTER`, kod `00000000`) gelmelidir; başka kod
+`kayıt reddedildi`, 30 sn'de gelmezse `kayıt yok`. 60 sn hiç çerçeve gelmezse `canlılık yok`
+(canlılık iletisinin yanıtı da çerçevedir). Bağlantı kurulamaz ya da koparsa bekleme 5 sn'den
+başlar, her ardışık hatada iki katına çıkar, en çok 15 dk; yalnız kayıtlı ve en az 60 sn ayakta
+kalmış bir bağlantıdan sonra 5 sn'ye döner (review round 1 M-3). Bağlantı 24 saat dolmadan
+yenilenir; canlılık iletisi 30 sn'den sık gider (sağlayıcı saniyede en çok 5 ileti kabul eder).
+Kopukluk (ilk kayıttan önce ve koptuktan sonra yeniden kayda kadar) bitince `kaynak=<ad>
+kopukluk=<n>s` satırı. Duyuru iletileri alınma anıyla kuyruğa girer; kayda yalnız tur yazar
+(`drain`). Beklenmeyen istisna iş parçacığını öldürmez: doğrulanamadı, bağlanamadı ya da koptu
+sayılır ve beklemeyle sürer (review round 1 M-1).
+"""
+
+import threading
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Final, Protocol
+
+from crytobot.news._binance_auth import UNVERIFIED, PermissionCheck, Verdict
+from crytobot.news._parse import REGISTERED, register_code
+
+FIRST_DELAY_S: Final = 5.0
+MAX_DELAY_S: Final = 900.0
+PING_EVERY_S: Final = 25.0
+LIVENESS_S: Final = 60.0  # no frame at all for this long: the connection is half-open
+REGISTER_WITHIN_S: Final = 30.0
+STABLE_AFTER_S: Final = 60.0  # only a connection that lasted this long resets the back-off
+RENEW_AFTER_S: Final = 23 * 3600 + 50 * 60  # the provider closes a connection at 24 h
+RECV_TIMEOUT_S: Final = 1.0
+CONTROL_FRAME: Final = ""  # `Connection.recv` for a frame that is not text (pong): liveness only
+
+
+class ConnectionLost(Exception):
+    """`name`: satıra yazılan hata adı (değer ya da adres taşımaz)."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
+        self.name = name
+
+
+class Connection(Protocol):
+    def recv(self, timeout: float) -> str | None:
+        """Metin iletisi; metin olmayan çerçeve `CONTROL_FRAME`; süre dolarsa `None`; bağlantı
+        koptuysa `ConnectionLost`."""
+        ...
+
+    def ping(self) -> None: ...
+
+    def close(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class StreamParts:
+    """`wait` en çok verilen süre bekler, durdurma istendiyse `True` döner."""
+
+    clock: Callable[[], datetime]
+    monotonic: Callable[[], float]
+    wait: Callable[[float], bool]
+    stopped: Callable[[], bool]
+    connect: Callable[[], Connection]
+    check_permissions: Callable[[], PermissionCheck]
+    say: Callable[[str], None]
+
+
+@dataclass(frozen=True)
+class StreamStatus:
+    connected: bool
+    last_connected_at: datetime | None
+    gap_started_at: datetime | None
+    gap_total: timedelta
+    fatal: PermissionCheck | None = None
+
+
+class StreamView(Protocol):
+    """Turun gördüğü yüz: kuyruğu boşaltmak ve durumu okumak."""
+
+    def drain(self) -> list[tuple[str, datetime]]: ...
+
+    def status(self) -> StreamStatus: ...
+
+
+def seconds(span: timedelta) -> str:
+    return f"{int(span.total_seconds())}s"
+
+
+class StreamRunner:
+    """Bir akış kaynağının bağlantısı. `run` iş parçacığında; `drain` ve `status` turdan."""
+
+    def __init__(
+        self,
+        name: str,
+        parts: StreamParts,
+        last_connected_at: datetime | None = None,
+        gap_total: timedelta = timedelta(0),
+    ) -> None:
+        self.name = name
+        self.parts = parts
+        self._lock = threading.Lock()
+        self._queue: list[tuple[str, datetime]] = []
+        self._connected = False
+        self._last_connected_at = last_connected_at
+        self._gap_started_at: datetime | None = parts.clock()
+        self._gap_total = gap_total
+        self._fatal: PermissionCheck | None = None
+        self._delay = FIRST_DELAY_S
+
+    def drain(self) -> list[tuple[str, datetime]]:
+        with self._lock:
+            taken, self._queue = self._queue, []
+        return taken
+
+    def status(self) -> StreamStatus:
+        with self._lock:
+            return StreamStatus(
+                self._connected,
+                self._last_connected_at,
+                self._gap_started_at,
+                self._gap_total,
+                self._fatal,
+            )
+
+    def _say(self, text: str) -> None:
+        self.parts.say(f"kaynak={self.name} {text}")
+
+    def _back_off(self) -> bool:
+        """Bekler, sonraki beklemeyi iki katına çıkarır; durdurma istendiyse `True`."""
+        stop = self.parts.wait(self._delay)
+        self._delay = min(self._delay * 2, MAX_DELAY_S)
+        return stop
+
+    def _registered(self) -> None:
+        now = self.parts.clock()
+        with self._lock:
+            started = self._gap_started_at
+            gap = timedelta(0) if started is None else max(now - started, timedelta(0))
+            self._gap_total += gap
+            self._gap_started_at = None
+            self._connected = True
+            self._last_connected_at = now
+        self._say(f"kopukluk={seconds(gap)}")
+
+    def _closed(self) -> None:
+        with self._lock:
+            self._connected = False
+            if self._gap_started_at is None:
+                self._gap_started_at = self.parts.clock()
+
+    def _check(self) -> PermissionCheck:
+        try:
+            return self.parts.check_permissions()
+        except Exception:  # an unexpected failure is an unverified key, never a dead thread
+            return UNVERIFIED
+
+    def _connect(self) -> Connection | str:
+        try:
+            return self.parts.connect()
+        except ConnectionLost as lost:
+            return lost.name
+        except Exception:
+            return "bağlanamadı"
+
+    def run(self) -> None:
+        """Durdurulana ya da fazla yetki görülene kadar."""
+        while not self.parts.stopped():
+            check = self._check()
+            if check.verdict is Verdict.EXCESS:
+                with self._lock:
+                    self._fatal = check
+                return
+            if check.verdict is not Verdict.READ_ONLY:
+                self._say(f"hata={check.message}")
+                if self._back_off():
+                    return
+                continue
+            connection = self._connect()
+            if isinstance(connection, str):
+                self._say(f"hata={connection}")
+                if self._back_off():
+                    return
+                continue
+            stopped = self._read(connection)
+            self._closed()
+            if stopped or self._back_off():
+                return
+
+    def _read(self, connection: Connection) -> bool:
+        """Bağlantı açıkken; durdurma istendiyse `True`. Her durumda bağlantı kapanır."""
+        opened = last_ping = last_frame = self.parts.monotonic()
+        registered = False
+        try:
+            while True:
+                if self.parts.stopped():
+                    return True
+                now = self.parts.monotonic()
+                if not registered and now - opened >= REGISTER_WITHIN_S:
+                    raise ConnectionLost("kayıt yok")
+                if now - last_frame >= LIVENESS_S:
+                    raise ConnectionLost("canlılık yok")
+                if now - opened >= RENEW_AFTER_S:
+                    self._say("bağlantı yenileniyor (24 saat)")
+                    return False
+                if now - last_ping >= PING_EVERY_S:
+                    connection.ping()
+                    last_ping = now
+                text = connection.recv(RECV_TIMEOUT_S)
+                if text is None:
+                    continue
+                last_frame = self.parts.monotonic()
+                if text == CONTROL_FRAME:
+                    continue
+                code = register_code(text)
+                if code is not None:
+                    if code != REGISTERED:
+                        raise ConnectionLost("kayıt reddedildi")
+                    if not registered:
+                        registered = True
+                        self._registered()
+                    continue
+                with self._lock:
+                    self._queue.append((text, self.parts.clock()))
+        except ConnectionLost as lost:
+            self._say(f"hata={lost.name}")
+            return False
+        except Exception:  # an unexpected failure of the library: lost, retried with back-off
+            self._say("hata=bağlantı koptu")
+            return False
+        finally:
+            if registered and self.parts.monotonic() - opened >= STABLE_AFTER_S:
+                self._delay = FIRST_DELAY_S
+            connection.close()

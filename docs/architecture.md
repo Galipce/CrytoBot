@@ -62,6 +62,11 @@ beklemeyi, sinyalleri, haber kaydının mutlak yolunun kilidini (bot kilidinden 
 kendi kayıt dosyasını, HTTPS getirmeyi ve `reporting`'in gönderimini `news`'e (`run_collection`)
 verir. Bot ayarından yalnız `[bot]` yolları (karşılaştırma için) ve `[reporting.telegram]` okunur;
 bot deposu açılmaz. `news status` ağa çıkmaz, kilit almaz.
+Spec 0056: açık bir `binance-akış` kaynağı varsa giriş noktası anahtarları ortamdan okur ve yetkiyi kilitten
+önce denetler; sonra kaynak başına bir daemon iş parçacığında akış yöneticisini (`news.StreamRunner`) gerçek
+WebSocket bağlantısı (`websocket-client`, yalnız `news._stream_ws`) ve imzalı yetki isteğiyle başlatır. Akış
+iletileri kuyruğa girer; tur kuyruğu beklemeden boşaltır ve kayda yalnız tur yazar (SQLite tek iş parçacığından).
+Bağlantı durumu haber kaydının ek `stream_state` tablosundadır; `news status` oradan okur.
 `news archive` (spec 0047) aynı biçimde `app` dışında koşar: ayarı aynı dosyanın `archive_` anahtarlarıdır;
 giriş noktası gerçek ve monoton saati, ≤1 s'lik beklemeyi, sinyalleri, arşiv deposunun mutlak yolunun kilidini
 (toplayıcının ve botun kilidinden ayrı), arşivin kendi kayıt dosyasını ve HTTPS getirmeyi `news`'e

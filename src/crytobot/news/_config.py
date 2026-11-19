@@ -16,8 +16,14 @@ Spec 0055 (CB-1; plan Risk 1, 2): açık kaynak AI kullanım izni kaydı ister �
 `ai_permission_on` (TOML tarihi), `ai_permission_basis`; kapalı kaynakta isteğe bağlıdır ama varsa
 üçü birden ve geçerli olmalıdır. Kod izin kararı vermez, yalnız kaydın varlığını ve biçimini
 denetler. Yükleyici saat bilmez: gelecek tarih `permission_in_future` ile giriş noktasında.
+
+Spec 0056 (plan Risk 9, A-1): `binance-akış` türü Binance'in resmi duyuru akışıdır; adresi yalnız
+`wss://`. Anahtar ve gizli anahtar ayarda değil ortamdadır: ayar yalnız değişkenlerin adlarını
+taşır (`api_key_env`, `api_secret_env`; varsayılan `BINANCE_NEWS_API_KEY`,
+`BINANCE_NEWS_API_SECRET`). Bu iki anahtar başka türde kabul edilmez.
 """
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -25,14 +31,21 @@ from urllib.parse import urlsplit
 
 SECTION = "news"
 SCORE_SECTION = "score"
-KINDS = ("binance-duyuru", "rss")
+STREAM_KIND = "binance-akış"
+KINDS = ("binance-duyuru", "rss", STREAM_KIND)
+# Spec 0056 AC-9: both kinds are Binance announcements (prompt examples, archive overlap)
+BINANCE_KINDS = frozenset({"binance-duyuru", STREAM_KIND})
+DEFAULT_KEY_ENV = "BINANCE_NEWS_API_KEY"
+DEFAULT_SECRET_ENV = "BINANCE_NEWS_API_SECRET"
+_ENV_NAME = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
+_ENV_KEYS = ("api_key_env", "api_secret_env")
 MIN_INTERVAL_MINUTES = 5
 _NAME_LIMIT = 64
 _URL_LIMIT = 2048
 _DEFAULTS = {"interval_minutes": 15, "max_response_kb": 2048, "source_alert_hours": 6}
 _PATHS = ("store_path", "log_path")
 _PERMISSION_KEYS = ("ai_permission_by", "ai_permission_on", "ai_permission_basis")
-_SOURCE_KEYS = ("name", "type", "url", "enabled", *_PERMISSION_KEYS)
+_SOURCE_KEYS = ("name", "type", "url", "enabled", *_PERMISSION_KEYS, *_ENV_KEYS)
 _BASIS_LIMIT = 1024
 ARCHIVE_KEYS = ("archive_store_path", "archive_log_path", "archive_url", "archive_request_gap_s")
 MIN_ARCHIVE_GAP_S = 1
@@ -55,6 +68,9 @@ class NewsSource:
     url: str
     enabled: bool
     permission: Permission | None = None
+    # spec 0056: only the `binance-akış` kind; the variable names, never the values
+    key_env: str | None = None
+    secret_env: str | None = None
 
     @property
     def permitted(self) -> bool:
@@ -125,15 +141,33 @@ def _text(value: object, name: str, limit: int) -> str:
     return value
 
 
-def _https(value: object, name: str) -> str:
+def _https(value: object, name: str, scheme: str = "https") -> str:
     url = _text(value, name, _URL_LIMIT)
     try:
         parts = urlsplit(url)
     except ValueError:
-        raise _invalid(name, "https değil") from None
-    if parts.scheme != "https" or not parts.hostname:
-        raise _invalid(name, "https değil")
+        raise _invalid(name, f"{scheme} değil") from None
+    if parts.scheme != scheme or not parts.hostname:
+        raise _invalid(name, f"{scheme} değil")
     return url
+
+
+def _env_names(raw: Mapping[str, object], prefix: str, kind: str) -> tuple[str | None, str | None]:
+    """Spec 0056 (A-1): yalnız akış türünde; isteğe bağlı, varsayılanlı; ikisi farklı olmalı."""
+    if kind != STREAM_KIND:
+        for key in _ENV_KEYS:
+            if key in raw:
+                raise _invalid(f"{prefix}.{key}", f"yalnız {STREAM_KIND}")
+        return None, None
+    names = []
+    for key, default in zip(_ENV_KEYS, (DEFAULT_KEY_ENV, DEFAULT_SECRET_ENV), strict=True):
+        value = raw.get(key, default)
+        if not isinstance(value, str) or not _ENV_NAME.fullmatch(value):
+            raise _invalid(f"{prefix}.{key}")
+        names.append(value)
+    if names[0] == names[1]:
+        raise _invalid(f"{prefix}.api_secret_env", "api_key_env ile aynı")
+    return names[0], names[1]
 
 
 def _source(raw: object, index: int) -> NewsSource:
@@ -150,11 +184,14 @@ def _source(raw: object, index: int) -> NewsSource:
     kind = raw["type"]
     if kind not in KINDS:
         raise _invalid(f"{prefix}.type", "bilinmeyen tür")
-    url = _https(raw["url"], f"{prefix}.url")
+    scheme = "wss" if kind == STREAM_KIND else "https"
+    url = _https(raw["url"], f"{prefix}.url", scheme)
     enabled = raw.get("enabled", True)
     if not isinstance(enabled, bool):
         raise _invalid(f"{prefix}.enabled")
-    return NewsSource(name, str(kind), url, enabled, _permission(raw, prefix, enabled))
+    key_env, secret_env = _env_names(raw, prefix, str(kind))
+    permission = _permission(raw, prefix, enabled)
+    return NewsSource(name, str(kind), url, enabled, permission, key_env, secret_env)
 
 
 def _permission(raw: Mapping[str, object], prefix: str, enabled: bool) -> Permission | None:

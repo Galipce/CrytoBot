@@ -118,3 +118,19 @@ def test_status_does_not_write_the_archive(tmp_path: Path) -> None:
     archive_status_lines(run.config)
     assert run.store_path.read_bytes() == data
     assert before == (63,)
+
+
+def test_overlap_counts_stream(tmp_path: Path) -> None:
+    """Spec 0056 AC-9: örtüşme sayımı akış türündeki kaynağın kayıtlarını da tarar."""
+    from dataclasses import replace
+
+    from crytobot.news import NewsSource
+
+    run = harness(tmp_path)
+    run.run()
+    archived = run.archived()
+    stream = NewsSource("akış", "binance-akış", "wss://api.binance.com/sapi/wss", False)
+    config = run.config
+    config = replace(config, news=replace(config.news, sources=(*config.news.sources, stream)))
+    forward(tmp_path / "news.db", "akış", f"id:{archived[0]}", "id:akış:1:abc")
+    assert archive_status_lines(config)[-1].endswith(" örtüşme=1")

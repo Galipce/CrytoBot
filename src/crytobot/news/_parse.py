@@ -12,8 +12,14 @@ Spec 0047 (plan Risk 4, 5): arşivin sayfası `parse_binance_page` ile okunur. K
 sapma `bad_schema`'dır (sessiz boşluk yok); duyuru düzeyinde gevşektir: nesne olmayan duyuru
 `bad_schema`, kimliği tamsayı olmayan ya da başlığı dizgi olmayan duyuru geçersizdir (`None`),
 `code` ASCII harf-rakam değilse bağlantı yoktur, `releaseDate` okunamıyorsa yayın anı bilinmiyor.
+
+Spec 0056 (plan A-1): resmi duyuru akışının iletisi `parse_stream_message` ile okunur. Akışın
+kontrol iletileri (`type` `COMMAND`) duyuru değildir (`CONTROL`); `DATA` dışı tür, yanlış konu,
+bozuk JSON, sınırı aşan ileti ya da dizgi olmayan başlık geçersizdir (`None`). Kimlik yoktur:
+`akış:<publishDate>:<başlığın SHA-256'sının ilk 16 hanesi>` türetilir; `disclaimer` alınmaz.
 """
 
+import hashlib
 import html
 import json
 from collections.abc import Callable
@@ -22,6 +28,7 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from xml.parsers import expat
 
+from crytobot.news._binance_auth import STREAM_TOPIC
 from crytobot.news._items import RawItem, clean
 
 BINANCE_LINK = "https://www.binance.com/en/support/announcement/"
@@ -276,6 +283,61 @@ PARSERS: dict[str, Callable[[bytes], list[RawItem]]] = {
     "rss": parse_feed,
     "binance-duyuru": parse_binance,
 }
+
+CONTROL = "control"
+REGISTERED = "00000000"
+
+
+def register_code(text: str) -> str | None:
+    """Akışın kayıt iletisinin kodu (`REGISTER`); kayıt iletisi değilse `None` (review L-1)."""
+    try:
+        found = json.loads(text)
+    except (ValueError, RecursionError):
+        return None
+    if not isinstance(found, dict) or found.get("type") != "COMMAND":
+        return None
+    if found.get("subType") != "REGISTER":
+        return None
+    return str(found.get("code"))
+
+
+def _stream_id(publish: object, title: str) -> str:
+    digest = hashlib.sha256(title.encode("utf-8", "replace")).hexdigest()[:16]
+    stamp = publish if isinstance(publish, int) and not isinstance(publish, bool) else "yok"
+    return f"akış:{stamp}:{digest}"
+
+
+def parse_stream_message(text: str, max_bytes: int) -> RawItem | str | None:
+    """Bir akış iletisi: duyuru, `CONTROL` ya da geçersiz (`None`)."""
+    if len(text.encode("utf-8", "replace")) > max_bytes:
+        return None
+    try:
+        outer = json.loads(text)
+    except (ValueError, RecursionError):
+        return None
+    if not isinstance(outer, dict):
+        return None
+    if outer.get("type") == "COMMAND":
+        return CONTROL
+    if outer.get("type") != "DATA" or outer.get("topic") != STREAM_TOPIC:
+        return None
+    data = outer.get("data")
+    if not isinstance(data, str):
+        return None
+    try:
+        inner = json.loads(data)
+    except (ValueError, RecursionError):
+        return None
+    if not isinstance(inner, dict):
+        return None
+    title, body, publish = inner.get("title"), inner.get("body", ""), inner.get("publishDate")
+    if not isinstance(title, str) or not isinstance(body, str):
+        return None
+    try:
+        published = _release(publish)
+    except ParseError:
+        published = None  # a publish time that is not a number: written with the time unknown
+    return RawItem(_stream_id(publish, title), None, title, body, published)
 
 
 _CATALOG_NAME_LIMIT = 128

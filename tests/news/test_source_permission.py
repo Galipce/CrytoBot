@@ -125,3 +125,19 @@ def test_permission_date_future_check() -> None:
         permission_in_future(config, date(2026, 11, 19))
         == "ayar geçersiz: news.sources[2].ai_permission_on (gelecekte)"
     )
+
+
+def test_stream_source_requires_permission() -> None:
+    """Spec 0056 PB-2: akış kaynağına da 0055 kuralı aynen uygulanır."""
+    raw = source(name="b", type="binance-akış", url="wss://api.binance.com/sapi/wss")
+    config, message = load(raw)
+    assert config is not None, message
+    assert config.permitted_names == {"b"}
+    for key in ("ai_permission_by", "ai_permission_on", "ai_permission_basis"):
+        assert load(source(name="b", type="binance-akış", url="wss://x.org/w", **{key: None})) == (
+            None,
+            f"ayar eksik: news.sources[1].{key}",
+        )
+    # VERIFY F-2: an open stream source with no permission record at all is refused
+    bare: dict[str, object] = {"name": "b", "type": "binance-akış", "url": "wss://x.org/w"}
+    assert load(bare) == (None, "ayar eksik: news.sources[1].ai_permission_by")

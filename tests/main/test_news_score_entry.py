@@ -353,3 +353,36 @@ def test_examples_only_with_permitted_binance(scorer: Scorer, binance_permitted:
     (prompt,) = scorer.prompts
     assert ("NEW4" in prompt) is binance_permitted
     assert ("(örnek yok)" in prompt) is not binance_permitted
+
+
+def test_examples_with_permitted_stream(scorer: Scorer) -> None:
+    """Spec 0056 AC-9: izinli `binance-akış` kaynağı da Binance duyurusudur: gerçek promptta
+    kütüphane örnekleri gelir."""
+    text = scorer.news_config.read_text(encoding="utf-8")
+    old = 'type = "binance-duyuru"\nurl = "https://example.org/b"'
+    assert old in text
+    scorer.news_config.write_text(
+        text.replace(old, 'type = "binance-akış"\nurl = "wss://example.org/b"'), encoding="utf-8"
+    )
+    scorer.add("binance", "id:akış:1:abc", "Binance Will Delist ABC", "Binance will delist.", START)
+    code, _ = scorer.run("news", "score")
+    assert code == EXIT_OK
+    (prompt,) = scorer.prompts
+    assert "NEW4" in prompt and "(örnek yok)" not in prompt
+
+
+def test_closed_stream_no_examples(scorer: Scorer) -> None:
+    """Review I-2 (AC-9 olumsuz kolu): akış kaynağı kapalı ve izinli `binance-duyuru` yokken, yalnız
+    izinli rss varken prompt örneksizdir."""
+    text = scorer.news_config.read_text(encoding="utf-8")
+    old = 'type = "binance-duyuru"\nurl = "https://example.org/b"\n' + "\n".join(PERMISSION_ROWS)
+    assert old in text
+    scorer.news_config.write_text(
+        text.replace(old, 'type = "binance-akış"\nurl = "wss://example.org/b"\nenabled = false'),
+        encoding="utf-8",
+    )
+    scorer.add("coindesk", "id:1", "Binance Will Delist ABC", "Binance will delist ABC.", START)
+    code, _ = scorer.run("news", "score")
+    assert code == EXIT_OK
+    (prompt,) = scorer.prompts
+    assert "NEW4" not in prompt and "(örnek yok)" in prompt

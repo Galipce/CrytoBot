@@ -127,6 +127,12 @@
   bekleme turun kalan Telegram bütçesiyle sınırlı (`TelegramClient.attempt`); terk edilen istek sürerken yenisi gönderilmez — from spec 0039, plan Risk 1, 4, A-1
 - Gerçek saatli bütçe testlerinde iş parçacığı başlatma ve ilk import gecikmesi 0.2 s'yi aşabilir: harcanan süre enjekte saatle sınanır,
   isteğin gittiği iş parçacığının girişte kurduğu `threading.Event` beklenerek doğrulanır; gerçek saat yalnız üst sınır için ölçülür — from spec 0039, review round 2 F-5
+- `urlopen` `http.client.HTTPException`'ı (`BadStatusLine`, `IncompleteRead`, `LineTooLong`) `URLError`'a sarmaz ve o
+  `OSError` değildir: yalnız `URLError`/`OSError` yakalayan istek traceback'le kaçar, iş parçacığında sessizce
+  ölür — ayrıca yakalanır — from spec 0056, review round 1 M-1
+- Daemon iş parçacığı beklenmeden dönülüyorsa (zorla durdurma) test, iş parçacığının yan etkisini dönüşten hemen sonra
+  değil sınırlı yoklamayla ya da `threading.Event` ile doğrular; "beklenmedi" ayrıca, takılı tutulan bir sahteyle
+  gösterilir — from spec 0056, review round 2 M-1
 - ccxt binance emir doğrulama reddinin çoğunu `InvalidOrder` değil `BadRequest` olarak fırlatır: `-1013`
   (`Filter failure: NOTIONAL`/`MIN_NOTIONAL`), `-1100…-1106`, `-1111`, `-1114…-1121` (`-1121`: `BadSymbol`);
   yalnız `LOT_SIZE`/`PRICE_FILTER` gibi birkaçı `InvalidOrder` olur — kesin ret yanıt gövdesindeki koddan

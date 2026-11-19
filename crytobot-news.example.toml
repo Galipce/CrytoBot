@@ -21,7 +21,8 @@ archive_log_path = "crytobot-news-archive.log"   # arşivin kayıt dosyası; di�
 archive_url = "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query"  # yalnız https
 archive_request_gap_s = 1                         # iki istek arası en az saniye (tamsayı, en az 1)
 
-# Kaynaklar: `type` "binance-duyuru" (JSON) ya da "rss" (RSS 2.0 ve Atom); yalnız https.
+# Kaynaklar: `type` "binance-duyuru" (JSON), "rss" (RSS 2.0 ve Atom), yalnız https; ya da
+# "binance-akış" (Binance'in resmi duyuru akışı, spec 0056), yalnız wss.
 # `enabled = false` olan kaynak sorgulanmaz. Kaynak çıkarılınca eski kayıtları kalır.
 # AI kullanım izni (spec 0055): açık her kaynak, sahibin o kaynağın koşullarını içeriğin AI ile
 # işlenmesine izin verir bulduğunu yazan üç alanı taşır; yoksa toplayıcı ve skorlayıcı başlamaz.
@@ -39,6 +40,22 @@ name = "binance-duyuru"
 type = "binance-duyuru"
 url = "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=20"
 enabled = false
+
+# Binance'in resmi duyuru akışı (spec 0056): İngilizce duyurular yayınlandıkça gelir; toplayıcı
+# çalıştığı sürece bağlı kalır, kopunca 5 sn'den 15 dk'ya artan beklemeyle yeniden bağlanır;
+# kopukken yayınlanan duyuru kaçabilir (akış geçmiş vermez), kopukluk kayda ve `news status`'a
+# yazılır. Sahibin Binance hesabına bağlı AYRI bir anahtar ister: yalnız "Enable Reading" açık;
+# işlem, para çekme ve transfer yetkilerinden biri açıksa toplayıcı başlamaz. Anahtar ayarda DEĞİL,
+# ortamdadır (`.env`, gitignore'da): aşağıdaki iki değişkenin yalnız adları burada durur (varsayılan
+# BINANCE_NEWS_API_KEY ve BINANCE_NEWS_API_SECRET). Kapalı ve izin kaydısız: açmadan önce Binance
+# koşullarını doğrulayıp izin kaydını (üç alan) kendiniz yazın — izin kararı sahibindir.
+[[news.sources]]
+name = "binance-akış"
+type = "binance-akış"
+url = "wss://api.binance.com/sapi/wss"
+enabled = false
+# api_key_env = "BINANCE_NEWS_API_KEY"
+# api_secret_env = "BINANCE_NEWS_API_SECRET"
 
 # RSS kaynağı örneği (yorumda; adres yok): koşulları AI kullanımına izin veren bir akış bulunca
 # açın ve üç alanı kendi doğrulamanızla doldurun.
