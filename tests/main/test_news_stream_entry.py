@@ -53,10 +53,13 @@ class FakeSocket:
     script: list[str]
     closed: bool = False
     hold: threading.Event | None = None  # set: recv hangs until released (a stuck connection)
+    stuck: threading.Event | None = None  # set just before hanging (review round 3 L-1)
 
     def recv(self, timeout: float) -> str | None:
         time.sleep(0.01)
         if self.hold is not None and not self.script:
+            if self.stuck is not None:
+                self.stuck.set()
             self.hold.wait(10)
         if self.closed:
             raise ConnectionLost("kapandı")
@@ -93,6 +96,7 @@ class World:
     restrictions_error: Exception | None = None
     check_timeout_s: float = 40.0
     first_fetch_at: float | None = None
+    stuck: threading.Event = field(default_factory=threading.Event)
 
     def __post_init__(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -114,6 +118,8 @@ class World:
 
     def wait(self, seconds: float) -> None:
         time.sleep(0.3)  # the stream thread delivers its messages in real time
+        if self.restrictions_block is not None:
+            self.restrictions_block.set()  # review round 3 I-1: free the stream's own check early
         self.waits += 1
         with self.lock:
             self.now += timedelta(seconds=seconds)
@@ -125,6 +131,8 @@ class World:
         if self.first_fetch_at is None:
             self.first_fetch_at = time.monotonic()
         if self.force:
+            if self.hold is not None:
+                assert self.stuck.wait(2)  # the stream thread hangs before the forced stop
             self.stop.request("SIGINT")
             self.stop.request("SIGINT")
         return Fetched(body=(FIXTURES / "coindesk.xml").read_bytes())
@@ -141,7 +149,7 @@ class World:
     def connect(self, url: str, keys: StreamKeys, now_ms: int) -> FakeSocket:
         if self.connect_error is not None:
             raise ConnectionLost(self.connect_error)
-        socket_ = FakeSocket(list(self.script), hold=self.hold)
+        socket_ = FakeSocket(list(self.script), hold=self.hold, stuck=self.stuck)
         self.sockets.append(socket_)
         return socket_
 
