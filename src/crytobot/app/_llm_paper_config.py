@@ -15,9 +15,9 @@ from decimal import Decimal
 from crytobot.risk import RiskLimits
 
 SECTION = "llm_paper"
-# spec 0061 CB-5 / G-1 (ADR 0007, 20 coins): a fixed 00:00 UTC after the new code is deployed;
-# the exact moment is written at ship (spec 0060's 2026-11-20T03:00Z period is superseded)
-MEASUREMENT_START = datetime(2026, 11, 22, tzinfo=UTC)
+# spec 0061 CB-5 / G-1 (ADR 0007, 20 coins): written at ship 2026-11-20, the first 00:00 UTC
+# at least two hours after the merge (spec 0060's 2026-11-20T03:00Z period is superseded)
+MEASUREMENT_START = datetime(2026, 11, 21, tzinfo=UTC)
 MEASUREMENT_DAYS = 90
 MEASUREMENT_SPAN = timedelta(days=MEASUREMENT_DAYS)
 MEASUREMENT_END = MEASUREMENT_START + MEASUREMENT_SPAN

@@ -201,6 +201,7 @@ def test_stopped_call_writes_no_turn(tmp_path: Path) -> None:
         run_decide(config(), store, replace(fake.parts(), call=stopped_call)) is DecideExit.STOPPED
     )
     assert not store.has_turn(BOUNDARY)
+    assert fake.notices == []  # VERIFY F-1: a stopped call notifies nothing
     store.close()
 
 

@@ -1581,7 +1581,7 @@ LlmPaperRules = Callable[[], tuple[str, None] | tuple[None, str]]
 
 
 def real_llm_paper_rules(clock: Clock) -> LlmPaperRules:
-    """Spec 0060 G-8: on çiftin borsa kuralları herkese açık okumadan (anahtarsız)."""
+    """Spec 0060 G-8: listenin çiftlerinin borsa kuralları herkese açık okumadan (anahtarsız)."""
 
     def fetch() -> tuple[str, None] | tuple[None, str]:
         pairs = tuple(f"{coin}/{QUOTE}" for coin in PREREGISTERED_COINS)

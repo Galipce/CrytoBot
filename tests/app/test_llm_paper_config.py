@@ -67,8 +67,8 @@ def test_preregistered_keys_refused(key: str) -> None:
 
 def test_preregistered_numbers_match_spec() -> None:
     """Spec 0060 C-4, C-5, C-6: sabitler spec'teki sayılardır (bot ayarından okunmaz)."""
-    assert MEASUREMENT_START.isoformat() == "2026-11-22T00:00:00+00:00"  # spec 0061 CB-5
-    assert MEASUREMENT_END.isoformat() == "2027-02-20T00:00:00+00:00"
+    assert MEASUREMENT_START.isoformat() == "2026-11-21T00:00:00+00:00"  # spec 0061 CB-5
+    assert MEASUREMENT_END.isoformat() == "2027-02-19T00:00:00+00:00"
     assert (RANDOM_SEED, RANDOM_REPEATS) == (60, 1000)
     assert (LIMITS.per_trade_risk, LIMITS.daily_loss_limit, LIMITS.max_drawdown) == (
         Decimal("0.01"),

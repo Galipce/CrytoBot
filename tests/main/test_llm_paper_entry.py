@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from crytobot.__main__ import EXIT_OK, EXIT_REFUSED, USAGE, run
+from crytobot.__main__ import EXIT_OK, EXIT_REFUSED, EXIT_REPORT_NOT_WRITTEN, USAGE, run
 from crytobot.app import StopRequest
 from crytobot.app._llm_paper_config import MEASUREMENT_START
 from crytobot.decide import (
@@ -361,3 +361,16 @@ def test_notify_failure_still_ok(world: World) -> None:
     assert code == EXIT_OK and "llm-paper report: bildirim iletilemedi (hata)" in console
     code, console = world.run("report", "--notify", offline=True, reporter=Telegram(error="kuyruk"))
     assert code == EXIT_OK and "bildirim iletilemedi (kuyruk)" in console
+
+
+def test_notify_only_after_the_report_is_written(world: World) -> None:
+    """VERIFY F-2 (CB-4): rapor yazılamazsa özet gönderilmez."""
+    world.decide()
+    world.run("download")
+    world.config.write_text(
+        llm_text(world.root, report_path="missing/report.txt"), encoding="utf-8"
+    )
+    telegram = Telegram()
+    code, console = world.run("report", "--notify", offline=True, reporter=telegram)
+    assert code == EXIT_REPORT_NOT_WRITTEN and "rapor yazılamadı" in console
+    assert telegram.sent == []

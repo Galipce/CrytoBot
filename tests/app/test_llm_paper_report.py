@@ -256,7 +256,7 @@ def test_summary_line() -> None:
     judged = verdict(PERIOD, START, found, CHANCE, GOOD, START)
     line = summary_line(START + 5 * HOUR, START + 5 * HOUR, found, judged)
     assert line == (
-        "LLM paper 2026-11-22T05:00Z · ufuk 2026-11-22T05:00Z · kapanmış 3 · net 1.50 USDT"
+        "LLM paper 2026-11-21T05:00Z · ufuk 2026-11-21T05:00Z · kapanmış 3 · net 1.50 USDT"
         " · drawdown %2.0 · hüküm: ölçüm sürüyor · paper — uygulanmıyor"
     )
     assert "\n" not in line
