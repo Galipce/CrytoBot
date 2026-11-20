@@ -1727,6 +1727,7 @@ def _llm_paper_download(
     stop: StopRequest,
     wait: Callable[[float], None] | None,
     effects: tuple[EventsDownload, LlmPaperRules | None],
+    record: LlmPaperRecord | None,
 ) -> ForwardOutcome:
     download, rules = effects
     lock = StoreLock(str(Path(config.price_store_path).resolve()))
@@ -1753,7 +1754,7 @@ def _llm_paper_download(
                 config,
                 LlmPaperDownloadParts(
                     PREREGISTERED_COINS,
-                    _llm_paper_record(config.decide_store_path),
+                    lambda: record,
                     real_llm_paper_rules(clock) if rules is None else rules,
                     lambda needs: download(needs, store, parts, config.request_gap_s),
                     write_atomic,
@@ -1796,7 +1797,12 @@ def _llm_paper(
         return EXIT_REFUSED
     try:
         if command == "download":
-            outcome = _llm_paper_download(config, output, clock, stop, wait, effects)
+            # review round 2 M-a: the record is read before the lock and the price store (AC-1)
+            record = _llm_paper_record(config.decide_store_path)()
+            if isinstance(record, str):
+                output.say(f"llm-paper download: reddedildi: {record}")
+                return EXIT_REFUSED
+            outcome = _llm_paper_download(config, output, clock, stop, wait, effects, record)
         else:
             parts = LlmPaperReportParts(
                 PREREGISTERED_COINS,

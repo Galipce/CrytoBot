@@ -152,12 +152,24 @@ def parse_rules(found: RulesFile, coins: Sequence[str]) -> dict[str, PairRules] 
         return f"kural dosyası okunamıyor; {DOWNLOAD_FIRST}"
 
 
-def _covered(prices: PriceData, coins: Sequence[str]) -> datetime:
-    """L-1: on coinin ölçüm başından kesintisiz indirilmiş kapsamının en erken sonu; yarım kalan
-    bir indirme ufku ilerletmez."""
+@dataclass(frozen=True)
+class Coverage:
+    """`until`: on coinin kesintisiz kapsamının en erken sonu; `limited_by`: o sonu veren coin;
+    `empty`: kapsam içinde mumsuz kaydedilmiş aralık sayısı (L-c)."""
+
+    until: datetime
+    limited_by: str | None
+    empty: int
+
+
+def covered(prices: PriceData, coins: Sequence[str]) -> Coverage:
+    """L-1: ölçüm başından (bir saat önce) kesintisiz indirilmiş kapsam; yarım kalan bir indirme
+    ufku ilerletmez. Mumsuz aralık kapsanmış sayılır (gerçek bir kesinti ufku kilitlemez), sayısı
+    raporda uyarıdır."""
     pairs = prices.pairs or {}
     start = MEASUREMENT_START - HOUR
-    ends = []
+    found: list[tuple[datetime, str]] = []
+    empty = 0
     for coin in coins:
         pair = pairs.get(coin)
         reach = start
@@ -166,8 +178,12 @@ def _covered(prices: PriceData, coins: Sequence[str]) -> datetime:
             if span.start > reach:
                 break
             reach = max(reach, span.end)
-        ends.append(reach)
-    return min(ends) if ends else start
+            empty += not span.found
+        found.append((reach, coin))
+    if not found:
+        return Coverage(start, None, 0)
+    until, coin = min(found)
+    return Coverage(until, coin, empty)
 
 
 def _bars(prices: PriceData, coins: Sequence[str]) -> dict[str, dict[datetime, Bar]]:
@@ -203,6 +219,8 @@ def _report(config: LlmPaperConfig, parts: LlmPaperReportParts, at: datetime | N
     rules: Mapping[str, PairRules] = {}
     horizon = min(_floor(report_at), period.end)
     rules_at: str | None = None
+    limited_by: str | None = None
+    empty = 0
     if buys:
         prices = parts.prices()
         if prices is None:
@@ -230,7 +248,11 @@ def _report(config: LlmPaperConfig, parts: LlmPaperReportParts, at: datetime | N
         bars = _bars(prices, parts.coins)
         ceiling = prices.ceiling
         horizon = min(horizon, period.end if ceiling is None else _floor(ceiling))
-        horizon = min(horizon, _covered(prices, parts.coins))
+        coverage = covered(prices, parts.coins)
+        if coverage.until < horizon:
+            limited_by = coverage.limited_by
+        horizon = min(horizon, coverage.until)
+        empty = coverage.empty
     window = (period.start, period.end, horizon)
     result = replay(buys, bars, rules, *window)
     chance = random_distribution(result.trades, bars, rules, parts.coins, window)
@@ -246,6 +268,8 @@ def _report(config: LlmPaperConfig, parts: LlmPaperReportParts, at: datetime | N
         parts.s0(period.start, period.end),
         chance.missing,
         horizon,
+        limited_by,
+        empty,
     )
     if not parts.write_rows(config.trades_path, trade_rows(result.trades)):
         raise _Halt(ForwardOutcome.NOT_WRITTEN, f"işlem dosyası yazılamadı: {config.trades_path}")

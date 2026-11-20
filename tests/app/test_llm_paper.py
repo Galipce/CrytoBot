@@ -3,6 +3,8 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+import pytest
+
 from crytobot.app._llm_paper import (
     HOLD_BARS,
     HOUR,
@@ -267,3 +269,23 @@ def test_pending_not_counted_and_risk_budget() -> None:
     assert trade.amount is not None
     unit_loss = D("100") * (1 + SLIPPAGE) - D("95") * (1 - SLIPPAGE)
     assert trade.amount * unit_loss <= OPENING_BALANCE * D("0.01")
+
+
+def test_step_down_never_spends_past_cash(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review round 2 I-b: onay kasayı aşan bir miktar verirse adım adım küçülür; altına inerse
+    `en küçük tutar`."""
+    import crytobot.app._llm_paper as core
+    from crytobot.risk import TradeApproval, TradeIntent
+
+    def generous(intent: TradeIntent, *args: object, **kwargs: object) -> TradeApproval:
+        return TradeApproval(D("1.2"), None, False, "test", intent)
+
+    monkeypatch.setattr(core, "approve_trade", generous)
+    rules = {"SOL": PairRules(D("0.1"), D("0.1"), D("5"))}
+    bars = {"SOL": series({1: bar(START + HOUR, "99", "101", "100")})}
+    trade = run([decision()], bars, rules=rules).trades[0]
+    assert trade.amount is not None and trade.fill_price is not None
+    assert trade.amount * trade.fill_price * (1 + FEE) <= OPENING_BALANCE
+    assert trade.amount == D("0.9")
+    tiny = {"SOL": PairRules(D("0.1"), D("0.1"), D("200"))}
+    assert run([decision()], bars, rules=tiny).trades[0].rejection == "en küçük tutar"

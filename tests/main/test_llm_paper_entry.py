@@ -57,6 +57,8 @@ class World:
         self.config = root / "crytobot-llm-paper.toml"
         self.config.write_text(llm_text(root), encoding="utf-8")
         self.needs: list[object] = []
+        self.now = NOW
+        self.fail_after: int | None = None  # coins written before a failed download (L-a)
         self.network = False
 
     def rules(self) -> tuple[str, None] | tuple[None, str]:
@@ -64,8 +66,9 @@ class World:
 
     def download(self, needs, store: PriceStore, parts, gap):  # type: ignore[no-untyped-def]
         self.needs.append(needs)
-        store.save_pairs([PairInfo(c, f"{c}USDT", "TRADING") for c in PREREGISTERED_COINS], NOW)
-        for need in needs:
+        now = self.now
+        store.save_pairs([PairInfo(c, f"{c}USDT", "TRADING") for c in PREREGISTERED_COINS], now)
+        for written, need in enumerate(needs):
             candles = []
             moment = need.start
             while moment < need.end:
@@ -73,8 +76,11 @@ class World:
                 low = "99" if moment == START + HOUR and need.coin == "SOL" else "104"
                 candles.append(StoredCandle(ms, "105", "106", low, "105"))
                 moment += HOUR
-            store.save_span(f"{need.coin}USDT", need.start, need.end, candles, "test", NOW)
-        store.record_run(DownloadRun(NOW, NOW, 0.1, 1, NOW.replace(minute=0)))
+            if self.fail_after is not None and written >= self.fail_after:
+                store.record_run(DownloadRun(now, now, 0.1, 1, now.replace(minute=0)))
+                return DownloadOutcome.FAILED
+            store.save_span(f"{need.coin}USDT", need.start, need.end, candles, "test", now)
+        store.record_run(DownloadRun(now, now, 0.1, 1, now.replace(minute=0)))
         return DownloadOutcome.COMPLETE
 
     def forbidden_download(self, *args, **kwargs):  # type: ignore[no-untyped-def]
@@ -91,7 +97,7 @@ class World:
             decide_config_path=self.root / "crytobot-decide.toml",
             llm_paper_config_path=self.config,
             console=out,
-            clock=lambda: NOW,
+            clock=lambda: self.now,
             stop=StopRequest(),
             wait=lambda seconds: None,
             events_download=self.forbidden_download if offline else self.download,
@@ -265,3 +271,31 @@ def test_report_while_decide_holds_its_lock(world: World) -> None:
         assert world.run("report", offline=True)[0] == EXIT_OK
     finally:
         lock.release()
+
+
+def test_unreadable_record_download_touches_no_file(world: World) -> None:
+    """Review round 2 M-a (AC-1): ret, kilitten ve fiyat deposundan önce."""
+    (world.root / "decide.db").write_bytes(b"not a database" * 50)
+    code, console = world.run("download")
+    assert code == EXIT_REFUSED and "karar kaydı okunamıyor" in console
+    assert not (world.root / "prices.db").exists()
+    assert world.needs == []
+
+
+def test_partial_failed_download_keeps_horizon(world: World) -> None:
+    """Review round 2 L-a, L-b: bazı coinleri yazıp düşen indirme ufku ilerletmez."""
+    world.decide()
+    assert world.run("download")[0] == EXIT_OK
+    world.run("report", offline=True)
+    first = (world.root / "report.txt").read_text(encoding="utf-8")
+    trades = (world.root / "trades.jsonl").read_bytes()
+    horizon = NOW.replace(minute=0)
+    assert f"oynatma ufku: {horizon.strftime('%Y-%m-%dT%H:%MZ')}" in first
+    world.now = NOW + 5 * HOUR
+    world.fail_after = 3
+    code, console = world.run("download")
+    assert code == EXIT_REFUSED and "kaynak hatası" in console
+    world.run("report", offline=True)
+    second = (world.root / "report.txt").read_text(encoding="utf-8")
+    assert f"oynatma ufku: {horizon.strftime('%Y-%m-%dT%H:%MZ')} (sınırlayan:" in second
+    assert (world.root / "trades.jsonl").read_bytes() == trades

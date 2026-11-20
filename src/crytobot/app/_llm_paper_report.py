@@ -280,6 +280,8 @@ class ReportFacts:
     s0: S0Summary | None
     random_missing: int
     horizon: datetime | None = None
+    limited_by: str | None = None  # the coin whose download holds the horizon back (I-a)
+    empty_spans: int = 0  # spans stored without candles (L-c)
 
 
 def report_text(
@@ -323,7 +325,16 @@ def report_text(
         f" {LIMITS.profit_cost_multiple}",
         "varsayım: dolum mumu kararın verildiği dakikadan önceki ilk dakikaları da kapsar (tur anı"
         " 1h sınırıdır); dolum mumunda hedef yalnız dolum açılışta olduysa sayılır (A-8)",
-        f"oynatma ufku: {_stamp(facts.horizon)}",
+        f"oynatma ufku: {_stamp(facts.horizon)}"
+        + ("" if facts.limited_by is None else f" (sınırlayan: {facts.limited_by})"),
+        *(
+            [
+                f"uyarı: mumsuz indirilmiş aralık={facts.empty_spans} (borsa kesintisi ya da"
+                " kapanmamış mum; bir sonraki indirme yeniden ister)"
+            ]
+            if facts.empty_spans
+            else []
+        ),
         "",
         "## Dönemler",
         *(

@@ -14,9 +14,10 @@ from crytobot.app._llm_paper_report import RecordTurn
 from crytobot.app._llm_paper_run import (
     LlmPaperDownloadParts,
     LlmPaperRecord,
+    covered,
     run_llm_paper_download,
 )
-from crytobot.market_data import DownloadOutcome, PriceNeed
+from crytobot.market_data import DownloadOutcome, PairInfo, PriceData, PriceNeed, StoredSpan
 
 HOUR = timedelta(hours=1)
 _LOADED = load_llm_paper_config(
@@ -90,3 +91,37 @@ def test_unreadable_record_refused_before_network() -> None:
     found = run_llm_paper_download(CONFIG, parts("karar kaydı okunamıyor", MEASUREMENT_END, needs))
     assert (found.outcome, found.message) == (ForwardOutcome.REFUSED, "karar kaydı okunamıyor")
     assert needs == []
+
+
+S = MEASUREMENT_START
+
+
+def prices(spans: dict[str, list[tuple[int, int, bool]]], coins: tuple[str, ...]) -> PriceData:
+    return PriceData(
+        {c: PairInfo(c, f"{c}USDT", "TRADING") for c in coins},
+        S,
+        {},
+        {
+            f"{c}USDT": tuple(
+                StoredSpan(S + HOUR * a, S + HOUR * b, found, "test") for a, b, found in items
+            )
+            for c, items in spans.items()
+        },
+        (),
+    )
+
+
+def test_covered_contiguous_gap_late_start_and_empty() -> None:
+    """Review round 2 L-b, L-c, I-a."""
+    whole = prices({"A": [(-1, 5, True), (5, 9, True)], "B": [(-1, 9, True)]}, ("A", "B"))
+    assert covered(whole, ("A", "B")).until == S + 9 * HOUR
+    gap = prices({"A": [(-1, 5, True), (6, 9, True)], "B": [(-1, 9, True)]}, ("A", "B"))
+    found = covered(gap, ("A", "B"))
+    assert (found.until, found.limited_by) == (S + 5 * HOUR, "A")
+    late = prices({"A": [(0, 9, True)], "B": [(-1, 9, True)]}, ("A", "B"))
+    assert covered(late, ("A", "B")).until == S - HOUR
+    empty = prices({"A": [(-1, 5, True), (5, 9, False)], "B": [(-1, 9, True)]}, ("A", "B"))
+    found = covered(empty, ("A", "B"))
+    assert (found.until, found.empty) == (S + 9 * HOUR, 1)
+    no_pair = prices({"A": [(-1, 9, True)]}, ("A",))
+    assert covered(no_pair, ("A", "B")).limited_by == "B"
