@@ -9,6 +9,7 @@ import pytest
 
 from crytobot.decide import (
     ADR_0005_COINS,
+    SYSTEM_PROMPT,
     CoinData,
     DecideConfig,
     DecideExit,
@@ -40,6 +41,7 @@ class Fake:
     replies: list[DecideReply] = field(default_factory=list)
     data: Mapping[str, CoinData | None] | None = None
     calls: list[str] = field(default_factory=list)
+    arguments: list[tuple[str, str, float]] = field(default_factory=list)
     reads: list[datetime] = field(default_factory=list)
     lines: list[str] = field(default_factory=list)
     notices: list[str] = field(default_factory=list)
@@ -58,6 +60,7 @@ class Fake:
 
     def call(self, model: str, system: str, prompt: str, timeout_s: float) -> DecideReply:
         self.calls.append(prompt)
+        self.arguments.append((model, system, timeout_s))
         self.now += timedelta(seconds=30)
         if self.replies:
             return self.replies.pop(0)
@@ -205,3 +208,34 @@ def test_minute_setting_honoured(tmp_path: Path, minute: int) -> None:
     run(tmp_path, fake, config(minute_after_close=minute))
     assert fake.reads == [BOUNDARY]
     assert fake.waits[0] == (minute * 60 if minute else 3600 - 30)  # the call took 30 s
+
+
+def test_call_arguments_from_config(tmp_path: Path) -> None:
+    """Review round 1 L-5: model, sabit sistem talimatı ve ayardaki zaman aşımı çağrıya gider."""
+    fake = Fake(BOUNDARY + timedelta(minutes=5))
+    run(tmp_path, fake, config(model="claude-test-1", timeout_s=77))
+    assert fake.arguments == [("claude-test-1", SYSTEM_PROMPT, 77.0)]
+
+
+def test_quota_wait_survives_restart(tmp_path: Path) -> None:
+    """Review round 1 L-1: kota beklemesi kayıttan türer (0051 R-5 gibi)."""
+    fake = Fake(BOUNDARY + timedelta(minutes=5), replies=[DecideReply("quota", None)])
+    run(tmp_path, fake, config(quota_wait_minutes=90))
+    restarted = Fake(BOUNDARY + HOUR + timedelta(minutes=5))
+    run(tmp_path, restarted, config(quota_wait_minutes=90))
+    assert restarted.calls == []
+    assert any("sonuç=kota bekleniyor çağrı=yok" in line for line in restarted.lines)
+    later = Fake(BOUNDARY + 2 * HOUR + timedelta(minutes=5))
+    run(tmp_path, later, config(quota_wait_minutes=90))
+    assert len(later.calls) == 1  # 10:05:30 + 90 min has passed
+
+
+def test_no_decision_turn_writes_wait_with_reason(tmp_path: Path) -> None:
+    """Review round 1 L-4: kararsız turda karar istenen her coin `bekle`, neden sonuç sınıfı."""
+    fake = Fake(BOUNDARY + timedelta(minutes=5), replies=[DecideReply("timeout", None)])
+    run(tmp_path, fake)
+    snapshot = read_decide_snapshot(str(tmp_path / "decide.db"), BOUNDARY.date())
+    assert snapshot is not None
+    assert {(d.status, d.reason) for d in snapshot.latest} == {("bekle", "timeout")}
+    assert len(snapshot.latest) == len(ADR_0005_COINS)
+    assert any("sonuç=timeout çağrı=var al=0 bekle=10" in line for line in fake.lines)

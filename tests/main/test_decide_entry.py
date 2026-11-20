@@ -172,6 +172,35 @@ def test_news_and_shadow_paths_refused(world: World) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("score", "key", "message"),
+    [
+        ('calibration_report_path = "{root}/report.txt"', "store_path", "decide.store_path"),
+        ('library_path = "{root}/library.jsonl"', "log_path", "decide.log_path"),
+        ('store_path = "{root}/other-score.db"', None, "decide.score_path"),
+    ],
+)
+def test_score_paths_guarded(world: World, score: str, key: str | None, message: str) -> None:
+    """Review round 1 L-3: skorlayıcının bağlam dosyaları korunur; skor yolu haber ayarındakidir."""
+    root = world.root.as_posix()
+    line_ = score.format(root=root)
+    (world.root / "crytobot-news.toml").write_text(f"[score]\n{line_}\n", encoding="utf-8")
+    if key is not None:
+        target = line_.split("=", 1)[1].strip()
+        world.decide_config.write_text(decide_text(world.root, **{key: target}), encoding="utf-8")
+    code, console = world.run("decide", forbidden=True)
+    assert code == EXIT_REFUSED
+    assert console.strip() == f"decide: reddedildi: ayar geçersiz: {message}"
+
+
+def test_matching_score_path_accepted(world: World) -> None:
+    (world.root / "crytobot-news.toml").write_text(
+        f'[score]\nstore_path = "{(world.root / "score.db").as_posix()}"\n', encoding="utf-8"
+    )
+    code, _ = world.run("decide")
+    assert code == EXIT_OK
+
+
 def test_wrong_list_refused(world: World) -> None:
     text = decide_text(world.root).replace('"TON"', '"PEPE"')
     world.decide_config.write_text(text, encoding="utf-8")

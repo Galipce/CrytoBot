@@ -10,7 +10,7 @@ başlarsa (ya da uyanırsa) o sınırın turu atlanır, satırı yazılır: kara
 """
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Final
@@ -25,7 +25,6 @@ from crytobot.decide._validate import Decision, Status, check_reply
 CONTEXT_COIN: Final = "BTC"
 LATE_LIMIT: Final = timedelta(minutes=15)
 OK: Final = "ok"
-QUOTA: Final = "quota"
 
 
 @dataclass(frozen=True)
@@ -58,12 +57,6 @@ def floor_hour(moment: datetime) -> datetime:
     return moment.replace(minute=0, second=0, microsecond=0)
 
 
-@dataclass
-class _Hold:
-    quota_until: datetime | None = None
-    lines: list[str] = field(default_factory=list)
-
-
 def _counts(decisions: tuple[Decision, ...]) -> str:
     names = (Status.BUY, Status.WAIT, Status.INCONSISTENT, Status.NO_DATA, Status.SCHEMA)
     return " ".join(
@@ -73,7 +66,7 @@ def _counts(decisions: tuple[Decision, ...]) -> str:
 
 
 def run_turn(
-    config: DecideConfig, store: DecideStore, parts: DecideParts, boundary: datetime, hold: _Hold
+    config: DecideConfig, store: DecideStore, parts: DecideParts, boundary: datetime
 ) -> Turn:
     """Bir sınırın turu; kayda yazılacak `Turn` (yazmaz)."""
     data = parts.read(config.coins, boundary)
@@ -88,8 +81,10 @@ def run_turn(
             summaries.append(summary)
 
     def turn(
-        outcome: str, called: bool, decided: tuple[Decision, ...] = (), **extra: object
+        outcome: str, called: bool, decided: tuple[Decision, ...] | None = None, **extra: object
     ) -> Turn:
+        if decided is None:  # no decision this turn: every asked coin waits, the reason named
+            decided = tuple(Decision(s.coin, Status.WAIT, reason=outcome) for s in summaries)
         return Turn(
             boundary,
             config.model,
@@ -99,22 +94,23 @@ def run_turn(
             called,
             (*decided, *missing),
             extra.get("reason"),  # type: ignore[arg-type]
+            extra.get("ended_at"),  # type: ignore[arg-type]
         )
 
     if not summaries:
         return turn("veri yok", False)
     now = parts.clock()
-    if hold.quota_until is not None and now < hold.quota_until:
+    quota_at = store.last_quota_at()
+    if quota_at is not None and now < quota_at + timedelta(minutes=config.quota_wait_minutes):
         return turn("kota bekleniyor", False)
     if store.calls_on(now.date()) >= config.daily_call_limit:
         return turn("sınır", False)
     context = next((s for s in summaries if s.coin == CONTEXT_COIN), None)
     prompt = build_prompt(summaries, context, boundary)
     reply = parts.call(config.model, SYSTEM_PROMPT, prompt.text, float(config.timeout_s))
-    if reply.outcome == QUOTA:
-        hold.quota_until = parts.clock() + timedelta(minutes=config.quota_wait_minutes)
+    ended = parts.clock()
     if reply.outcome != OK:
-        return turn(reply.outcome, True, input_fingerprint=prompt.input_fingerprint)
+        return turn(reply.outcome, True, input_fingerprint=prompt.input_fingerprint, ended_at=ended)
     checked = check_reply(reply.text, {s.coin: (s.low, s.high) for s in summaries})
     outcome = OK if checked.schema_reason is None else Status.SCHEMA.value
     return turn(
@@ -123,6 +119,7 @@ def run_turn(
         checked.decisions,
         input_fingerprint=prompt.input_fingerprint,
         reason=checked.schema_reason,
+        ended_at=ended,
     )
 
 
@@ -148,7 +145,6 @@ def run_decide(config: DecideConfig, store: DecideStore, parts: DecideParts) -> 
         f"başladı: model={config.model} coin={len(config.coins)} dakika={config.minute_after_close}"
         f" günlük_sınır={config.daily_call_limit} kayıt={config.store_path}"
     )
-    hold = _Hold()
     after = timedelta(minutes=config.minute_after_close)
     turns = 0
     try:
@@ -161,7 +157,7 @@ def run_decide(config: DecideConfig, store: DecideStore, parts: DecideParts) -> 
             if now > boundary + after + LATE_LIMIT and not store.has_turn(boundary):
                 parts.say(f"tur atlandı: an={boundary.isoformat()} geç kalındı")
             elif not store.has_turn(boundary):
-                turn = run_turn(config, store, parts, boundary, hold)
+                turn = run_turn(config, store, parts, boundary)
                 if parts.stopped() and turn.outcome == "stopped":
                     break
                 store.write(turn)

@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS turns (
     input_fingerprint TEXT,
     outcome TEXT NOT NULL,
     called INTEGER NOT NULL,
-    reason TEXT
+    reason TEXT,
+    ended_at TEXT
 );
 CREATE TABLE IF NOT EXISTS decisions (
     turn_id INTEGER NOT NULL REFERENCES turns(id),
@@ -73,6 +74,7 @@ class Turn:
     called: bool
     decisions: tuple[Decision, ...]
     reason: str | None = None
+    ended_at: datetime | None = None  # the call's end (quota wait is derived from it, R-3)
 
 
 def _text(moment: datetime) -> str:
@@ -130,6 +132,16 @@ class DecideStore:
             datetime.fromisoformat(str(row[0])).astimezone(UTC).date() == day for row in rows
         )
 
+    def last_quota_at(self) -> datetime | None:
+        """Son kota yanıtlı çağrının bitişi (0051 R-5 gibi kayıttan; yeniden başlatmada da)."""
+        try:
+            row = self._connection.execute(
+                "SELECT MAX(ended_at) FROM turns WHERE outcome = 'quota'"
+            ).fetchone()
+        except sqlite3.Error:
+            raise DecideStoreError("karar kaydı okunamıyor") from None
+        return None if row is None or row[0] is None else datetime.fromisoformat(str(row[0]))
+
     def write(self, turn: Turn) -> None:
         connection = self._connection
         try:
@@ -139,7 +151,7 @@ class DecideStore:
         try:
             cursor = connection.execute(
                 "INSERT INTO turns (at, model, prompt_fingerprint, input_fingerprint, outcome,"
-                " called, reason) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                " called, reason, ended_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     _text(turn.at),
                     turn.model,
@@ -148,6 +160,7 @@ class DecideStore:
                     turn.outcome,
                     int(turn.called),
                     turn.reason,
+                    None if turn.ended_at is None else _text(turn.ended_at),
                 ),
             )
             turn_id = cursor.lastrowid

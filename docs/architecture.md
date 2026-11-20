@@ -134,7 +134,9 @@ kararlar paper öncesidir, hiçbir defterin, botun ya da filtrenin girdisi deği
 - `news` ticaret modüllerini (`app`, `persistence`, `execution`, `portfolio`, `risk`, `strategy`, `backtest`,
   `control`, `dashboard`, `market_data`) import etmez: haber toplama `app` dışında koşar, gerçek etkilerini giriş
   noktası verir (spec 0046, R-3i).
-- `decide` ticaret modüllerini, `market_data`'yı, `news`'i, `llm`'i, `research`'ü, `reporting`'i ve `calibration`'ı import etmez (spec 0059, R-3l); etkiler giriş noktasından gelir. `app` `decide`'ı import etmez (R-3k): bot karar kaydını okuyamaz.
+- `decide` ticaret modüllerini, `market_data`'yı, `news`'i, `llm`'i, `research`'ü, `reporting`'i ve `calibration`'ı import etmez (spec 0059, R-3l); etkiler giriş noktasından gelir. `app` `decide`'ı import etmez (R-3k); hiçbir ticaret modülü (`app`, `persistence`, `execution`,
+  `portfolio`, `risk`, `strategy`, `backtest`, `control`, `dashboard`, `reporting`) ona doğrudan ya da dolaylı
+  ulaşamaz (R-3m): bot ve defterler karar kaydını okuyamaz.
 - `app` `news`'i ve `llm`'i import etmez (spec 0052, R-3k): paper turu skorlara yapısal olarak erişemez; gölge filtre
   görünümü giriş noktasının verdiği işlevle, `app`'in tipiyle gelir.
 - `backtest` `app`'i ve `market_data`'yı import etmez: koşuyu `app` yapar, veri dosyasını giriş noktası okutur; `backtest` yalnız tur kayıtlarından metrik ve rapor üretir (spec 0025). `ccxt` kuralı onu da kapsar.

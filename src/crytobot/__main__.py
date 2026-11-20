@@ -1463,7 +1463,9 @@ def _decide_config(
         *_raw_paths(
             news, "news", ("store_path", "log_path", "archive_store_path", "archive_log_path")
         ),
-        *_raw_paths(news, "score", ("store_path", "log_path")),
+        *_raw_paths(
+            news, "score", ("store_path", "log_path", "calibration_report_path", "library_path")
+        ),
         *_raw_paths(
             _load_toml(events_path), "events", ("price_store_path", "report_path", "library_path")
         ),
@@ -1478,8 +1480,11 @@ def _decide_config(
     if any(_same_file(config.log_path, other) for other in (*others, config.store_path)):
         output.say("decide: reddedildi: ayar geçersiz: decide.log_path")
         return None
-    if _same_file(config.score_path, config.store_path) or _same_file(
-        config.score_path, config.log_path
+    scores = _raw_paths(news, "score", ("store_path",))
+    if (
+        _same_file(config.score_path, config.store_path)
+        or _same_file(config.score_path, config.log_path)
+        or (scores and not _same_file(config.score_path, scores[0]))
     ):
         output.say("decide: reddedildi: ayar geçersiz: decide.score_path")
         return None

@@ -82,6 +82,7 @@ forbidden_modules = [
     "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest", "crytobot.control",
     "crytobot.reporting", "crytobot.app", "crytobot.persistence", "crytobot.dashboard",
     "crytobot.calibration",  # spec 0045
+    "crytobot.decide",  # spec 0059
 ]
 allow_indirect_imports = true
 
@@ -125,6 +126,7 @@ forbidden_modules = [
     "crytobot.market_data", "crytobot.news", "crytobot.research", "crytobot.llm", "crytobot.strategy",
     "crytobot.risk", "crytobot.execution", "crytobot.portfolio", "crytobot.backtest", "crytobot.control",
     "crytobot.reporting", "crytobot.app", "crytobot.persistence", "crytobot.dashboard",
+    "crytobot.decide",  # spec 0059
 ]
 allow_indirect_imports = true
 
@@ -152,6 +154,7 @@ forbidden_modules = [
     "crytobot.strategy", "crytobot.risk", "crytobot.execution", "crytobot.portfolio",
     "crytobot.backtest", "crytobot.control", "crytobot.reporting", "crytobot.app",
     "crytobot.persistence", "crytobot.dashboard", "crytobot.calibration",
+    "crytobot.decide",  # spec 0059
 ]
 allow_indirect_imports = true
 
@@ -178,6 +181,19 @@ forbidden_modules = [
     "crytobot.research", "crytobot.reporting", "crytobot.calibration",
 ]
 allow_indirect_imports = true
+
+# Spec 0059 AC-9 (review round 1 M-1): the bot, the ledgers and the paper path cannot reach the
+# decision record, not even through another module; only the entry point wires `decide`.
+[[tool.importlinter.contracts]]
+name = "R-3m: no trading module reaches decide"
+type = "forbidden"
+source_modules = [
+    "crytobot.app", "crytobot.persistence", "crytobot.execution", "crytobot.portfolio",
+    "crytobot.risk", "crytobot.strategy", "crytobot.backtest", "crytobot.control",
+    "crytobot.dashboard", "crytobot.reporting",
+]
+forbidden_modules = ["crytobot.decide"]
+allow_indirect_imports = false
 
 [[tool.importlinter.contracts]]
 name = "R-3d: no module imports another module's internal submodules"
