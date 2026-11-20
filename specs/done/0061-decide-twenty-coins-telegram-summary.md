@@ -1,6 +1,6 @@
 # Spec 0061 — LLM karar listesi 20 coin, tur özeti Telegram'da, ölçüm yeniden başlar (mini)
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0061-plan.md`
 - Self-critique: done
@@ -28,29 +28,29 @@ Self-critique kararları (Galip Badem, 2026-11-20, "onaylıyorum" — bütün ö
   izi değişmez, ölçümü sabit başlangıç anı ayırır.
 
 ## Changed behavior
-- [ ] CB-1 — Liste: `decide` ve `llm-paper` ADR 0007'nin 20 coinini kullanır (BTC ETH SOL BNB XRP ADA DOGE AVAX LINK
+- [x] CB-1 — Liste: `decide` ve `llm-paper` ADR 0007'nin 20 coinini kullanır (BTC ETH SOL BNB XRP ADA DOGE AVAX LINK
   TRX BCH LTC SUI XLM HBAR DOT SHIB UNI NEAR APT); başka liste ret (adıyla, çağrısız).
-- [ ] CB-2 — İstem boyutu: 20 coinin verisi kısaltılmadan sınıra sığar: coin başına son 24 adet 1h ve son 12 adet 4h mum
+- [x] CB-2 — İstem boyutu: 20 coinin verisi kısaltılmadan sınıra sığar: coin başına son 24 adet 1h ve son 12 adet 4h mum
   gösterilir; indikatörler (EMA 20/50/200, RSI 14, ATR 14), değişimler, 48 mumun en yüksek/en düşüğü (doğrulama
   aralığı) ve olay skorları aynen kalır. Gerçek 20 coinlik bir turda veri bölümü 64 KB'ın altındadır.
-- [ ] CB-3 — Tur özeti: kayda yazılan her tur için Telegram'a tek mesaj: tur anı, sonuç sınıfı (ok, şema dışı, sınır,
+- [x] CB-3 — Tur özeti: kayda yazılan her tur için Telegram'a tek mesaj: tur anı, sonuç sınıfı (ok, şema dışı, sınır,
   kota bekleniyor, veri yok, zaman aşımı…), `al`/`bekle`/tutarsız/şema dışı/veri yok sayıları ve `al` coinleri;
   "paper öncesi — uygulanmıyor" işaretli. Geçerli `al` için bugünkü ayrıntılı mesaj ayrıca gider. Telegram kapalıysa
   yalnız satır; iletilemezse tur durmaz.
-- [ ] CB-4 — Rapor özeti: `llm-paper report --notify` raporu yazdıktan sonra Telegram'a tek özet satırı gönderir
+- [x] CB-4 — Rapor özeti: `llm-paper report --notify` raporu yazdıktan sonra Telegram'a tek özet satırı gönderir
   (ufuk, kapanmış işlem, net kâr, drawdown, hüküm); `--notify`'sız `report` ağa hiç çıkmaz. Günlük görev `--notify`
   kullanır.
-- [ ] CB-5 — Ölçüm anları: başlangıç ship'te bu spec'e yazılan, yeni kodun dağıtımından sonra gelen sabit bir 1h
+- [x] CB-5 — Ölçüm anları: başlangıç ship'te bu spec'e yazılan, yeni kodun dağıtımından sonra gelen sabit bir 1h
   sınırıdır, bitiş başlangıç + 90 gün; kodda sabittir, ayardan verilemez. Başlangıçtan önceki kayıtlar (on coinlik
   dönem dahil) ölçüme girmez.
 
 ## Preserved behavior
-- [ ] PB-1 — Tur başına tek Claude çağrısı, günlük sınır, kota beklemesi, geç kalınan turun atlanması, yalıtım (0059).
-- [ ] PB-2 — Yanıt doğrulaması ve tutarlılık kuralları (±%20 aralığı 48 adet 1h mumun en yüksek/en düşüğünden),
+- [x] PB-1 — Tur başına tek Claude çağrısı, günlük sınır, kota beklemesi, geç kalınan turun atlanması, yalıtım (0059).
+- [x] PB-2 — Yanıt doğrulaması ve tutarlılık kuralları (±%20 aralığı 48 adet 1h mumun en yüksek/en düşüğünden),
   yalnız eklenen kayıt, ham yanıtın yazılmaması (0059 AC-4, AC-5).
-- [ ] PB-3 — `llm-paper` oynatması, eşlenik rastgele, risk kuralları ve hükmün eşikleri aynen (0060 C-1…C-5, C-7,
+- [x] PB-3 — `llm-paper` oynatması, eşlenik rastgele, risk kuralları ve hükmün eşikleri aynen (0060 C-1…C-5, C-7,
   C-8); `--notify`'sız rapor ağsız, kilitsiz, girdileri değiştirmez (0060 AC-10).
-- [ ] PB-4 — Bot ve S0 koşusu (ADR 0004) etkilenmez; bot karar kaydını okumaz (R-3k, R-3m).
+- [x] PB-4 — Bot ve S0 koşusu (ADR 0004) etkilenmez; bot karar kaydını okumaz (R-3k, R-3m).
 
 ## Out of scope
 - Hükmün eşikleri, kasa, risk ayarları, sıklık, model, istemin talimat metni (yalnız gösterilen mum sayısı değişir).
@@ -59,10 +59,12 @@ Self-critique kararları (Galip Badem, 2026-11-20, "onaylıyorum" — bütün ö
   başlatmayla yüklemek için.
 
 ## Definition of Done
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Criterion ↔ evidence table complete for CB-* **and** PB-* (UI: before/after screenshots, agent-captured, judged at SHIP)
-- [ ] Spec moved to `specs/done/` (immutable there)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Criterion ↔ evidence table complete for CB-* **and** PB-* (UI: before/after screenshots, agent-captured, judged at SHIP)
+- [x] Spec moved to `specs/done/` (immutable there)
 
 ## Handoff
-Next: PLAN — Developer runs /plan 0061
+Shipped — Galip Badem, 2026-11-20. CB-5 kesin anlar (G-1): ölçüm başlangıcı **2026-11-21T00:00:00Z**, bitiş
+**2027-02-19T00:00:00Z** (kodda `app/_llm_paper_config.py`). Sahip `decide` görevini bu andan önce yeniden başlatır;
+yeni sürecin log'unda `karar başladı: … coin=20`. VERIFY canlı turunda ilk `al` (TRX, 2026-11-20T15:00Z).
