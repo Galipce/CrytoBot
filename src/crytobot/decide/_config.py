@@ -1,9 +1,9 @@
 """Karar turunun ayarı: `crytobot-decide.toml`'un `[decide]` bölümü (spec 0059 R-1, AC-1; ADR 0005).
 
-Liste ADR 0005'in ön kayıtlı on coinidir (sıra serbest, küme aynı olmalı); farklıysa ret. Yollar ve
-model zorunludur, varsayılansızdır; sayıların varsayılanı ve aralığı vardır. Model adı argv'ye
-girer: yalnız harf, rakam, nokta, tire, alt çizgi. İlk sorun adıyla söylenir, ham değer mesaja
-yazılmaz. Dosya açılmaz: yolların çözülmüş karşılaştırması giriş noktasındadır.
+Liste ADR 0005'in (ADR 0007 ile) ön kayıtlı 20 coinidir (sıra serbest, küme aynı olmalı); farklıysa
+ret. Yollar ve model zorunludur, varsayılansızdır; sayıların varsayılanı ve aralığı vardır. Model
+adı argv'ye girer: yalnız harf, rakam, nokta, tire, alt çizgi. İlk sorun adıyla söylenir, ham değer
+mesaja yazılmaz. Dosya açılmaz: yolların çözülmüş karşılaştırması giriş noktasındadır.
 """
 
 import re

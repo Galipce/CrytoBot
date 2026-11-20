@@ -84,3 +84,15 @@ def test_same_paths_refused() -> None:
 def test_other_section_and_missing_section() -> None:
     assert load_decide_config({**document(), "bot": {}}).message == "bilinmeyen ayar: bot"
     assert load_decide_config({}).message == "ayar eksik: decide"
+
+
+def test_list_is_adr_0007_twenty_coins() -> None:
+    """Spec 0061 CB-1: ADR 0007'nin 20 adı harfiyen; eski on coinlik liste reddedilir."""
+    assert PREREGISTERED_COINS == (
+        "BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "LINK", "TRX",
+        "BCH", "LTC", "SUI", "XLM", "HBAR", "DOT", "SHIB", "UNI", "NEAR", "APT",
+    )  # fmt: skip
+    old = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "LINK", "TRX"]
+    result = load_decide_config(document(coins=old))
+    assert result.config is None
+    assert result.message == "ayar geçersiz: decide.coins (ADR 0005/0007 ön kayıtlı listesi değil)"

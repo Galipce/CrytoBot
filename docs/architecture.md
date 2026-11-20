@@ -106,7 +106,7 @@ deposunun mutlak yolu kilitlenir), raporda fiyat deposunu ağsız okutur, ölç�
 kilit almaz, ağa ve LLM'e çıkmaz; hüküm hiçbir aksiyonu tetiklemez. Okunan kayıtlar, bot deposu ve ayarlar değişmez.
 
 `decide` (spec 0059, ADR 0005) ayrı bir süreçtir (`python -m crytobot decide`, ayar `crytobot-decide.toml`): giriş
-noktası her turda on çiftin 1h (250) ve 4h (40) mumlarını `market_data`'nın herkese açık okumasıyla, son 24 saatin
+noktası her turda 20 çiftin 1h (250) ve 4h (40) mumlarını `market_data`'nın herkese açık okumasıyla, son 24 saatin
 olay skorlarını `news.read_score_record` ile (`mode=ro`) okur ve `decide`'ın tipine çevirir; Claude çağrısını
 `llm.call_claude`, bildirimi `reporting`'in gönderimi olarak verir. `decide` kararları yalnız kendi kaydına yazar:
 kararlar paper öncesidir, hiçbir defterin, botun ya da filtrenin girdisi değildir (karşılaştırma 0060).

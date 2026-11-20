@@ -5,7 +5,8 @@
 # teknik özetini (herkese açık piyasa verisi, anahtarsız) ve skor kaydındaki son 24 saatin olay
 # skorlarını tek bir `claude -p` çağrısıyla Claude'a verir; yanıt doğrulanır ve karar kaydına yalnız
 # eklenir. Her turun tek satırlık özeti ve geçerli `al` kararlarının ayrıntısı Telegram'a "paper
-# öncesi — uygulanmıyor" işaretiyle gider (bot ayarındaki [reporting.telegram]; spec 0061). Kararlar hiçbir defterin, botun ya da filtrenin girdisi değildir.
+# öncesi — uygulanmıyor" işaretiyle gider (bot ayarındaki [reporting.telegram]; spec 0061).
+# Kararlar hiçbir defterin, botun ya da filtrenin girdisi değildir.
 # `python -m crytobot decide status` ağa ve LLM'e çıkmadan son turları gösterir.
 #
 # Liste ADR 0005'te ön kayıtlıdır (ADR 0006: TON yerine TRX; ADR 0007: 20 coin): başka bir liste reddedilir.

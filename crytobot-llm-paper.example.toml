@@ -1,8 +1,8 @@
-# CrytoBot LLM paper ölçümü ayarı örneği (spec 0060, ADR 0005/0006). Kopyala: crytobot-llm-paper.toml
+# CrytoBot LLM paper ölçümü ayarı örneği (spec 0060/0061, ADR 0005/0007). Kopyala: crytobot-llm-paper.toml
 # (çalışma dizininde, git'e girmez). Karar turunun (crytobot-decide.toml), botun ve haberin ayarından
 # ayrıdır.
 #
-# `python -m crytobot llm-paper download` on çiftin borsa kurallarını ve ölçüm penceresinin 1h
+# `python -m crytobot llm-paper download` 20 çiftin borsa kurallarını ve ölçüm penceresinin 1h
 # mumlarını herkese açık uçlardan anahtarsız indirir; yeniden çalıştırılınca yalnız eksikleri ister.
 # `python -m crytobot llm-paper report [--at YYYY-MM-DDTHH:MM:SSZ] [--notify]` ağa ve LLM'e çıkmadan, kilit
 # almadan karar kaydındaki geçerli `al`ları oynatır, eşlenik rastgeleyle karşılaştırır ve hükmü

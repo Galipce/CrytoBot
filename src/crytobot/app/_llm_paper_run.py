@@ -1,13 +1,13 @@
 """LLM paper ölçümünün iki koşusu: indirme ve rapor (spec 0060 R-2, R-3, R-6, R-7; plan Risk 5, 8).
 
-`run_llm_paper_download`: önce on çiftin borsa kuralları (herkese açık okuma) kural dosyasına, sonra
-listenin bütün coinleri için ölçüm penceresinin 1h mumları (`market_data`'nın indirme adımı; ikizin
-giriş mumu için başlangıçtan bir saat önce). `run_llm_paper_report`: rapor anı (gelecekte ise ret)
--> karar kaydı -> etkin dönem ve sayılar -> mumlar ve kurallar (al yoksa okunmaz) -> oynatma,
-eşlenik rastgele, metrik, hüküm -> işlem dosyası ve rapor (atomik). Ufuk rapor anının ve son
-indirmenin tavanının küçüğüdür: indirilmemiş saatler bekleyen sayılır, ölçülemedi değil. Gerçek
-etkiler `*Parts` ile gelir: `app` dosya açmaz, saat çağırmaz, ağa çıkmaz, `decide`'ı import etmez
-(R-3k).
+`run_llm_paper_download`: önce listenin çiftlerinin borsa kuralları (herkese açık okuma) kural
+dosyasına, sonra listenin bütün coinleri için ölçüm penceresinin 1h mumları (`market_data`'nın
+indirme adımı; ikizin giriş mumu için başlangıçtan bir saat önce). `run_llm_paper_report`: rapor anı
+(gelecekte ise ret) -> karar kaydı -> etkin dönem ve sayılar -> mumlar ve kurallar (al yoksa
+okunmaz) -> oynatma, eşlenik rastgele, metrik, hüküm -> işlem dosyası ve rapor (atomik). Ufuk rapor
+anının ve son indirmenin tavanının küçüğüdür: indirilmemiş saatler bekleyen sayılır, ölçülemedi
+değil. Gerçek etkiler `*Parts` ile gelir: `app` dosya açmaz, saat çağırmaz, ağa çıkmaz, `decide`'ı
+import etmez (R-3k).
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -157,8 +157,8 @@ def parse_rules(found: RulesFile, coins: Sequence[str]) -> dict[str, PairRules] 
 
 @dataclass(frozen=True)
 class Coverage:
-    """`until`: on coinin kesintisiz kapsamının en erken sonu; `limited_by`: o sonu veren coin;
-    `empty`: kapsam içinde mumsuz kaydedilmiş aralık sayısı (L-c)."""
+    """`until`: listenin coinlerinin kesintisiz kapsamının en erken sonu; `limited_by`: o sonu
+    veren coin; `empty`: kapsam içinde mumsuz kaydedilmiş aralık sayısı (L-c)."""
 
     until: datetime
     limited_by: str | None
