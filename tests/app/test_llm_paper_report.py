@@ -235,3 +235,15 @@ def test_report_ratios_and_halt_equity() -> None:
     assert "oranlar: al=%20.0 claude_bekle=%70.0 tutarsız=%5.0 şema_dışı=%5.0" in text
     assert "durdurmadaki_kasa=84.50" in text
     assert "varsayım: dolum mumu" in text
+
+
+def test_threshold_boundaries() -> None:
+    """VERIFY F-2: ön kayıtlı dört eşiğin tam sınır değeri (C-7)."""
+    ceiling = CHANCE.percentile(95)
+    assert ceiling == D("9.4")
+    at_ceiling = verdict(PERIOD, END, _metrics(net="9.4"), CHANCE, GOOD, END)
+    assert at_ceiling.name == NEGATIVE
+    assert at_ceiling.failed == ("rastgelenin 95. yüzdeliğini geçmiyor",)
+    assert verdict(PERIOD, END, _metrics(closed=30), CHANCE, GOOD, END).name == POSITIVE
+    assert verdict(PERIOD, END, _metrics(pf="1.2"), CHANCE, GOOD, END).name == POSITIVE
+    assert verdict(PERIOD, END, _metrics(dd="0.15"), CHANCE, GOOD, END).name == POSITIVE

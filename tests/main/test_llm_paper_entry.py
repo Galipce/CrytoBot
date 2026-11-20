@@ -299,3 +299,23 @@ def test_partial_failed_download_keeps_horizon(world: World) -> None:
     second = (world.root / "report.txt").read_text(encoding="utf-8")
     assert f"oynatma ufku: {horizon.strftime('%Y-%m-%dT%H:%MZ')} (sınırlayan:" in second
     assert (world.root / "trades.jsonl").read_bytes() == trades
+
+
+def test_write_atomic_keeps_the_old_file_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """VERIFY F-3 (AC-10): değiştirme düşerse eski dosya kalır, geçici dosya kalmaz."""
+    import os
+
+    from crytobot.__main__ import write_atomic
+
+    target = tmp_path / "report.txt"
+    target.write_text("ESKİ", encoding="utf-8")
+
+    def broken(source: object, destination: object) -> None:
+        raise OSError("disk")
+
+    monkeypatch.setattr(os, "replace", broken)
+    assert write_atomic(str(target), "YENİ") is False
+    assert target.read_text(encoding="utf-8") == "ESKİ"
+    assert [p.name for p in tmp_path.iterdir()] == ["report.txt"]

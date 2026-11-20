@@ -289,3 +289,12 @@ def test_step_down_never_spends_past_cash(monkeypatch: pytest.MonkeyPatch) -> No
     assert trade.amount == D("0.9")
     tiny = {"SOL": PairRules(D("0.1"), D("0.1"), D("200"))}
     assert run([decision()], bars, rules=tiny).trades[0].rejection == "en küçük tutar"
+
+
+def test_stop_first_in_a_later_bar() -> None:
+    """VERIFY F-1: dolumdan sonraki bir mumda stop ve hedef birlikte görülürse stop sayılır."""
+    fill = Bar(START + HOUR, D("106"), D("106"), D("99"), D("104"))  # not at the open (A-8)
+    both = Bar(START + 3 * HOUR, D("104"), D("121"), D("94"), D("100"))
+    trade = run([decision()], {"SOL": series({1: fill, 3: both})}).trades[0]
+    assert trade.filled_at == START + HOUR
+    assert trade.exit_kind is ExitKind.STOP and trade.exit_at == START + 4 * HOUR
