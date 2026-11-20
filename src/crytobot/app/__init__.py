@@ -121,6 +121,21 @@ from crytobot.app._forward import (
 )
 from crytobot.app._grid import CANDIDATE_GRIDS
 from crytobot.app._inputs import PairMarket, TurnSettings
+from crytobot.app._llm_paper_config import (
+    LlmPaperConfig,
+    LlmPaperConfigResult,
+    load_llm_paper_config,
+)
+from crytobot.app._llm_paper_report import RecordDecision, RecordTurn, S0Summary
+from crytobot.app._llm_paper_run import (
+    LlmPaperDownloadParts,
+    LlmPaperRecord,
+    LlmPaperReportParts,
+    RulesFile,
+    run_llm_paper_download,
+    run_llm_paper_report,
+)
+from crytobot.app._llm_paper_s0 import read_s0_summary
 from crytobot.app._loop import (
     MAX_WAIT_S,
     ExitReason,
@@ -213,6 +228,11 @@ __all__: list[str] = [
     "ForwardReportParts",
     "ForwardSources",
     "KillRequest",
+    "LlmPaperConfig",
+    "LlmPaperConfigResult",
+    "LlmPaperDownloadParts",
+    "LlmPaperRecord",
+    "LlmPaperReportParts",
     "LogWriteError",
     "LoopExit",
     "LoopParts",
@@ -225,6 +245,10 @@ __all__: list[str] = [
     "PaperProofResult",
     "PrepareOutcome",
     "PrepareResult",
+    "RecordDecision",
+    "RecordTurn",
+    "RulesFile",
+    "S0Summary",
     "ShadowConfig",
     "ShadowConfigResult",
     "ShadowParts",
@@ -253,6 +277,7 @@ __all__: list[str] = [
     "load_download_config",
     "load_events_config",
     "load_forward_config",
+    "load_llm_paper_config",
     "load_shadow_config",
     "load_stage_config",
     "open_for_start",
@@ -260,6 +285,7 @@ __all__: list[str] = [
     "prepare_store",
     "query_status",
     "read_pairs",
+    "read_s0_summary",
     "record_start",
     "request_stop",
     "resume_operations",
@@ -272,6 +298,8 @@ __all__: list[str] = [
     "run_events_measure",
     "run_forward_download",
     "run_forward_report",
+    "run_llm_paper_download",
+    "run_llm_paper_report",
     "run_loop",
     "run_turn",
     "shadow_rows",

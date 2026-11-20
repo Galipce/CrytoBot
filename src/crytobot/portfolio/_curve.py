@@ -5,6 +5,7 @@ kapanışlardan ister; `app` gerçekleşen kâr/zararı kendisi okumaz (R-14). A
 gerçekleşmemiş sonucu eğriye girmez; kısmi kapanışın gerçekleşen kısmı girer (plan Risk 3).
 """
 
+from datetime import datetime
 from decimal import Decimal, DecimalException, localcontext
 
 from crytobot.portfolio._ledger import EntryKind, Ledger
@@ -34,3 +35,13 @@ def closed_trades(ledger: Ledger) -> int:
     (hedef, stop ya da sinyal kapanışı fark etmez); kısmi kapanışlar tek işlemdir."""
     closed = {closure.position.client_order_id for closure in ledger.closures.values()}
     return len(closed - set(ledger.positions))
+
+
+def realized_opened_between(ledger: Ledger, start: datetime, end: datetime) -> tuple[Decimal, ...]:
+    """Spec 0060 G-9: girişi `[start, end)` içinde olan kapanışların net sonuçları, kapanma
+    sırasıyla (kısmi kapanış ayrı öğe). Rapor içindir; hiçbir karar bunu okumaz."""
+    return tuple(
+        closure.realized
+        for closure in ledger.closures.values()
+        if start <= closure.position.opened_at < end
+    )
