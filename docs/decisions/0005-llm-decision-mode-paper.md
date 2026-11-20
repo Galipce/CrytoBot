@@ -1,6 +1,6 @@
 # ADR 0005 — LLM karar modu: paper'da Claude'un al kararı ve fiyat seviyeleri, ön kayıtlı ölçümle
 
-- Status: Accepted
+- Status: Accepted — kural 1'in listesi Superseded by ADR-0006 (TON yerine TRX)
 - Date: 2026-11-20
 
 ## Context
