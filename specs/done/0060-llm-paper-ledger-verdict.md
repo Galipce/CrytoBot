@@ -1,6 +1,6 @@
 # Spec 0060 — LLM paper defteri, karşılaştırma ve ön kayıtlı hüküm
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0060-plan.md`
 - Self-critique: done
@@ -88,43 +88,45 @@ none — no user interface (komut satırı; rapor ve işlem dosyası metindir, s
 - Split: önerilmedi (tek yetenek: ölçüm; 10 kriter).
 
 ## Acceptance criteria
-- [ ] AC-1 — Ayar: eksik ya da geçersiz alan, çakışan ya da aynı çıktı yolları, okunamayan karar kaydı her iki komutta
+- [x] AC-1 — Ayar: eksik ya da geçersiz alan, çakışan ya da aynı çıktı yolları, okunamayan karar kaydı her iki komutta
   ağa ve dosyaya dokunmadan alan adıyla reddedilir; ölçüm başlangıcı, süre, tohum ve eşikler ayarda verilirse ret.
-- [ ] AC-2 — İndirme: ölçüm penceresindeki `al` kararlarının coinleri için gereken 1h mumlar indirilir; ikinci çalıştırma
+- [x] AC-2 — İndirme: ölçüm penceresindeki `al` kararlarının coinleri için gereken 1h mumlar indirilir; ikinci çalıştırma
   yalnız eksikleri ister; ağ hatası adıyla raporlanır, önceki veri bozulmaz.
-- [ ] AC-3 — Dolum: geçerlilik süresi içinde giriş bölgesine değen ilk mumda bölgenin üst ucundan dolar; değmezse
+- [x] AC-3 — Dolum: geçerlilik süresi içinde giriş bölgesine değen ilk mumda bölgenin üst ucundan dolar; değmezse
   "dolmadı"; geçerlilik sınırındaki mum (son dahil, sonrası hariç) doğru sayılır.
-- [ ] AC-4 — Çıkış ve maliyet: hedef, stop ve aynı mumda ikisi (stop sayılır), dolumdan 7 gün sonra "süre" kapanışı,
+- [x] AC-4 — Çıkış ve maliyet: hedef, stop ve aynı mumda ikisi (stop sayılır), dolumdan 7 gün sonra "süre" kapanışı,
   bitişte açık pozisyon "ölçüm sonu" kapanışı; komisyon ve kayma her yönde uygulanır; net kâr bunlardan sonradır.
-- [ ] AC-5 — Risk: işlem başına risk, en çok açık pozisyon (yalnız dolanlar), günlük zarar (UTC günü), maliyet katı,
+- [x] AC-5 — Risk: işlem başına risk, en çok açık pozisyon (yalnız dolanlar), günlük zarar (UTC günü), maliyet katı,
   en küçük tutar ve drawdown kuralları dolum anında, zaman sırasıyla uygulanır; aynı coinde açık iken gelen `al`
   atlanır; her ret adıyla sayılır; drawdown aşılınca yeni işlem açılmaz ve an raporda yazılır.
-- [ ] AC-6 — Pencere: 2026-11-20T03:00:00Z'den önceki ve 2027-02-18T03:00:00Z'den sonraki kararlar ve kararsız turların `bekle` satırları ölçüme girmez; model
+- [x] AC-6 — Pencere: 2026-11-20T03:00:00Z'den önceki ve 2027-02-18T03:00:00Z'den sonraki kararlar ve kararsız turların `bekle` satırları ölçüme girmez; model
   ya da istem parmak izi değişince ölçüm o turdan yeniden başlar ve rapor dönemleri ayrı gösterir.
-- [ ] AC-7 — Rastgele: eşlenik rastgele (G-5) sabit tohumla 1000 tekrar, her tekrar kendi kasasıyla; aynı girdilerle iki rapor birebir aynı; LLM'in
+- [x] AC-7 — Rastgele: eşlenik rastgele (G-5) sabit tohumla 1000 tekrar, her tekrar kendi kasasıyla; aynı girdilerle iki rapor birebir aynı; LLM'in
   yüzdeliği ve 5./50./95. yüzdelikler raporda.
-- [ ] AC-8 — Rapor ve işlem dosyası: R-6'daki bütün alanlar; S0 deposu yoksa ya da okunamıyorsa "S0 yok" yazılır ve
+- [x] AC-8 — Rapor ve işlem dosyası: R-6'daki bütün alanlar; S0 deposu yoksa ya da okunamıyorsa "S0 yok" yazılır ve
   rapor yine üretilir; eksik mumlu karar "ölçülemedi" olarak nedeniyle sayılır.
-- [ ] AC-9 — Hüküm: süre dolmadan "ölçüm sürüyor"; dolunca 30 işlemin altında "yetersiz örnek"; her eşik ayrı ayrı
+- [x] AC-9 — Hüküm: süre dolmadan "ölçüm sürüyor"; dolunca 30 işlemin altında "yetersiz örnek"; her eşik ayrı ayrı
   bozulduğunda `olumsuz` ve bozan eşiğin adı; hepsi tutunca `olumlu`; şema dışı + tutarsız > %20 iken olumlu olmaz.
-- [ ] AC-10 — Yalıtım: rapor ağa ve LLM'e çıkmaz, kilit almaz (karar turu ve bot çalışırken de); girdiler raporlardan
+- [x] AC-10 — Yalıtım: rapor ağa ve LLM'e çıkmaz, kilit almaz (karar turu ve bot çalışırken de); girdiler raporlardan
   sonra bayt bayt aynı; bot ve S0 deposuna yazılmaz; rapor ve işlem dosyası atomik yazılır.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed (`docs/commands.md`, `docs/architecture.md`, örnek ayar)
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed (`docs/commands.md`, `docs/architecture.md`, örnek ayar)
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 (plan A-8: dolum mumunda hedef kuralı sıkılaştı; A-9: rapor süresi hedefi) |
+| Fix rounds | 3 (review turu 1 ve 2; VERIFY test turu) |
+| Review findings: real / noise / deferred | 26 / 8 / 1 (B-105) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (ship anında) |
 
 ## Handoff
-Next: PLAN — Developer runs /plan 0060
+Shipped — Galip Badem, 2026-11-20. Uygulanışta iki plan değişikliği: A-8 (C-2'yi sıkılaştırır: dolum mumunda
+hedef yalnız dolum açılışta olduysa sayılır) ve A-9 (rapor süresi < 3 dk; hızlandırma B-105). Ölçüm
+2026-11-20T03:00Z → 2027-02-18T03:00Z; karar turunun (`decide`) zamanlanmış görevi sahipte.
