@@ -12,7 +12,19 @@ from dataclasses import dataclass
 from typing import Final
 
 SECTION: Final = "decide"
-ADR_0005_COINS: Final = ("BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "LINK", "TON")
+# ADR 0005 rule 1, list as amended by ADR 0006 (TON is not traded on Binance)
+PREREGISTERED_COINS: Final = (
+    "BTC",
+    "ETH",
+    "SOL",
+    "BNB",
+    "XRP",
+    "ADA",
+    "DOGE",
+    "AVAX",
+    "LINK",
+    "TRX",
+)
 QUOTE: Final = "USDT"
 DAILY_CALL_HARD_CAP: Final = 48  # twice the hourly turn: a failed call never doubles a day
 _PATH_LIMIT: Final = 2048
@@ -90,8 +102,8 @@ def _coins(table: Mapping[str, object]) -> tuple[str, ...]:
     if not isinstance(value, list) or not all(isinstance(coin, str) for coin in value):
         raise _Problem(f"ayar geçersiz: {_name('coins')}")
     coins = tuple(str(coin) for coin in value)
-    if len(set(coins)) != len(coins) or set(coins) != set(ADR_0005_COINS):
-        raise _Problem(f"ayar geçersiz: {_name('coins')} (ADR 0005 ön kayıtlı listesi değil)")
+    if len(set(coins)) != len(coins) or set(coins) != set(PREREGISTERED_COINS):
+        raise _Problem(f"ayar geçersiz: {_name('coins')} (ADR 0005/0006 ön kayıtlı listesi değil)")
     return coins
 
 

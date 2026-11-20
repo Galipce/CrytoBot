@@ -8,11 +8,12 @@
 # ayarındaki [reporting.telegram]). Kararlar hiçbir defterin, botun ya da filtrenin girdisi değildir.
 # `python -m crytobot decide status` ağa ve LLM'e çıkmadan son turları gösterir.
 #
-# Liste ADR 0005'te ön kayıtlıdır: başka bir liste reddedilir. Karar kaydı ve kayıt dosyası bot,
-# haber, skor, gölge, forward ve olay kayıtları ya da ayar dosyaları olamaz.
+# Liste ADR 0005'te ön kayıtlıdır (ADR 0006: TON yerine TRX): başka bir liste reddedilir.
+# Karar kaydı ve kayıt dosyası bot, haber, skor, gölge, forward ve olay kayıtları ya da ayar
+# dosyaları olamaz.
 
 [decide]
-coins = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "LINK", "TON"]
+coins = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "LINK", "TRX"]
 model = "claude-sonnet-5-5"
 store_path = "C:/CrytoBot-data/crytobot-decide.db"   # karar kaydı (SQLite, yalnız eklenir)
 log_path = "C:/CrytoBot-data/crytobot-decide.log"    # satır kaydı

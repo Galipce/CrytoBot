@@ -8,7 +8,7 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
 - **LLM karar turu** (spec 0059, ADR 0005): `python -m crytobot decide` her 1h kapanışından sonra ADR 0005'in
-  on coininin teknik özetini ve son 24 saatin olay skorlarını tek `claude -p` çağrısıyla Claude'a verir; yanıt
+  (ADR 0006: TON yerine TRX) on coininin teknik özetini ve son 24 saatin olay skorlarını tek `claude -p` çağrısıyla Claude'a verir; yanıt
   şema ve tutarlılık kurallarıyla doğrulanır, yalnız eklenen karar kaydına yazılır, geçerli `al` kararları
   Telegram'a "paper öncesi — uygulanmıyor" işaretiyle gider. `decide status` ağsız durum gösterir. Kararlar
   uygulanmaz; bot kaydı okumaz (import kuralı R-3l, R-3k). Yeni ayar dosyası `crytobot-decide.toml`.

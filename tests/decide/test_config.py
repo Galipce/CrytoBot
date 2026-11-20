@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from crytobot.decide import ADR_0005_COINS, load_decide_config
+from crytobot.decide import PREREGISTERED_COINS, load_decide_config
 
 EXAMPLE = Path(__file__).resolve().parents[2] / "crytobot-decide.example.toml"
 
@@ -26,7 +26,7 @@ def document(**changes: Any) -> dict[str, Any]:
 def test_example_loads() -> None:
     result = load_decide_config(document())
     assert result.config is not None, result.message
-    assert result.config.coins == ADR_0005_COINS
+    assert result.config.coins == PREREGISTERED_COINS
     assert result.config.pairs[0] == "BTC/USDT"
     assert result.config.minute_after_close == 5 and result.config.daily_call_limit == 24
 
@@ -34,10 +34,10 @@ def test_example_loads() -> None:
 @pytest.mark.parametrize(
     "coins",
     [
-        list(ADR_0005_COINS[:9]),
-        [*ADR_0005_COINS[:9], "PEPE"],
-        [*ADR_0005_COINS, "PEPE"],
-        [*ADR_0005_COINS[:9], "BTC"],
+        list(PREREGISTERED_COINS[:9]),
+        [*PREREGISTERED_COINS[:9], "PEPE"],
+        [*PREREGISTERED_COINS, "PEPE"],
+        [*PREREGISTERED_COINS[:9], "BTC"],
         "BTC",
     ],
 )
@@ -48,7 +48,7 @@ def test_list_must_match_adr_0005(coins: object) -> None:
 
 
 def test_order_is_free() -> None:
-    result = load_decide_config(document(coins=list(reversed(ADR_0005_COINS))))
+    result = load_decide_config(document(coins=list(reversed(PREREGISTERED_COINS))))
     assert result.config is not None
 
 

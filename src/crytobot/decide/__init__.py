@@ -6,8 +6,8 @@ Kararlar paper öncesidir: hiçbir defterin, botun ya da filtrenin girdisi deği
 """
 
 from crytobot.decide._config import (
-    ADR_0005_COINS,
     DAILY_CALL_HARD_CAP,
+    PREREGISTERED_COINS,
     QUOTE,
     DecideConfig,
     DecideConfigResult,
@@ -48,13 +48,13 @@ from crytobot.decide._summary import (
 from crytobot.decide._validate import Checked, Decision, Status, check_reply
 
 __all__: list[str] = [
-    "ADR_0005_COINS",
     "DAILY_CALL_HARD_CAP",
     "H1_SHOWN",
     "H4",
     "MARK",
     "MIN_H1",
     "NO_TURNS",
+    "PREREGISTERED_COINS",
     "PROMPT_FINGERPRINT",
     "PROMPT_LIMIT",
     "QUOTE",

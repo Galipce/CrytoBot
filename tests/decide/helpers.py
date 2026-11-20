@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from crytobot.analysis import Candle
-from crytobot.decide import ADR_0005_COINS, CoinData, EventNote
+from crytobot.decide import PREREGISTERED_COINS, CoinData, EventNote
 
 BOUNDARY = datetime(2026, 11, 20, 10, tzinfo=UTC)
 HOUR = timedelta(hours=1)
@@ -40,7 +40,8 @@ def coin_data(
 
 def all_data(boundary: datetime = BOUNDARY) -> dict[str, CoinData | None]:
     return {
-        coin: coin_data(coin, 10.0 * (i + 1), boundary) for i, coin in enumerate(ADR_0005_COINS)
+        coin: coin_data(coin, 10.0 * (i + 1), boundary)
+        for i, coin in enumerate(PREREGISTERED_COINS)
     }
 
 

@@ -22,7 +22,7 @@ from crytobot.__main__ import (
     run,
 )
 from crytobot.app import StopRequest
-from crytobot.decide import ADR_0005_COINS, CoinData, DecideReply
+from crytobot.decide import PREREGISTERED_COINS, CoinData, DecideReply
 from crytobot.market_data import MarketCandle, MarketRead, PairRead, ReadSettings
 from crytobot.news import EventScore, ResultKind, ScoreResult, ScoreStore
 from tests.decide.helpers import BOUNDARY, all_data, reply, wait_entry
@@ -38,7 +38,7 @@ def decide_text(root: Path, **changes: str) -> str:
         "score_path": f'"{(root / "score.db").as_posix()}"',
         **changes,
     }
-    coins = ", ".join(f'"{coin}"' for coin in ADR_0005_COINS)
+    coins = ", ".join(f'"{coin}"' for coin in PREREGISTERED_COINS)
     rows = [f"coins = [{coins}]", 'model = "claude-sonnet-5-5"']
     rows += [f"{key} = {value}" for key, value in values.items()]
     return "[decide]\n" + "\n".join(rows) + "\n"
@@ -61,7 +61,7 @@ class World:
         self.calls.append(prompt)
         if callable(self.on_call):
             self.on_call(self)
-        return DecideReply("ok", reply(*(wait_entry(coin) for coin in ADR_0005_COINS)))
+        return DecideReply("ok", reply(*(wait_entry(coin) for coin in PREREGISTERED_COINS)))
 
     def forbidden_call(self, model: str, system: str, prompt: str, timeout_s: float) -> DecideReply:
         raise AssertionError("no LLM call expected")
@@ -202,11 +202,11 @@ def test_matching_score_path_accepted(world: World) -> None:
 
 
 def test_wrong_list_refused(world: World) -> None:
-    text = decide_text(world.root).replace('"TON"', '"PEPE"')
+    text = decide_text(world.root).replace('"TRX"', '"PEPE"')
     world.decide_config.write_text(text, encoding="utf-8")
     code, console = world.run("decide", forbidden=True)
     assert code == EXIT_REFUSED
-    assert "ayar geçersiz: decide.coins (ADR 0005 ön kayıtlı listesi değil)" in console
+    assert "ayar geçersiz: decide.coins (ADR 0005/0006 ön kayıtlı listesi değil)" in console
 
 
 def test_missing_config_refused(world: World) -> None:
@@ -253,7 +253,7 @@ def test_bot_store_untouched(world: World) -> None:
 def _market(pairs: tuple[str, ...], settings: ReadSettings, end: datetime) -> MarketRead:
     found = []
     for index, pair in enumerate(pairs):
-        if pair == "TON/USDT":  # unreadable pair
+        if pair == "TRX/USDT":  # unreadable pair
             found.append(PairRead(pair, None, None, None, None, None, None, ()))
             continue
         base = Decimal(10 * (index + 1))
@@ -287,15 +287,15 @@ def test_real_read_wiring(tmp_path: Path) -> None:
 
     lines: list[str] = []
     read = make_decide_read(lambda: START, str(tmp_path / "score.db"), lines.append, market)
-    data = read(ADR_0005_COINS, BOUNDARY)
+    data = read(PREREGISTERED_COINS, BOUNDARY)
     assert settings == [DECIDE_H1, DECIDE_H4]
     assert DECIDE_H1.candle_count == 250 and DECIDE_H4.candle_count == 40
-    assert data["TON"] is None
+    assert data["TRX"] is None
     sol = data["SOL"]
     assert sol is not None and len(sol.h1) == 250 and sol.tick == Decimal("0.01")
     assert [e.event_type for e in sol.events] == ["listeye alma"]  # only the last 24 hours
     assert lines == []
     missing = make_decide_read(lambda: START, str(tmp_path / "none.db"), lines.append, market)
-    assert missing(ADR_0005_COINS, BOUNDARY)["SOL"] is not None
+    assert missing(PREREGISTERED_COINS, BOUNDARY)["SOL"] is not None
     assert lines == ["skor kaydı okunamadı ya da yok: olay skorsuz tur"]
     assert not (tmp_path / "none.db").exists()

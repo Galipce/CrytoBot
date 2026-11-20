@@ -49,7 +49,12 @@ def test_append_only_no_reply_text(tmp_path: Path) -> None:
             "id", "at", "model", "prompt_fingerprint", "input_fingerprint", "outcome", "called",
             "reason", "ended_at",
         }  # fmt: skip
-        for statement in ("UPDATE turns SET outcome = 'x'", "DELETE FROM decisions"):
+        for statement in (
+            "UPDATE turns SET outcome = 'x'",
+            "DELETE FROM turns",
+            "UPDATE decisions SET status = 'al'",
+            "DELETE FROM decisions",
+        ):
             with pytest.raises(sqlite3.DatabaseError, match="append-only"):
                 connection.execute(statement)
 

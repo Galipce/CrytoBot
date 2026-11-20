@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from crytobot.decide import (
-    ADR_0005_COINS,
+    PREREGISTERED_COINS,
     SYSTEM_PROMPT,
     CoinData,
     DecideConfig,
@@ -64,7 +64,7 @@ class Fake:
         self.now += timedelta(seconds=30)
         if self.replies:
             return self.replies.pop(0)
-        return DecideReply("ok", wait_reply(ADR_0005_COINS))
+        return DecideReply("ok", wait_reply(PREREGISTERED_COINS))
 
     def parts(self) -> DecideParts:
         return DecideParts(
@@ -138,13 +138,13 @@ def test_quota_waits_without_calls(tmp_path: Path) -> None:
 
 def test_missing_coin_not_asked(tmp_path: Path) -> None:
     data = dict(all_data())
-    data["TON"] = None
-    asked = tuple(coin for coin in ADR_0005_COINS if coin != "TON")
+    data["TRX"] = None
+    asked = tuple(coin for coin in PREREGISTERED_COINS if coin != "TRX")
     fake = Fake(BOUNDARY + timedelta(minutes=5), data=data,
                 replies=[DecideReply("ok", wait_reply(asked))])  # fmt: skip
     run(tmp_path, fake)
     assert "Coinler: " + ", ".join(asked) in fake.calls[0]
-    assert "## TON" not in fake.calls[0]
+    assert "## TRX" not in fake.calls[0]
     assert any("sonuç=ok" in line and "veri_yok=1" in line for line in fake.lines)
 
 
@@ -160,7 +160,7 @@ def test_notice_per_valid_buy(tmp_path: Path) -> None:
     entries = [
         buy_entry("BTC", summary_low["BTC"] * 1.1, summary_low["BTC"] * 1.12),
         buy_entry("ETH", 20.0 * 1.1, 20.0 * 1.12, stop=99.0),  # inconsistent: not notified
-        *(wait_entry(coin) for coin in ADR_0005_COINS[2:]),
+        *(wait_entry(coin) for coin in PREREGISTERED_COINS[2:]),
     ]
     fake = Fake(BOUNDARY + timedelta(minutes=5), replies=[DecideReply("ok", reply(*entries))])
     run(tmp_path, fake)
@@ -170,7 +170,7 @@ def test_notice_per_valid_buy(tmp_path: Path) -> None:
 
 
 def test_notify_failure_does_not_stop(tmp_path: Path) -> None:
-    entries = [buy_entry("BTC", 11.0, 11.2), *(wait_entry(c) for c in ADR_0005_COINS[1:])]
+    entries = [buy_entry("BTC", 11.0, 11.2), *(wait_entry(c) for c in PREREGISTERED_COINS[1:])]
     fake = Fake(BOUNDARY + timedelta(minutes=5), replies=[DecideReply("ok", reply(*entries))])
     parts = fake.parts()
 
@@ -237,5 +237,5 @@ def test_no_decision_turn_writes_wait_with_reason(tmp_path: Path) -> None:
     snapshot = read_decide_snapshot(str(tmp_path / "decide.db"), BOUNDARY.date())
     assert snapshot is not None
     assert {(d.status, d.reason) for d in snapshot.latest} == {("bekle", "timeout")}
-    assert len(snapshot.latest) == len(ADR_0005_COINS)
+    assert len(snapshot.latest) == len(PREREGISTERED_COINS)
     assert any("sonuç=timeout çağrı=var al=0 bekle=10" in line for line in fake.lines)
