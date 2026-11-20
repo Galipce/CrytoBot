@@ -115,8 +115,8 @@ def test_turn_logged_and_status(world: World) -> None:
     assert code == EXIT_OK
     assert len(world.calls) == 1 and world.reads == [BOUNDARY]
     log = (world.root / "decide.log").read_text(encoding="utf-8")
-    assert "karar başladı: model=claude-sonnet-5-5 coin=10 dakika=5" in log
-    assert "karar tur: an=2026-11-20T10:00:00+00:00 sonuç=ok çağrı=var al=0 bekle=10" in log
+    assert "karar başladı: model=claude-sonnet-5-5 coin=20 dakika=5" in log
+    assert "karar tur: an=2026-11-20T10:00:00+00:00 sonuç=ok çağrı=var al=0 bekle=20" in log
     assert log.splitlines()[-1].endswith("karar durdu: durdurma isteği tur_sayısı=1")
     code, console = world.run("decide", "status", forbidden=True)
     assert code == EXIT_OK
@@ -206,7 +206,7 @@ def test_wrong_list_refused(world: World) -> None:
     world.decide_config.write_text(text, encoding="utf-8")
     code, console = world.run("decide", forbidden=True)
     assert code == EXIT_REFUSED
-    assert "ayar geçersiz: decide.coins (ADR 0005/0006 ön kayıtlı listesi değil)" in console
+    assert "ayar geçersiz: decide.coins (ADR 0005/0007 ön kayıtlı listesi değil)" in console
 
 
 def test_missing_config_refused(world: World) -> None:

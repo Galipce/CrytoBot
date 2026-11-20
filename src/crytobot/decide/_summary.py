@@ -1,12 +1,12 @@
 """Coin başına teknik özet (spec 0059 R-2, AC-2; S-2; plan A-1). Saf: ağa, saate ve dosyaya
 dokunmaz.
 
-Girdi yalnız kapanmış mumlardır: açılışı + aralığı turun sınırını aşan mum atılır. Özet: son 48 adet
-1h mum (açılış, en yüksek, en düşük, kapanış — okuyucu hacim taşımaz, A-1), son 30 adet 4h mum, EMA
-20/50/200, RSI 14, ATR 14 (1h), 24 saatlik ve 7 günlük değişim, son 48 1h mumun en yüksek ve en
-düşüğü, son 24 saatin olay skorları. İndikatörler `analysis` ile hesaplanır. Bir coinin son 1h mumu
-turun sınırından bir önceki saat değilse, ya da 1h'de en az `MIN_H1`, 4h'de en az `H4` mum yoksa o
-coin "veri yok"tur. Fiyatlar borsanın fiyat adımına (yoksa 6 anlamlı basamağa) yuvarlanır.
+Girdi yalnız kapanmış mumlardır: açılışı + aralığı turun sınırını aşan mum atılır. Özet: son 24 adet
+1h mum (açılış, en yüksek, en düşük, kapanış — okuyucu hacim taşımaz, A-1), son 12 adet 4h mum (spec
+0061), EMA 20/50/200, RSI 14, ATR 14 (1h), 24 saatlik ve 7 günlük değişim, son 48 1h mumun en yüksek
+ve en düşüğü, son 24 saatin olay skorları. İndikatörler `analysis` ile hesaplanır. Bir coinin son 1h
+mumu turun sınırından bir önceki saat değilse, ya da 1h'de en az `MIN_H1`, 4h'de en az `H4` mum
+yoksa o coin "veri yok"tur. Fiyatlar borsanın fiyat adımına (yoksa 6 anlamlı basamağa) yuvarlanır.
 """
 
 from collections.abc import Sequence
@@ -19,8 +19,10 @@ from crytobot.analysis import AnalysisError, Candle, atr, ema, rsi
 
 HOUR: Final = timedelta(hours=1)
 H4_SPAN: Final = timedelta(hours=4)
-H1_SHOWN: Final = 48
-H4: Final = 30
+# spec 0061 CB-2: 20 coins fit the prompt; the validation range keeps 48 bars (PB-2)
+H1_SHOWN: Final = 24
+H4: Final = 12
+RANGE_H1: Final = 48
 MIN_H1: Final = 200 + 1  # EMA 200 needs 200 closes; the 7-day change needs 168 more hours back
 WEEK_H1: Final = 168
 NO_DATA: Final = "veri yok"
@@ -113,7 +115,8 @@ def summarize(data: CoinData, boundary: datetime) -> CoinSummary | None:
     if None in (ema20, ema50, ema200, rsi14, atr14):
         return None
     shown, h4_shown = h1[-H1_SHOWN:], h4[-H4:]
-    low, high = min(c.low for c in shown), max(c.high for c in shown)
+    ranged = h1[-RANGE_H1:]
+    low, high = min(c.low for c in ranged), max(c.high for c in ranged)
     last = h1[-1].close
     week = h1[-1 - WEEK_H1].close if len(h1) > WEEK_H1 else h1[0].close
     tick = data.tick

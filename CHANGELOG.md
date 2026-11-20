@@ -7,6 +7,10 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
+- **LLM karar listesi 20 coin ve Telegram özetleri** (spec 0061, ADR 0007): karar turu 20 coinle çalışır (Claude'a
+  coin başına 24 adet 1h ve 12 adet 4h mum; doğrulama aralığı 48 mumdan), kayda yazılan her tur ve atlanan tur için
+  Telegram'a tek satırlık özet gider; `llm-paper report --notify` raporun özet satırını gönderir. Ölçüm yeni sabit
+  başlangıçtan 90 gün yeniden başlar; on coinlik dönem ölçüme girmez.
 - **LLM paper defteri ve ön kayıtlı hüküm** (spec 0060, ADR 0005/0006): `llm-paper download` borsa kurallarını ve
   ölçüm penceresinin 1h mumlarını indirir; `llm-paper report` karar kaydındaki geçerli `al`ları risk kurallarından
   geçirerek oynatır (giriş bölgesi, stop, hedef, 7 günlük üst süre), tohumlu eşlenik rastgeleyle karşılaştırır, S0'ı

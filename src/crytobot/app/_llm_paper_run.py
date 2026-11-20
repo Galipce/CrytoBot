@@ -1,13 +1,13 @@
 """LLM paper ölçümünün iki koşusu: indirme ve rapor (spec 0060 R-2, R-3, R-6, R-7; plan Risk 5, 8).
 
-`run_llm_paper_download`: önce on çiftin borsa kuralları (herkese açık okuma) kural dosyasına, sonra
-listenin bütün coinleri için ölçüm penceresinin 1h mumları (`market_data`'nın indirme adımı; ikizin
-giriş mumu için başlangıçtan bir saat önce). `run_llm_paper_report`: rapor anı (gelecekte ise ret)
--> karar kaydı -> etkin dönem ve sayılar -> mumlar ve kurallar (al yoksa okunmaz) -> oynatma,
-eşlenik rastgele, metrik, hüküm -> işlem dosyası ve rapor (atomik). Ufuk rapor anının ve son
-indirmenin tavanının küçüğüdür: indirilmemiş saatler bekleyen sayılır, ölçülemedi değil. Gerçek
-etkiler `*Parts` ile gelir: `app` dosya açmaz, saat çağırmaz, ağa çıkmaz, `decide`'ı import etmez
-(R-3k).
+`run_llm_paper_download`: önce listenin çiftlerinin borsa kuralları (herkese açık okuma) kural
+dosyasına, sonra listenin bütün coinleri için ölçüm penceresinin 1h mumları (`market_data`'nın
+indirme adımı; ikizin giriş mumu için başlangıçtan bir saat önce). `run_llm_paper_report`: rapor anı
+(gelecekte ise ret) -> karar kaydı -> etkin dönem ve sayılar -> mumlar ve kurallar (al yoksa
+okunmaz) -> oynatma, eşlenik rastgele, metrik, hüküm -> işlem dosyası ve rapor (atomik). Ufuk rapor
+anının ve son indirmenin tavanının küçüğüdür: indirilmemiş saatler bekleyen sayılır, ölçülemedi
+değil. Gerçek etkiler `*Parts` ile gelir: `app` dosya açmaz, saat çağırmaz, ağa çıkmaz, `decide`'ı
+import etmez (R-3k).
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -30,6 +30,7 @@ from crytobot.app._llm_paper_report import (
     metrics,
     periods,
     report_text,
+    summary_line,
     trade_rows,
     verdict,
 )
@@ -81,6 +82,8 @@ class LlmPaperReportParts:
     write_file: Callable[[str, str], bool]
     write: Callable[[str], None]
     clock: Callable[[], datetime]
+    # spec 0061 CB-4: given only with `--notify`; returns the error name or None
+    notify: Callable[[str], str | None] | None = None
 
 
 def _guarded(write: Callable[[str], None], command: str, body: Callable[[], str]) -> ForwardExit:
@@ -154,8 +157,8 @@ def parse_rules(found: RulesFile, coins: Sequence[str]) -> dict[str, PairRules] 
 
 @dataclass(frozen=True)
 class Coverage:
-    """`until`: on coinin kesintisiz kapsamının en erken sonu; `limited_by`: o sonu veren coin;
-    `empty`: kapsam içinde mumsuz kaydedilmiş aralık sayısı (L-c)."""
+    """`until`: listenin coinlerinin kesintisiz kapsamının en erken sonu; `limited_by`: o sonu
+    veren coin; `empty`: kapsam içinde mumsuz kaydedilmiş aralık sayısı (L-c)."""
 
     until: datetime
     limited_by: str | None
@@ -277,7 +280,20 @@ def _report(config: LlmPaperConfig, parts: LlmPaperReportParts, at: datetime | N
     if not parts.write_file(config.report_path, text):
         raise _Halt(ForwardOutcome.NOT_WRITTEN, f"rapor yazılamadı: {config.report_path}")
     parts.write(f"{EVENT} report: hüküm: {judged.line}")
+    if parts.notify is not None:
+        _notify(parts, summary_line(report_at, horizon, found, judged))
     return f"tamam: rapor dosyası {config.report_path}"
+
+
+def _notify(parts: LlmPaperReportParts, text: str) -> None:
+    """G-4: iletilemeyen özet raporu durdurmaz; satırı yazılır."""
+    assert parts.notify is not None
+    try:
+        error = parts.notify(text)
+    except Exception:  # reporting never fails the report
+        error = "hata"
+    if error is not None:
+        parts.write(f"{EVENT} report: bildirim iletilemedi ({error})")
 
 
 def run_llm_paper_report(

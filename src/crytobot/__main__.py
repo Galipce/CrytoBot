@@ -1581,7 +1581,7 @@ LlmPaperRules = Callable[[], tuple[str, None] | tuple[None, str]]
 
 
 def real_llm_paper_rules(clock: Clock) -> LlmPaperRules:
-    """Spec 0060 G-8: on çiftin borsa kuralları herkese açık okumadan (anahtarsız)."""
+    """Spec 0060 G-8: listenin çiftlerinin borsa kuralları herkese açık okumadan (anahtarsız)."""
 
     def fetch() -> tuple[str, None] | tuple[None, str]:
         pairs = tuple(f"{coin}/{QUOTE}" for coin in PREREGISTERED_COINS)
@@ -1668,6 +1668,18 @@ def _llm_paper_rules_file(path: str) -> Callable[[], RulesFile | str | None]:
         return (at if isinstance(at, str) else None), document["pairs"]
 
     return read
+
+
+def _llm_paper_notify(
+    bot_path: Path, reporter: ReportingService | None
+) -> Callable[[str], str | None]:
+    """Bot ayarının Telegram'ı; kapalıysa hiçbir şey gönderilmez (hata değil)."""
+    service = _news_reporter(bot_path, reporter)
+
+    def send(text: str) -> str | None:
+        return None if service is None else service.dispatch(text, parse_mode=None)
+
+    return send
 
 
 def _write_rows(path: str, rows: Sequence[Mapping[str, str | int | None]]) -> bool:
@@ -1776,11 +1788,15 @@ def _llm_paper(
     clock: Clock,
     stop: StopRequest,
     wait: Callable[[float], None] | None,
-    effects: tuple[EventsDownload, LlmPaperRules | None],
+    effects: tuple[EventsDownload, LlmPaperRules | None, ReportingService | None],
 ) -> int:
-    """Spec 0060: `download` kilitli (fiyat deposu), `report` kilitsiz ve ağsız (R-3, AC-10)."""
+    """Spec 0060: `download` kilitli (fiyat deposu), `report` kilitsiz ve ağsız (R-3, AC-10);
+    spec 0061 CB-4: `report --notify` raporu yazdıktan sonra tek özet satırı gönderir."""
     output = Output(console)
     given = list(argv)
+    notify = len(given) > 1 and given[0] == "report" and given[-1] == "--notify"
+    if notify:
+        given = given[:-1]
     valid = given in (["download"], ["report"]) or (
         len(given) == 3 and given[:2] == ["report", "--at"]
     )
@@ -1802,7 +1818,9 @@ def _llm_paper(
             if isinstance(record, str):
                 output.say(f"llm-paper download: reddedildi: {record}")
                 return EXIT_REFUSED
-            outcome = _llm_paper_download(config, output, clock, stop, wait, effects, record)
+            outcome = _llm_paper_download(
+                config, output, clock, stop, wait, (effects[0], effects[1]), record
+            )
         else:
             parts = LlmPaperReportParts(
                 PREREGISTERED_COINS,
@@ -1814,6 +1832,7 @@ def _llm_paper(
                 write_atomic,
                 output.say,
                 clock,
+                _llm_paper_notify(paths[2], effects[2]) if notify else None,
             )
             outcome = run_llm_paper_report(config, parts, at).outcome
     except ForcedStop:
@@ -2688,7 +2707,7 @@ def run(
             clock,
             stop,
             wait,
-            (events_download, llm_paper_rules),
+            (events_download, llm_paper_rules, reporter),
         )
     if list(argv) not in COMMANDS:
         output.say(USAGE)

@@ -13,7 +13,7 @@ from crytobot.decide._config import (
     DecideConfigResult,
     load_decide_config,
 )
-from crytobot.decide._notice import MARK, buy_notice
+from crytobot.decide._notice import MARK, buy_notice, skipped_notice, turn_notice
 from crytobot.decide._prompt import (
     PROMPT_FINGERPRINT,
     PROMPT_LIMIT,
@@ -93,5 +93,7 @@ __all__: list[str] = [
     "read_decide_snapshot",
     "read_decision_record",
     "run_decide",
+    "skipped_notice",
     "summarize",
+    "turn_notice",
 ]
