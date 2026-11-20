@@ -21,6 +21,7 @@ Kullanıcı arayüzü: CLI + Telegram (bildirim ve yetkili komutlar).
 | `llm` | LLM'e tek erişim noktası, spec 0051: sahibin Claude aboneliğiyle `claude -p` alt süreci (API anahtarı ve SDK yok) — yalıtılmış argv ve ortam, çağrı başına boş çalışma klasörü, stdin'den prompt, süreç grubu ve zaman aşımında ağaç sonlandırma, çıktı sınırı, sonuç sınıflama (ok, zaman aşımı, oturum yok, kota, tanınmayan, durduruldu). Yanıtı yorumlamaz | — (durumsuz; çağrı sayısı ve kota beklemesi `news`'in skor kaydında) |
 | `analysis` | Teknik analiz ve indikatör hesapları (saf fonksiyonlar) | — (durumsuz); spec 0045: stochastic, ADX/DI, Supertrend, Donchian |
 | `calibration` | İndikatör sinyallerinin isabet ölçümü ve kalibrasyonu (saf): sekiz indikatörün sabit "al"/"sat" kuralları ve ızgaraları, isabet kuralı ve taban oran, olağandışı mumlar, BTC'de ayarlama, çapraz sınama, görülmemiş dönemde hüküm (spec 0045); geçmiş olay örnekleri (spec 0048): duyuru × coin örnekleri, giriş mumu, 0045'in isabet kuralıyla isabet ve taban oran, ölçülemeyen nedenleri, model kesim dönemi, çakışma, betimleyici kalibrasyon tablosu; ileriye dönük ölçüm (spec 0053): skor kaydının olumsuz olay skorları × coin örnekleri, skor anındaki beyaz liste, 0048'in çekirdeğiyle (`measure_reference`) isabet ve taban oran, `ölçüm bekliyor`, sıralı örtüşme, üçlü tabloları, yardımcı tablo, gölge kayıt bölümü, ön kayıtlı kesin eşikli hüküm | Ayar seti metni (kanonik JSON, parmak izi), kalibrasyon raporu metni, sinyal kayıtları metni (JSON Lines); olay kalibrasyon tablosu ve örnek kütüphanesi metni (JSON Lines); ileriye dönük ölçüm raporu ve örnek dosyası metni (JSON Lines); dosyaları giriş noktası yazar |
+| `decide` | LLM karar turu (spec 0059, ADR 0005; saf çekirdek): ADR 0005'in (ADR 0006: TON yerine TRX) on coini için kapanmış 1h/4h mumlardan teknik özet (EMA 20/50/200, RSI 14, ATR 14, değişimler, 48 mumun aralığı, son 24 saatin olay skorları, BTC bağlamı), tek `claude -p` çağrısının istemi, yanıtın şema ve tutarlılık doğrulaması, tur zamanlaması, günlük sınır ve kota beklemesi, Telegram metni | Karar kaydı (SQLite, yalnız eklenir: tur ve coin başına karar; ham yanıt ve haber metni yok); piyasa okuması, skor kaydı, Claude çağrısı ve bildirim giriş noktasından |
 | `strategy` | Sinyalleri birleştirip işlem önerisi (yön, giriş, stop, hedef) üretmek; sabit aday kümesi S0…S3, ayarın tipi adayı seçer (spec 0043) | Strateji konfigürasyonu |
 | `risk` | Her işlem önerisini BR-3…BR-11'e göre onaylamak/reddetmek, pozisyon boyutlamak | Risk limitleri, sabit üst sınırlar, kill switch durumu |
 | `execution` | Onaylı emirleri borsaya (live) / simülatöre (paper, backtest) iletmek, emir durumunu izlemek | Emir kayıtları, clientOrderId'ler |
@@ -104,6 +105,12 @@ deposunun mutlak yolu kilitlenir), raporda fiyat deposunu ağsız okutur, ölç�
 `calibration`'ın saf ölçümünü ve hükmünü koşar; rapor ve örnek dosyasını giriş noktası atomik üzerine yazar. Rapor
 kilit almaz, ağa ve LLM'e çıkmaz; hüküm hiçbir aksiyonu tetiklemez. Okunan kayıtlar, bot deposu ve ayarlar değişmez.
 
+`decide` (spec 0059, ADR 0005) ayrı bir süreçtir (`python -m crytobot decide`, ayar `crytobot-decide.toml`): giriş
+noktası her turda on çiftin 1h (250) ve 4h (40) mumlarını `market_data`'nın herkese açık okumasıyla, son 24 saatin
+olay skorlarını `news.read_score_record` ile (`mode=ro`) okur ve `decide`'ın tipine çevirir; Claude çağrısını
+`llm.call_claude`, bildirimi `reporting`'in gönderimi olarak verir. `decide` kararları yalnız kendi kaydına yazar:
+kararlar paper öncesidir, hiçbir defterin, botun ya da filtrenin girdisi değildir (karşılaştırma 0060).
+
 ## Communication rules
 - Modüller birbirini yalnızca **public arayüz** (`<module>/__init__.py` ile dışa açılanlar) üzerinden çağırır.
 - Emir akışı tek yönlüdür: `strategy → risk → execution`. Başka hiçbir yol emir oluşturamaz.
@@ -127,6 +134,9 @@ kilit almaz, ağa ve LLM'e çıkmaz; hüküm hiçbir aksiyonu tetiklemez. Okunan
 - `news` ticaret modüllerini (`app`, `persistence`, `execution`, `portfolio`, `risk`, `strategy`, `backtest`,
   `control`, `dashboard`, `market_data`) import etmez: haber toplama `app` dışında koşar, gerçek etkilerini giriş
   noktası verir (spec 0046, R-3i).
+- `decide` ticaret modüllerini, `market_data`'yı, `news`'i, `llm`'i, `research`'ü, `reporting`'i ve `calibration`'ı import etmez (spec 0059, R-3l); etkiler giriş noktasından gelir. `app` `decide`'ı import etmez (R-3k); hiçbir ticaret modülü (`app`, `persistence`, `execution`,
+  `portfolio`, `risk`, `strategy`, `backtest`, `control`, `dashboard`, `reporting`) ona doğrudan ya da dolaylı
+  ulaşamaz (R-3m): bot ve defterler karar kaydını okuyamaz.
 - `app` `news`'i ve `llm`'i import etmez (spec 0052, R-3k): paper turu skorlara yapısal olarak erişemez; gölge filtre
   görünümü giriş noktasının verdiği işlevle, `app`'in tipiyle gelir.
 - `backtest` `app`'i ve `market_data`'yı import etmez: koşuyu `app` yapar, veri dosyasını giriş noktası okutur; `backtest` yalnız tur kayıtlarından metrik ve rapor üretir (spec 0025). `ccxt` kuralı onu da kapsar.

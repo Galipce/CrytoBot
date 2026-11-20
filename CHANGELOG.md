@@ -7,6 +7,11 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
+- **LLM karar turu** (spec 0059, ADR 0005): `python -m crytobot decide` her 1h kapanışından sonra ADR 0005'in
+  (ADR 0006: TON yerine TRX) on coininin teknik özetini ve son 24 saatin olay skorlarını tek `claude -p` çağrısıyla Claude'a verir; yanıt
+  şema ve tutarlılık kurallarıyla doğrulanır, yalnız eklenen karar kaydına yazılır, geçerli `al` kararları
+  Telegram'a "paper öncesi — uygulanmıyor" işaretiyle gider. `decide status` ağsız durum gösterir. Kararlar
+  uygulanmaz; bot kaydı okumaz (import kuralı R-3l, R-3k). Yeni ayar dosyası `crytobot-decide.toml`.
 - **Süreç ağacı sonlandırma konsol penceresi açmaz** (spec 0058, B-102): zaman aşımı, durdurma ya da çıktı sınırında
   Claude alt sürecini sonlandıran `taskkill` de `CREATE_NO_WINDOW` ile başlar; bayraklar tek yardımcıda
   (`llm._claude.hidden_flags`). Sonlandırma davranışı aynı.
