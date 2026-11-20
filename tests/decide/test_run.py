@@ -101,7 +101,7 @@ def test_one_call_per_turn(tmp_path: Path) -> None:
     fake = Fake(BOUNDARY + timedelta(minutes=5), replies=[DecideReply("ok", "bozuk")])
     run(tmp_path, fake)
     assert len(fake.calls) == 1  # no retry after a schema violation (G-6)
-    assert any("sonuç=şema dışı" in line and "şema_dışı=10" in line for line in fake.lines)
+    assert any("sonuç=şema dışı" in line and "şema_dışı=20" in line for line in fake.lines)
 
 
 def test_restart_same_hour_no_second_turn(tmp_path: Path) -> None:
@@ -164,7 +164,9 @@ def test_notice_per_valid_buy(tmp_path: Path) -> None:
     ]
     fake = Fake(BOUNDARY + timedelta(minutes=5), replies=[DecideReply("ok", reply(*entries))])
     run(tmp_path, fake)
-    assert len(fake.notices) == 1 and "BTC al" in fake.notices[0]
+    assert len(fake.notices) == 2  # the turn summary, then the valid buy's details
+    assert fake.notices[0].startswith("LLM karar 2026-11-20 10:00Z · ok · al=1")
+    assert "(BTC)" in fake.notices[0] and "BTC al" in fake.notices[1]
     assert "bildirim: BTC al" in fake.lines
     assert any("al=1" in line and "tutarsız=1" in line for line in fake.lines)
 
@@ -238,4 +240,23 @@ def test_no_decision_turn_writes_wait_with_reason(tmp_path: Path) -> None:
     assert snapshot is not None
     assert {(d.status, d.reason) for d in snapshot.latest} == {("bekle", "timeout")}
     assert len(snapshot.latest) == len(PREREGISTERED_COINS)
-    assert any("sonuç=timeout çağrı=var al=0 bekle=10" in line for line in fake.lines)
+    assert any("sonuç=timeout çağrı=var al=0 bekle=20" in line for line in fake.lines)
+
+
+def test_summary_every_turn_then_buy_details(tmp_path: Path) -> None:
+    """Spec 0061 CB-3, G-3: her yazılan tur bir özet; başarısız ve sınır turları dahil."""
+    fake = Fake(BOUNDARY + timedelta(minutes=5), turns=2, replies=[DecideReply("timeout", None)])
+    run(tmp_path, fake, config(daily_call_limit=1))
+    assert len(fake.notices) == 2
+    assert " · timeout · " in fake.notices[0] and "bekle=20" in fake.notices[0]
+    assert " · sınır · " in fake.notices[1]
+    assert all(n.endswith("paper öncesi — uygulanmıyor") for n in fake.notices)
+
+
+def test_skipped_turn_notified(tmp_path: Path) -> None:
+    """Spec 0061 G-2."""
+    fake = Fake(BOUNDARY + timedelta(minutes=40), turns=0)
+    run(tmp_path, fake)
+    assert fake.notices == [
+        "LLM karar 2026-11-20 10:00Z · tur atlandı (geç kalındı) · paper öncesi — uygulanmıyor"
+    ]

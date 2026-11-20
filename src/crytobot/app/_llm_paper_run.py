@@ -30,6 +30,7 @@ from crytobot.app._llm_paper_report import (
     metrics,
     periods,
     report_text,
+    summary_line,
     trade_rows,
     verdict,
 )
@@ -81,6 +82,8 @@ class LlmPaperReportParts:
     write_file: Callable[[str, str], bool]
     write: Callable[[str], None]
     clock: Callable[[], datetime]
+    # spec 0061 CB-4: given only with `--notify`; returns the error name or None
+    notify: Callable[[str], str | None] | None = None
 
 
 def _guarded(write: Callable[[str], None], command: str, body: Callable[[], str]) -> ForwardExit:
@@ -277,7 +280,20 @@ def _report(config: LlmPaperConfig, parts: LlmPaperReportParts, at: datetime | N
     if not parts.write_file(config.report_path, text):
         raise _Halt(ForwardOutcome.NOT_WRITTEN, f"rapor yazılamadı: {config.report_path}")
     parts.write(f"{EVENT} report: hüküm: {judged.line}")
+    if parts.notify is not None:
+        _notify(parts, summary_line(report_at, horizon, found, judged))
     return f"tamam: rapor dosyası {config.report_path}"
+
+
+def _notify(parts: LlmPaperReportParts, text: str) -> None:
+    """G-4: iletilemeyen özet raporu durdurmaz; satırı yazılır."""
+    assert parts.notify is not None
+    try:
+        error = parts.notify(text)
+    except Exception:  # reporting never fails the report
+        error = "hata"
+    if error is not None:
+        parts.write(f"{EVENT} report: bildirim iletilemedi ({error})")
 
 
 def run_llm_paper_report(

@@ -86,7 +86,7 @@ class World:
     def forbidden_download(self, *args, **kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("no network expected")
 
-    def run(self, *command: str, offline: bool = False) -> tuple[int, str]:
+    def run(self, *command: str, offline: bool = False, reporter: object = None) -> tuple[int, str]:
         out = io.StringIO()
         code = run(
             ["llm-paper", *command],
@@ -101,6 +101,7 @@ class World:
             stop=StopRequest(),
             wait=lambda seconds: None,
             events_download=self.forbidden_download if offline else self.download,
+            reporter=reporter,  # type: ignore[arg-type]
             llm_paper_rules=(lambda: (_ for _ in ()).throw(AssertionError("network")))
             if offline
             else self.rules,
@@ -319,3 +320,44 @@ def test_write_atomic_keeps_the_old_file_on_failure(
     assert write_atomic(str(target), "YENİ") is False
     assert target.read_text(encoding="utf-8") == "ESKİ"
     assert [p.name for p in tmp_path.iterdir()] == ["report.txt"]
+
+
+class Telegram:
+    def __init__(self, error: str | None = None, broken: bool = False) -> None:
+        self.sent: list[str] = []
+        self.error = error
+        self.broken = broken
+
+    def dispatch(self, text: str, parse_mode: str | None = "HTML") -> str | None:
+        if self.broken:
+            raise RuntimeError("telegram")
+        self.sent.append(text)
+        return self.error
+
+
+def test_notify_sends_one_summary(world: World) -> None:
+    """Spec 0061 CB-4: `--notify` raporu yazdıktan sonra tek özet; onsuz hiç gönderim yok."""
+    world.decide()
+    world.run("download")
+    silent = Telegram()
+    assert world.run("report", offline=True, reporter=silent)[0] == EXIT_OK
+    assert silent.sent == []
+    telegram = Telegram()
+    code, console = world.run("report", "--notify", offline=True, reporter=telegram)
+    assert code == EXIT_OK, console
+    assert len(telegram.sent) == 1 and telegram.sent[0].startswith("LLM paper ")
+    assert "hüküm: ölçüm sürüyor" in telegram.sent[0]
+    at = (NOW - HOUR).isoformat()
+    again = Telegram()
+    assert world.run("report", "--at", at, "--notify", offline=True, reporter=again)[0] == EXIT_OK
+    assert len(again.sent) == 1
+
+
+def test_notify_failure_still_ok(world: World) -> None:
+    """Spec 0061 G-4."""
+    world.decide()
+    world.run("download")
+    code, console = world.run("report", "--notify", offline=True, reporter=Telegram(broken=True))
+    assert code == EXIT_OK and "llm-paper report: bildirim iletilemedi (hata)" in console
+    code, console = world.run("report", "--notify", offline=True, reporter=Telegram(error="kuyruk"))
+    assert code == EXIT_OK and "bildirim iletilemedi (kuyruk)" in console

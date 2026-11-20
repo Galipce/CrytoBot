@@ -26,15 +26,15 @@ def test_summary_fields() -> None:
         "atr14:",
         "48x1h_en_yüksek:",
         "48x1h_en_düşük:",
-        "son 48:",
-        "son 30:",
+        "son 24:",
+        "son 12:",
         "2026-11-20T07:00Z listeye alma olumlu/2",
     ):
         assert field in text, field
     rows = text.split("\n")
     h1_start = rows.index(next(r for r in rows if r.startswith("1h mumlar")))
     h4_start = rows.index(next(r for r in rows if r.startswith("4h mumlar")))
-    assert h4_start - h1_start - 1 == 48
+    assert h4_start - h1_start - 1 == 24
     assert rows[h4_start - 1].startswith("2026-11-20T09:00Z")  # last closed 1h candle
     assert summary.low < summary.last_close < summary.high
 
@@ -50,7 +50,7 @@ def test_only_closed_candles() -> None:
 
 def test_missing_or_stale_coin_no_data() -> None:
     assert summarize(coin_data("ADA", h1=150), BOUNDARY) is None  # too few for EMA 200
-    assert summarize(coin_data("ADA", h4=20), BOUNDARY) is None
+    assert summarize(coin_data("ADA", h4=10), BOUNDARY) is None
     stale = coin_data("ADA", boundary=BOUNDARY - HOUR)  # last 1h candle is an hour old
     assert summarize(stale, BOUNDARY) is None
 
@@ -68,3 +68,17 @@ def test_prices_rounded_to_tick() -> None:
     assert len(close.split()[1].split(".")[1]) == 5
     untick = summarize(coin_data("DOGE", base=0.123456789, tick=None), BOUNDARY)
     assert untick is not None and "fiyat_adımı: -" in untick.text
+
+
+def test_range_from_48_bars() -> None:
+    """Spec 0061 CB-2, PB-2: 24 mum gösterilir ama doğrulama aralığı son 48 adet 1h mumdan."""
+    data = coin_data("BTC")
+    h1 = list(data.h1)
+    spike = h1[-40]  # shown neither in the 24 bars nor in the 4h rows' window of 1h data
+    h1[-40] = Candle(spike.open_time, spike.open, 999.0, 1.0, spike.close)
+    summary = summarize(replace(data, h1=tuple(h1)), BOUNDARY)
+    assert summary is not None
+    assert (summary.low, summary.high) == (1.0, 999.0)
+    rows = summary.text.split("\n")
+    start = rows.index(next(r for r in rows if r.startswith("1h mumlar")))
+    assert not any("999" in row for row in rows[start + 1 : start + 25])

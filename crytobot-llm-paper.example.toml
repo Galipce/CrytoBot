@@ -4,11 +4,11 @@
 #
 # `python -m crytobot llm-paper download` on çiftin borsa kurallarını ve ölçüm penceresinin 1h
 # mumlarını herkese açık uçlardan anahtarsız indirir; yeniden çalıştırılınca yalnız eksikleri ister.
-# `python -m crytobot llm-paper report [--at YYYY-MM-DDTHH:MM:SSZ]` ağa ve LLM'e çıkmadan, kilit
+# `python -m crytobot llm-paper report [--at YYYY-MM-DDTHH:MM:SSZ] [--notify]` ağa ve LLM'e çıkmadan, kilit
 # almadan karar kaydındaki geçerli `al`ları oynatır, eşlenik rastgeleyle karşılaştırır ve hükmü
 # yazar; rapor ve işlem dosyası her koşuda baştan (atomik) yazılır.
 #
-# Ölçüm anları (2026-11-20T03:00Z → 2027-02-18T03:00Z), tohum, eşikler, kasa (100 USDT), maliyet ve
+# Ölçüm anları (spec 0061'in sabit başlangıcından 90 gün), tohum, eşikler, kasa (100 USDT), maliyet ve
 # risk ayarları spec 0060'ta ön kayıtlıdır ve buradan ayarlanamaz. Hüküm bilgi verir: emir, mod,
 # liste ve ayar değişmez. Çıktı yolları girdi kayıtları, kayıt dosyaları, bot ve paper depoları,
 # öteki kayıtlar ve ayar dosyaları olamaz, birbirlerinden de farklıdır.

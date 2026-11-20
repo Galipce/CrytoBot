@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Final
 
 from crytobot.decide._config import DecideConfig
-from crytobot.decide._notice import buy_notice
+from crytobot.decide._notice import buy_notice, skipped_notice, turn_notice
 from crytobot.decide._prompt import PROMPT_FINGERPRINT, SYSTEM_PROMPT, build_prompt
 from crytobot.decide._store import DecideStore, DecideStoreError, Turn
 from crytobot.decide._summary import HOUR, CoinData, CoinSummary, summarize
@@ -123,20 +123,27 @@ def run_turn(
     )
 
 
+def _send(parts: DecideParts, text: str) -> None:
+    if parts.notify is None:
+        return
+    try:
+        error = parts.notify(text)
+    except Exception:  # reporting never stops the decision loop
+        parts.say("bildirim iletilemedi")
+        return
+    if error is not None:
+        parts.say(f"bildirim kuyrukta ({error})")
+
+
 def _notify(parts: DecideParts, turn: Turn) -> None:
+    """Spec 0061 CB-3: önce turun özeti, sonra her geçerli `al`ın ayrıntılı mesajı."""
+    _send(parts, turn_notice(turn))
     for decision in turn.decisions:
         text = buy_notice(decision, turn.at)
         if text is None:
             continue
         parts.say(f"bildirim: {decision.coin} al")
-        if parts.notify is not None:
-            try:
-                error = parts.notify(text)
-            except Exception:  # reporting never stops the decision loop
-                parts.say("bildirim iletilemedi")
-                continue
-            if error is not None:
-                parts.say(f"bildirim kuyrukta ({error})")
+        _send(parts, text)
 
 
 def run_decide(config: DecideConfig, store: DecideStore, parts: DecideParts) -> DecideExit:
@@ -156,6 +163,7 @@ def run_decide(config: DecideConfig, store: DecideStore, parts: DecideParts) -> 
                 continue
             if now > boundary + after + LATE_LIMIT and not store.has_turn(boundary):
                 parts.say(f"tur atlandı: an={boundary.isoformat()} geç kalındı")
+                _send(parts, skipped_notice(boundary))
             elif not store.has_turn(boundary):
                 turn = run_turn(config, store, parts, boundary)
                 if parts.stopped() and turn.outcome == "stopped":

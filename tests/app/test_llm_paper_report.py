@@ -26,6 +26,7 @@ from crytobot.app._llm_paper_report import (
     metrics,
     periods,
     report_text,
+    summary_line,
     trade_rows,
     verdict,
 )
@@ -175,7 +176,7 @@ def test_report_fields() -> None:
         _facts(s0),
     )
     for part in (
-        "## Dönemler", "etkin dönem: 2026-11-20T03:00Z → 2027-02-18T03:00Z",
+        "## Dönemler", f"etkin dönem: {START:%Y-%m-%dT%H:%MZ} → {END:%Y-%m-%dT%H:%MZ}",
         "karar_istenen=100 al=20 claude_bekle=70 tutarsız=5 şema_dışı=5",
         "risk reddi: maliyet_katı=1", "kapanış: hedef=1", "ölçülemedi_(mum_eksik)=1",
         "net kâr (maliyetlerden sonra): 0.95 USDT", "## Eşlenik rastgele", "tohum=60",
@@ -247,3 +248,15 @@ def test_threshold_boundaries() -> None:
     assert verdict(PERIOD, END, _metrics(closed=30), CHANCE, GOOD, END).name == POSITIVE
     assert verdict(PERIOD, END, _metrics(pf="1.2"), CHANCE, GOOD, END).name == POSITIVE
     assert verdict(PERIOD, END, _metrics(dd="0.15"), CHANCE, GOOD, END).name == POSITIVE
+
+
+def test_summary_line() -> None:
+    """Spec 0061 CB-4: tek satır - an, ufuk, kapanmış, net, drawdown, hüküm."""
+    found = _metrics(closed=3, net="1.5", dd="0.02")
+    judged = verdict(PERIOD, START, found, CHANCE, GOOD, START)
+    line = summary_line(START + 5 * HOUR, START + 5 * HOUR, found, judged)
+    assert line == (
+        "LLM paper 2026-11-22T05:00Z · ufuk 2026-11-22T05:00Z · kapanmış 3 · net 1.50 USDT"
+        " · drawdown %2.0 · hüküm: ölçüm sürüyor · paper — uygulanmıyor"
+    )
+    assert "\n" not in line

@@ -59,3 +59,31 @@ def test_size_limit_shortens_4h_rows() -> None:
     assert full > PROMPT_LIMIT
     assert len(prompt.text.encode("utf-8")) < full
     assert big[0].text not in prompt.text  # shortened
+
+
+def test_twenty_coins_fit_without_shortening() -> None:
+    """Spec 0061 CB-2: gerçekçi fiyat ve adımlarla 20 coin 64 KB'a kısaltılmadan sığar."""
+    from decimal import Decimal
+
+    from crytobot.decide import PREREGISTERED_COINS
+
+    levels = {
+        "BTC": (62000.0, "0.01"), "ETH": (1750.0, "0.01"), "SOL": (71.0, "0.01"),
+        "BNB": (570.0, "0.01"), "XRP": (0.95, "0.0001"), "ADA": (0.1465, "0.0001"),
+        "DOGE": (0.0566, "0.00001"), "AVAX": (6.8, "0.001"), "LINK": (8.8, "0.001"),
+        "TRX": (0.306, "0.0001"), "BCH": (300.0, "0.1"), "LTC": (55.0, "0.01"),
+        "SUI": (1.1, "0.0001"), "XLM": (0.11, "0.00001"), "HBAR": (0.08, "0.00001"),
+        "DOT": (1.9, "0.001"), "SHIB": (0.0000071, "0.00000001"), "UNI": (3.9, "0.001"),
+        "NEAR": (1.4, "0.001"), "APT": (2.6, "0.0001"),
+    }  # fmt: skip
+    assert set(levels) == set(PREREGISTERED_COINS)
+    summaries = []
+    for coin in PREREGISTERED_COINS:
+        base, tick = levels[coin]
+        found = summarize(coin_data(coin, base, tick=Decimal(tick)), BOUNDARY)
+        assert found is not None, coin
+        summaries.append(found)
+    data = "\n\n".join(s.text for s in summaries)
+    assert len(data.encode("utf-8")) < PROMPT_LIMIT
+    prompt = build_prompt(summaries, None, BOUNDARY)
+    assert all(s.text in prompt.text for s in summaries)  # nothing shortened

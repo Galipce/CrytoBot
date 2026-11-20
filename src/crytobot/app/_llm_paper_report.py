@@ -314,7 +314,7 @@ def report_text(
     win_share = None if not found.closed else Decimal(found.wins) / found.closed
     llm_rank = chance.rank_of(found.net)
     lines = [
-        "# CrytoBot LLM paper ölçümü (spec 0060, ADR 0005/0006)",
+        "# CrytoBot LLM paper ölçümü (spec 0060/0061, ADR 0005/0007)",
         f"rapor anı: {_stamp(facts.at)} yazıldı: {_stamp(facts.written_at)}",
         f"karar kaydı: {facts.record_path} okunamayan_satır={facts.record_skipped}",
         f"fiyat verisi: {facts.price_path} borsa_kuralları: {facts.rules_at or '-'}",
@@ -421,3 +421,12 @@ def trade_rows(trades: Sequence[PaperTrade]) -> tuple[dict[str, str | int | None
             }
         )
     return tuple(rows)
+
+
+def summary_line(at: datetime, horizon: datetime, found: Metrics, judged: Verdict) -> str:
+    """Spec 0061 CB-4: raporun tek satırlık Telegram özeti."""
+    return (
+        f"LLM paper {_stamp(at)} · ufuk {_stamp(horizon)} · kapanmış {found.closed}"
+        f" · net {_money(found.net)} USDT · drawdown {_share(found.max_drawdown)}"
+        f" · hüküm: {judged.line} · paper — uygulanmıyor"
+    )
