@@ -7,6 +7,11 @@ the core is Markdown plus a few POSIX scripts, so upgrades are file edits, not m
 
 Bu projeye özel, ANEW sürümü olmayan değişiklikler; yükseltmede elle korunur.
 
+- **LLM paper defteri ve ön kayıtlı hüküm** (spec 0060, ADR 0005/0006): `llm-paper download` borsa kurallarını ve
+  ölçüm penceresinin 1h mumlarını indirir; `llm-paper report` karar kaydındaki geçerli `al`ları risk kurallarından
+  geçirerek oynatır (giriş bölgesi, stop, hedef, 7 günlük üst süre), tohumlu eşlenik rastgeleyle karşılaştırır, S0'ı
+  bilgi olarak yanına koyar ve 2027-02-18'de ön kayıtlı hükmü verir. Ölçümün sayıları kodda sabittir; ayarda
+  verilirse ret. Yeni ayar dosyası `crytobot-llm-paper.toml`.
 - **LLM karar turu** (spec 0059, ADR 0005): `python -m crytobot decide` her 1h kapanışından sonra ADR 0005'in
   (ADR 0006: TON yerine TRX) on coininin teknik özetini ve son 24 saatin olay skorlarını tek `claude -p` çağrısıyla Claude'a verir; yanıt
   şema ve tutarlılık kurallarıyla doğrulanır, yalnız eklenen karar kaydına yazılır, geçerli `al` kararları

@@ -25,7 +25,7 @@ from crytobot.portfolio._close import (
     exit_decisions,
     remaining_position,
 )
-from crytobot.portfolio._curve import closed_trades, realized_curve
+from crytobot.portfolio._curve import closed_trades, realized_curve, realized_opened_between
 from crytobot.portfolio._ledger import (
     BUY,
     EMPTY_LEDGER,
@@ -75,6 +75,7 @@ __all__: list[str] = [
     "ledger_problems",
     "open_ledger",
     "realized_curve",
+    "realized_opened_between",
     "record_fill",
     "remaining_position",
 ]

@@ -14,6 +14,7 @@ from crytobot.portfolio import (
     closed_trades,
     open_ledger,
     realized_curve,
+    realized_opened_between,
     record_fill,
 )
 
@@ -110,3 +111,22 @@ def test_ledger_not_starting_with_an_opening_has_no_curve() -> None:
     broken = replace(ledger, entries=ledger.entries[1:])
 
     assert realized_curve(broken) == ()
+
+
+def test_realized_opened_between_filters_by_entry() -> None:
+    """Spec 0060 G-9: yalnız girişi pencerede olan kapanışlar, kapanma sırasıyla."""
+    ledger = bought(opened(), "b1", 0)
+    ledger = bought(ledger, "b2", 5)
+    ledger = closed(ledger, sale("s1", "b1", "10", "110", OPENED + timedelta(hours=6)))
+    ledger = closed(ledger, sale("s2", "b2", "10", "90", OPENED + timedelta(hours=7)))
+    window = realized_opened_between(
+        ledger, OPENED + timedelta(hours=1), OPENED + timedelta(hours=10)
+    )
+    assert window == (ledger.closures["s2"].realized,)
+    assert ledger.closures["s2"].realized < 0
+    both = realized_opened_between(ledger, OPENED, OPENED + timedelta(hours=10))
+    assert both == (ledger.closures["s1"].realized, ledger.closures["s2"].realized)
+    assert (
+        realized_opened_between(ledger, OPENED + timedelta(hours=6), OPENED + timedelta(days=1))
+        == ()
+    )

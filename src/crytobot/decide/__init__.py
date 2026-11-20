@@ -21,6 +21,12 @@ from crytobot.decide._prompt import (
     DecidePrompt,
     build_prompt,
 )
+from crytobot.decide._read import (
+    DecisionRecord,
+    DecisionRow,
+    TurnRow,
+    read_decision_record,
+)
 from crytobot.decide._run import (
     DecideExit,
     DecideParts,
@@ -72,9 +78,12 @@ __all__: list[str] = [
     "DecideStore",
     "DecideStoreError",
     "Decision",
+    "DecisionRecord",
+    "DecisionRow",
     "EventNote",
     "Status",
     "Turn",
+    "TurnRow",
     "build_prompt",
     "buy_notice",
     "check_reply",
@@ -82,6 +91,7 @@ __all__: list[str] = [
     "floor_hour",
     "load_decide_config",
     "read_decide_snapshot",
+    "read_decision_record",
     "run_decide",
     "summarize",
 ]

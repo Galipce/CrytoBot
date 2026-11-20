@@ -52,6 +52,8 @@
 - LLM çıktısı (haber/whitepaper) hiçbir zaman doğrudan emir, limit veya mod değişikliği tetiklemez.
 - Strateji kodu backtest, paper ve live'da aynıdır; yalnızca `execution` adaptörü değişir.
 - **LLM karar modu (ADR 0005, spec 0059):** Claude'un `al` kararı ve seviyeleri yalnız paper öncesi bir kayda yazılır ve "paper öncesi — uygulanmıyor" işaretiyle bildirilir; hiçbir emir, defter, limit ya da mod değişikliği tetiklemez. Paper'da uygulanması ve ön kayıtlı karşılaştırma ayrı spec'tedir (0060); live için ADR 0003 aynen geçerlidir.
+  Uygulanışı (spec 0060): kararlar canlı bir süreçte değil, rapor anında kayıtlı kararların 1h mumlarla oynatılmasıyla
+  ayrı bir paper defterinde ölçülür; her işlem bugünkü risk kurallarından geçer, hüküm ön kayıtlıdır.
 - Defter (ledger) kayıtları silinmez/değiştirilmez; düzeltme yeni kayıtla yapılır.
 - Para çekme (withdrawal) hiçbir kod yolunda yoktur.
 - **Borsa şartlı stop emri (live, spec 0034):** Canlı modda bir alım dolunca borsaya `cs-<alım id>` kimlikli şartlı stop emri verilir. Kapanıştan önce borsa stopunun iptali teyit edilir; tur başında borsada dolmuş stop deftere işlenerek senkronize edilir. Koruma her canlı turda durumdan türer: borsada hiç olmayan stop yeniden verilir; iptal edilmiş, reddedilmiş, durumu belirsiz ya da kısmen dolmuş stop yeni alımı durdurur (fail-closed, `BuyHalt.STOP_ORDER_FAILED`) ve pozisyona özgü `STOP_ORDER_FAILED` bildirimi üretir (güvenli mod `SAFE_MODE` bildiriminden ayrı).

@@ -1,0 +1,23 @@
+# CrytoBot LLM paper ölçümü ayarı örneği (spec 0060, ADR 0005/0006). Kopyala: crytobot-llm-paper.toml
+# (çalışma dizininde, git'e girmez). Karar turunun (crytobot-decide.toml), botun ve haberin ayarından
+# ayrıdır.
+#
+# `python -m crytobot llm-paper download` on çiftin borsa kurallarını ve ölçüm penceresinin 1h
+# mumlarını herkese açık uçlardan anahtarsız indirir; yeniden çalıştırılınca yalnız eksikleri ister.
+# `python -m crytobot llm-paper report [--at YYYY-MM-DDTHH:MM:SSZ]` ağa ve LLM'e çıkmadan, kilit
+# almadan karar kaydındaki geçerli `al`ları oynatır, eşlenik rastgeleyle karşılaştırır ve hükmü
+# yazar; rapor ve işlem dosyası her koşuda baştan (atomik) yazılır.
+#
+# Ölçüm anları (2026-11-20T03:00Z → 2027-02-18T03:00Z), tohum, eşikler, kasa (100 USDT), maliyet ve
+# risk ayarları spec 0060'ta ön kayıtlıdır ve buradan ayarlanamaz. Hüküm bilgi verir: emir, mod,
+# liste ve ayar değişmez. Çıktı yolları girdi kayıtları, kayıt dosyaları, bot ve paper depoları,
+# öteki kayıtlar ve ayar dosyaları olamaz, birbirlerinden de farklıdır.
+
+[llm_paper]
+decide_store_path = "C:/CrytoBot-data/crytobot-decide.db"      # karar kaydı (0059), yalnız okunur
+s0_store_path = "C:/CrytoBot-data/crytobot-paper.db"           # ADR 0004 S0 paper deposu, yalnız okunur
+price_store_path = "C:/CrytoBot-data/llm-paper-prices.db"      # fiyat verisi (kendi SQLite deposu)
+rules_path = "C:/CrytoBot-data/llm-paper-rules.json"           # borsa kuralları (JSON)
+report_path = "C:/CrytoBot-data/llm-paper-report.txt"          # rapor (metin)
+trades_path = "C:/CrytoBot-data/llm-paper-trades.jsonl"        # işlem dosyası (JSON Lines)
+request_gap_s = 1                                              # istekler arası saniye (1…60)

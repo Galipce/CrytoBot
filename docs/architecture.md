@@ -111,6 +111,11 @@ olay skorlarını `news.read_score_record` ile (`mode=ro`) okur ve `decide`'ın 
 `llm.call_claude`, bildirimi `reporting`'in gönderimi olarak verir. `decide` kararları yalnız kendi kaydına yazar:
 kararlar paper öncesidir, hiçbir defterin, botun ya da filtrenin girdisi değildir (karşılaştırma 0060).
 
+`llm-paper` (spec 0060) iki komuttur: giriş noktası karar kaydını `decide.read_decision_record` ile (`mode=ro`) okur ve
+`app`'in tipine çevirir (R-3k), S0 paper deposunu 0038 gibi salt okunur açar, fiyatları `market_data`'nın indirme
+adımıyla, borsa kurallarını herkese açık okumayla alır. Oynatma, eşlenik rastgele, metrik ve ön kayıtlı hüküm `app`'te
+saftır (`risk.approve_trade` ve `risk.observe` aynen); ölçümün sayıları kodda sabittir, bot ayarından okunmaz.
+
 ## Communication rules
 - Modüller birbirini yalnızca **public arayüz** (`<module>/__init__.py` ile dışa açılanlar) üzerinden çağırır.
 - Emir akışı tek yönlüdür: `strategy → risk → execution`. Başka hiçbir yol emir oluşturamaz.

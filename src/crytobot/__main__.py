@@ -134,11 +134,18 @@ from crytobot.app import (
     ForwardReportParts,
     ForwardSources,
     KillRequest,
+    LlmPaperConfig,
+    LlmPaperDownloadParts,
+    LlmPaperRecord,
+    LlmPaperReportParts,
     LogWriteError,
     LoopParts,
     PairFilter,
     PaperProof,
     PrepareOutcome,
+    RecordDecision,
+    RecordTurn,
+    RulesFile,
     ShadowConfig,
     ShadowParts,
     StartOutcome,
@@ -157,12 +164,14 @@ from crytobot.app import (
     load_download_config,
     load_events_config,
     load_forward_config,
+    load_llm_paper_config,
     load_shadow_config,
     load_stage_config,
     open_for_start,
     prepare_live_store,
     prepare_store,
     query_status,
+    read_s0_summary,
     record_start,
     request_stop,
     resume_operations,
@@ -175,6 +184,8 @@ from crytobot.app import (
     run_events_measure,
     run_forward_download,
     run_forward_report,
+    run_llm_paper_download,
+    run_llm_paper_report,
     run_loop,
     shadow_status_lines,
 )
@@ -201,6 +212,7 @@ from crytobot.dashboard import (
     load_dashboard_config,
 )
 from crytobot.decide import (
+    PREREGISTERED_COINS,
     QUOTE,
     CoinData,
     DecideConfig,
@@ -209,10 +221,12 @@ from crytobot.decide import (
     DecideReply,
     DecideStore,
     DecideStoreError,
+    DecisionRecord,
     EventNote,
     decide_status_lines,
     load_decide_config,
     read_decide_snapshot,
+    read_decision_record,
     run_decide,
 )
 from crytobot.llm import ClaudeRequest, call_claude
@@ -302,10 +316,11 @@ NEWS_CONFIG_FILE = "crytobot-news.toml"
 EVENTS_CONFIG_FILE = "crytobot-events.toml"
 FORWARD_CONFIG_FILE = "crytobot-forward.toml"
 DECIDE_CONFIG_FILE = "crytobot-decide.toml"
+LLM_PAPER_CONFIG_FILE = "crytobot-llm-paper.toml"
 USAGE = (
     "kullanım: python -m crytobot "
     "prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news|events"
-    "|shadow|forward|decide"
+    "|shadow|forward|decide|llm-paper"
     " [--live] [--trial] [--final] [archive] [score] [status] [download] [measure]"
     " [report] [--at YYYY-MM-DDTHH:MM:SSZ]"
 )
@@ -380,6 +395,7 @@ ArchiveFetch = Callable[[str, int, Callable[[], bool]], Fetched]
 ARCHIVE_BUSY = "arşiv başka bir arşiv komutunda açık"
 SCORE_BUSY = "skor kaydı başka bir skorlayıcıda açık"
 DECIDE_BUSY = "karar kaydı başka bir karar sürecinde açık"
+LLM_PAPER_BUSY = "fiyat deposu başka bir llm-paper indirmesinde açık"
 EventsDownload = Callable[
     [Sequence[PriceNeed], PriceStore, EventPriceParts, float], DownloadOutcome
 ]
@@ -1561,6 +1577,243 @@ def _decide(
     return EXIT_OK if exit_ is DecideExit.STOPPED else EXIT_REFUSED
 
 
+LlmPaperRules = Callable[[], tuple[str, None] | tuple[None, str]]
+
+
+def real_llm_paper_rules(clock: Clock) -> LlmPaperRules:
+    """Spec 0060 G-8: on çiftin borsa kuralları herkese açık okumadan (anahtarsız)."""
+
+    def fetch() -> tuple[str, None] | tuple[None, str]:
+        pairs = tuple(f"{coin}/{QUOTE}" for coin in PREREGISTERED_COINS)
+        settings = ReadSettings(
+            "binance", timedelta(hours=1), 1, timedelta(seconds=10), timedelta(minutes=1)
+        )
+        read = read_market_data(pairs, settings, clock)
+        if read.input_problem is not None:
+            return None, read.input_problem.value
+        found: dict[str, dict[str, str]] = {}
+        for pair in read.pairs:
+            if pair.rules is not None:
+                found[pair.pair.split("/")[0]] = {
+                    "amount_step": str(pair.rules.amount_step),
+                    "min_amount": str(pair.rules.min_amount),
+                    "min_notional": str(pair.rules.min_notional),
+                }
+        if not found:
+            return None, "hiçbir çiftin kuralı okunamadı"
+        text = json.dumps({"at": clock().isoformat(), "pairs": found}, sort_keys=True)
+        return text + "\n", None
+
+    return fetch
+
+
+def _record_types(record: DecisionRecord) -> LlmPaperRecord:
+    """Spec 0060 plan Risk 1: `decide`'ın satırları `app`'in tipine (R-3k)."""
+
+    def number(value: float | None) -> Decimal | None:
+        return None if value is None else Decimal(repr(value))
+
+    return LlmPaperRecord(
+        tuple(
+            RecordTurn(t.at, t.model, t.prompt_fingerprint, t.outcome, t.called)
+            for t in record.turns
+        ),
+        tuple(
+            RecordDecision(
+                d.at,
+                d.coin,
+                d.status,
+                d.action,
+                number(d.entry_low),
+                number(d.entry_high),
+                number(d.stop),
+                number(d.target),
+                d.valid_hours,
+            )
+            for d in record.decisions
+        ),
+        record.skipped,
+    )
+
+
+def _llm_paper_record(path: str) -> Callable[[], LlmPaperRecord | str | None]:
+    def read() -> LlmPaperRecord | str | None:
+        try:
+            record = read_decision_record(path)
+        except DecideStoreError as error:
+            return str(error)
+        return None if record is None else _record_types(record)
+
+    return read
+
+
+def _llm_paper_rules_file(path: str) -> Callable[[], RulesFile | str | None]:
+    """Kural dosyası (JSON): yoksa `None`, çözülemiyorsa nedeni."""
+    unreadable = "kural dosyası okunamıyor; önce llm-paper download"
+
+    def read() -> RulesFile | str | None:
+        try:
+            text = Path(path).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return None
+        except (OSError, UnicodeDecodeError):
+            return unreadable
+        try:
+            document = json.loads(text)
+        except (ValueError, RecursionError):
+            return unreadable
+        if not isinstance(document, dict) or not isinstance(document.get("pairs"), dict):
+            return unreadable
+        at = document.get("at")
+        return (at if isinstance(at, str) else None), document["pairs"]
+
+    return read
+
+
+def _write_rows(path: str, rows: Sequence[Mapping[str, str | int | None]]) -> bool:
+    """İşlem dosyası (JSON Lines), atomik."""
+    return write_atomic(path, "".join(f"{json.dumps(row, ensure_ascii=False)}\n" for row in rows))
+
+
+def _llm_paper_config(
+    paths: tuple[Path, Path, Path, Path, Path, Path], output: Output, command: str
+) -> LlmPaperConfig | None:
+    """Spec 0060 AC-1: hiçbir dosyaya dokunmadan, ilk sorun adıyla. Çıktı yolları girdi kayıtları,
+    kayıt dosyaları, bot ve paper depoları, öteki kayıtlar ve ayar dosyaları olamaz."""
+    llm_path, decide_path, bot_path, news_path, events_path, forward_path = paths
+    document = _load_toml(llm_path)
+    if isinstance(document, str):
+        output.say(f"llm-paper {command}: reddedildi: {document}")
+        return None
+    result = load_llm_paper_config(document)
+    config = result.config
+    if config is None:
+        output.say(f"llm-paper {command}: reddedildi: {result.message}")
+        return None
+    bot, news = _load_toml(bot_path), _load_toml(news_path)
+    news_keys = ("store_path", "log_path", "archive_store_path", "archive_log_path")
+    score_keys = ("store_path", "log_path", "calibration_report_path", "library_path")
+    others = (
+        config.decide_store_path,
+        config.s0_store_path,
+        *_raw_paths(_load_toml(decide_path), "decide", ("store_path", "log_path", "score_path")),
+        *_bot_paths(bot_path),
+        *_raw_paths(bot, "stage", ("paper_store_path",)),
+        *_raw_paths(bot, "shadow", ("record_path", "score_path", "news_path")),
+        *_raw_paths(news, "news", news_keys),
+        *_raw_paths(news, "score", score_keys),
+        *_raw_paths(
+            _load_toml(events_path), "events", ("price_store_path", "report_path", "library_path")
+        ),
+        *_raw_paths(
+            _load_toml(forward_path), "forward", ("price_store_path", "report_path", "samples_path")
+        ),
+        *(str(path) for path in paths),
+    )
+    keys = ("price_store_path", "rules_path", "report_path", "trades_path")
+    outputs = config.outputs
+    for index, (key, path) in enumerate(zip(keys, outputs, strict=True)):
+        earlier = outputs[:index]
+        if any(_same_file(path, other) for other in (*others, *earlier)):
+            output.say(f"llm-paper {command}: reddedildi: ayar geçersiz: llm_paper.{key}")
+            return None
+    return config
+
+
+def _llm_paper_download(
+    config: LlmPaperConfig,
+    output: Output,
+    clock: Clock,
+    stop: StopRequest,
+    wait: Callable[[float], None] | None,
+    effects: tuple[EventsDownload, LlmPaperRules | None],
+) -> ForwardOutcome:
+    download, rules = effects
+    lock = StoreLock(str(Path(config.price_store_path).resolve()))
+    refused = lock.acquire()
+    if refused is not None:
+        why = LLM_PAPER_BUSY if refused == LOCK_BUSY else refused
+        output.say(f"llm-paper download: reddedildi: {why}")
+        return ForwardOutcome.REFUSED
+    try:
+        try:
+            store = PriceStore.open(config.price_store_path)
+        except PriceStoreError as error:
+            output.say(f"llm-paper download: reddedildi: {error}")
+            return ForwardOutcome.REFUSED
+        try:
+            parts = EventPriceParts(
+                clock,
+                time.monotonic,
+                make_wait(stop) if wait is None else wait,
+                lambda: stop.requested,
+                lambda text: output.say(f"llm-paper download: {text}"),
+            )
+            exit_ = run_llm_paper_download(
+                config,
+                LlmPaperDownloadParts(
+                    PREREGISTERED_COINS,
+                    real_llm_paper_rules(clock) if rules is None else rules,
+                    lambda needs: download(needs, store, parts, config.request_gap_s),
+                    write_atomic,
+                    output.say,
+                    clock,
+                ),
+            )
+        finally:
+            store.close()
+    finally:
+        lock.release()
+    return exit_.outcome
+
+
+def _llm_paper(
+    argv: Sequence[str],
+    paths: tuple[Path, Path, Path, Path, Path, Path],
+    console: TextIO,
+    clock: Clock,
+    stop: StopRequest,
+    wait: Callable[[float], None] | None,
+    effects: tuple[EventsDownload, LlmPaperRules | None],
+) -> int:
+    """Spec 0060: `download` kilitli (fiyat deposu), `report` kilitsiz ve ağsız (R-3, AC-10)."""
+    output = Output(console)
+    given = list(argv)
+    valid = given in (["download"], ["report"]) or (
+        len(given) == 3 and given[:2] == ["report", "--at"]
+    )
+    if not valid:
+        output.say(USAGE)
+        return EXIT_REFUSED
+    command = given[0]
+    at = _report_at(given) if command == "report" else None
+    if isinstance(at, str):
+        output.say(f"llm-paper report: reddedildi: {at}")
+        return EXIT_REFUSED
+    config = _llm_paper_config(paths, output, command)
+    if config is None:
+        return EXIT_REFUSED
+    try:
+        if command == "download":
+            outcome = _llm_paper_download(config, output, clock, stop, wait, effects)
+        else:
+            parts = LlmPaperReportParts(
+                PREREGISTERED_COINS,
+                _llm_paper_record(config.decide_store_path),
+                _event_prices(config.price_store_path),
+                _llm_paper_rules_file(config.rules_path),
+                lambda start, end: read_s0_summary(config.s0_store_path, start, end),
+                _write_rows,
+                write_atomic,
+                output.say,
+                clock,
+            )
+            outcome = run_llm_paper_report(config, parts, at).outcome
+    except ForcedStop:
+        return EXIT_FORCED
+    return _FORWARD_EXIT_CODES[outcome]
+
+
 def repo_root() -> Path | None:
     """Botun çalışma ağacı: paketin üstündeki ilk `pyproject.toml`'lu dizin (spec 0048 R-10)."""
     for parent in Path(__file__).resolve().parents:
@@ -2396,6 +2649,8 @@ def run(
     decide_config_path: Path = Path(DECIDE_CONFIG_FILE),
     decide_call: DecideCall | None = None,
     decide_read: DecideRead | None = None,
+    llm_paper_config_path: Path = Path(LLM_PAPER_CONFIG_FILE),
+    llm_paper_rules: LlmPaperRules | None = None,
 ) -> int:
     """Komutu çalıştırır, çıkış kodunu döndürür. Ayar, kilit, depo sırası: borsaya ve depoya
     ayarlar denetlenmeden dokunulmaz (R-2); kilit depodan önce alınır (R-6)."""
@@ -2410,6 +2665,23 @@ def run(
             stop,
             wait,
             events_download,
+        )
+    if argv and argv[0] == "llm-paper":
+        return _llm_paper(
+            list(argv[1:]),
+            (
+                llm_paper_config_path,
+                decide_config_path,
+                config_path,
+                news_config_path,
+                events_config_path,
+                forward_config_path,
+            ),
+            console,
+            clock,
+            stop,
+            wait,
+            (events_download, llm_paper_rules),
         )
     if list(argv) not in COMMANDS:
         output.say(USAGE)
