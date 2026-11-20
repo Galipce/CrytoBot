@@ -86,7 +86,7 @@ def test_not_filled() -> None:
 
 def test_validity_boundary() -> None:
     bars = {"SOL": series({3: bar(START + 3 * HOUR, "99", "101")})}  # the last valid bar
-    assert run([decision()], bars).trades[0].status is not Status.NOT_FILLED
+    assert run([decision()], bars).trades[0].filled_at == START + 3 * HOUR  # L-4
 
 
 def test_exits_target_stop_same_candle_time() -> None:
@@ -198,3 +198,72 @@ def test_drawdown_halts_new_trades() -> None:
     assert result.halted_at is not None
     after = [t for t in result.trades if t.decision.turn >= result.halted_at]
     assert after and all(t.rejection == "drawdown durdurması" for t in after)
+
+
+def test_cash_never_negative_when_balance_limits() -> None:
+    """Review round 1 M-3: bakiyeyle sınırlı dolumlar kasayı aşmaz; ret adı doğru."""
+    rules = {c: PairRules(D("0.001"), D("0.001"), D("1")) for c in ("A", "B", "C")}
+    bars = {c: series({}, hours=10, price="1") for c in rules}
+    made = [
+        decision(c, entry_low=D("0.999"), entry_high=D("1"), stop=D("0.99"), target=D("1.05"),
+                 valid_hours=3)
+        for c in rules
+    ]  # fmt: skip
+    result = run(made, bars, START + 3 * HOUR, rules)
+    paid = sum(
+        (t.amount * t.fill_price * (1 + FEE) for t in result.trades if t.amount and t.fill_price),
+        D(0),
+    )
+    assert paid <= OPENING_BALANCE
+    assert "geçersiz girdi" not in [t.rejection for t in result.trades]
+
+
+def test_target_in_fill_bar_only_when_filled_at_open() -> None:
+    """Review round 1 M-4, A-8: tepesi dolumdan önce gelmiş olabilecek hedef aynı mumda sayılmaz."""
+    gap = {"SOL": series({1: Bar(START + HOUR, D("105"), D("125"), D("99"), D("104"))})}
+    trade = run([decision()], gap).trades[0]
+    assert trade.filled_at == START + HOUR and trade.exit_kind is not ExitKind.TARGET
+    at_open = {"SOL": series({1: Bar(START + HOUR, D("100"), D("125"), D("99"), D("104"))})}
+    trade = run([decision()], at_open).trades[0]
+    assert trade.exit_kind is ExitKind.TARGET and trade.exit_at == START + 2 * HOUR
+
+
+def test_daily_loss_is_the_utc_day() -> None:
+    """Review round 1 L-5: 22:00'de dolan günlük zarar ertesi gün 01:00'de engel değil."""
+    evening = START.replace(hour=0) + timedelta(hours=17)
+    decisions, bars = [], {}
+    for k in range(5):
+        turn = evening + HOUR * k
+        coin = f"E{k}"
+        found = {
+            turn: bar(turn, "99", "101", "100"),
+            turn + HOUR: bar(turn + HOUR, "90", "100", "91"),
+        }
+        flat(found, START - HOUR, 24 * 12, "100")
+        bars[coin] = found
+        decisions.append(decision(coin, turn=turn, target=D("130")))
+    late = evening + HOUR * 4
+    assert "günlük zarar" in [t.rejection for t in run(decisions, bars).trades]
+    morning = evening + HOUR * 8  # 01:00 the next UTC day: less than 24 hours after the losses
+    found = {morning: bar(morning, "99", "101", "100")}
+    flat(found, START - HOUR, 24 * 12, "100")
+    bars["M"] = found
+    result = run([*decisions, decision("M", turn=morning, target=D("130"))], bars)
+    assert result.trades[-1].status is not Status.REJECTED
+    assert late.date() != morning.date()
+
+
+def test_pending_not_counted_and_risk_budget() -> None:
+    """Review round 1 L-6: bekleyenler pozisyon sınırına girmez; miktar risk bütçesine sığar."""
+    coins = [f"P{i}" for i in range(6)]
+    # P0 waits (its zone is touched an hour later); P1...P5 fill at once: five open, one pending
+    bars = {c: series({0: bar(START, "99", "101", "100")}, price="104") for c in coins[1:]}
+    bars["P0"] = series({1: bar(START + HOUR, "99", "101", "100")}, price="104")
+    result = run([decision(c) for c in coins], bars)
+    by_coin = {t.decision.coin: t for t in result.trades}
+    assert all(by_coin[c].status is not Status.REJECTED for c in coins[1:])
+    assert by_coin["P0"].rejection == "açık pozisyon sınırı"
+    trade = by_coin["P1"]
+    assert trade.amount is not None
+    unit_loss = D("100") * (1 + SLIPPAGE) - D("95") * (1 - SLIPPAGE)
+    assert trade.amount * unit_loss <= OPENING_BALANCE * D("0.01")

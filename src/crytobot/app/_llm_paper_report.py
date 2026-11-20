@@ -33,6 +33,7 @@ from crytobot.app._llm_paper_config import (
 from crytobot.app._llm_paper_random import RandomResult, closed_net
 
 RUNNING = "ölçüm sürüyor"
+DATA_MISSING = "veri eksik: önce llm-paper download"
 POSITIVE = "olumlu"
 NEGATIVE = "olumsuz"
 INSUFFICIENT = "yetersiz örnek"
@@ -112,6 +113,9 @@ class Counts:
     waits: int = 0
     inconsistent: int = 0
     schema: int = 0
+
+    def share(self, count: int) -> Decimal | None:
+        return None if not self.asked else Decimal(count) / Decimal(self.asked)
 
     @property
     def bad_share(self) -> Decimal | None:
@@ -220,13 +224,20 @@ def verdict(
     found: Metrics,
     chance: RandomResult,
     tally: Counts,
+    horizon: datetime,
 ) -> Verdict:
-    """C-7, R-7: dönem bitmeden `ölçüm sürüyor`; sonra yetersiz örnek, olumsuz ya da olumlu."""
+    """C-7, R-7: dönem bitmeden `ölçüm sürüyor`; dönem bittiği halde oynatma dönem sonuna
+    ulaşmadıysa (indirilmemiş saatler) yine `ölçüm sürüyor` ve nedeni (M-1); sonra yetersiz
+    örnek, olumsuz ya da olumlu."""
     quality_low = tally.bad_share is not None and tally.bad_share > MAX_BAD_DECISIONS
     if at < period.end:
         return Verdict(RUNNING, (), quality_low)
+    if horizon < period.end:
+        return Verdict(RUNNING, (DATA_MISSING,), quality_low)
     if found.closed < MIN_CLOSED_TRADES:
-        return Verdict(INSUFFICIENT, (f"kapanmış işlem {found.closed} < {MIN_CLOSED_TRADES}",))
+        return Verdict(
+            INSUFFICIENT, (f"kapanmış işlem {found.closed} < {MIN_CLOSED_TRADES}",), quality_low
+        )
     failed: list[str] = []
     if found.net <= 0:
         failed.append("net kâr ≤ 0")
@@ -268,6 +279,7 @@ class ReportFacts:
     rules_at: str | None
     s0: S0Summary | None
     random_missing: int
+    horizon: datetime | None = None
 
 
 def report_text(
@@ -309,6 +321,9 @@ def report_text(
         f" {LIMITS.per_trade_risk} günlük {LIMITS.daily_loss_limit} drawdown"
         f" {LIMITS.max_drawdown} pozisyon {LIMITS.max_open_positions} kat"
         f" {LIMITS.profit_cost_multiple}",
+        "varsayım: dolum mumu kararın verildiği dakikadan önceki ilk dakikaları da kapsar (tur anı"
+        " 1h sınırıdır); dolum mumunda hedef yalnız dolum açılışta olduysa sayılır (A-8)",
+        f"oynatma ufku: {_stamp(facts.horizon)}",
         "",
         "## Dönemler",
         *(
@@ -323,6 +338,10 @@ def report_text(
         f"karar_istenen={tally.asked} al={tally.buys} claude_bekle={tally.waits}"
         f" tutarsız={tally.inconsistent} şema_dışı={tally.schema}"
         f" şema_dışı+tutarsız={_share(tally.bad_share)} (sınır %{MAX_BAD_DECISIONS * 100:.0f})",
+        f"oranlar: al={_share(tally.share(tally.buys))}"
+        f" claude_bekle={_share(tally.share(tally.waits))}"
+        f" tutarsız={_share(tally.share(tally.inconsistent))}"
+        f" şema_dışı={_share(tally.share(tally.schema))}",
         "",
         "## İşlemler",
         f"durum: {pairs(statuses)}",
@@ -333,7 +352,8 @@ def report_text(
         f" kâr_faktörü={_ratio(found.profit_factor)} en_büyük_drawdown={_share(found.max_drawdown)}"
         f" ortalama_süre={_ratio(found.average_hours)} saat",
         f"son kasa (açıklar son fiyatla): {_money(result.final_equity)} USDT"
-        f" drawdown_durdurması={_stamp(result.halted_at)}",
+        f" drawdown_durdurması={_stamp(result.halted_at)}"
+        f" durdurmadaki_kasa={_money(result.halted_equity)}",
         "coin başına (kapanmış, net):",
         *(
             f"- {coin}: {len(nets)} {_money(sum(nets, Decimal(0)))}"

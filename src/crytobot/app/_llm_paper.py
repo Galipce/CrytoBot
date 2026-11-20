@@ -6,9 +6,11 @@ başlangıcından ufka (rapor anı ya da bitiş) kadar oynatılır. Her saatte s
 bekleyenlere eklenir (aynı coinde açık pozisyon ya da bekleyen varsa atlanır, G-3); bekleyenler
 mumun aralığı giriş bölgesine değerse bölgenin üst ucundan dolar (piyasa kararı - rastgele ikiz -
 turun anında); dolumda risk modülü kasanın o anki durumuyla onaylar ya da reddeder (G-2, G-4, G-8);
-açık pozisyonlar o mumda stop (önce), hedef, sonra 168. mumda süre ile kapanır; mum kapanışında kasa
-gözlenir (BR-5, BR-6). Bitişte açık pozisyon "ölçüm sonu" ile kapanır (G-6); ufuk bitişten önceyse
-açık kalır. Gereken aralığında mumu eksik karar baştan "ölçülemedi" olur ve oynatmaya girmez.
+açık pozisyonlar o mumda stop (önce), hedef (dolum mumunda yalnız dolum açılışta olduysa, A-8),
+sonra 168. mumda süre ile kapanır; serbest bakiye kayma payı düşülerek verilir ve ödenen tutar
+kasayı aşmaz (M-3); mum kapanışında kasa gözlenir (BR-5, BR-6). Bitişte açık pozisyon "ölçüm sonu"
+ile kapanır (G-6); ufuk bitişten önceyse açık kalır. Gereken aralığında mumu eksik karar baştan
+"ölçülemedi" olur ve oynatmaya girmez.
 """
 
 from collections.abc import Mapping, Sequence
@@ -123,6 +125,7 @@ class Replay:
     curve: tuple[tuple[datetime, Decimal], ...]
     halted_at: datetime | None
     final_equity: Decimal
+    halted_equity: Decimal | None = None
 
 
 @dataclass
@@ -135,6 +138,7 @@ class _Open:
     stop: Decimal
     target: Decimal
     fill_bar: datetime
+    at_open: bool  # filled at the bar's open: the target may count in the fill bar (A-8)
 
 
 Bars = Mapping[str, Mapping[datetime, Bar]]
@@ -187,6 +191,7 @@ def replay(
     positions: list[_Open] = []
     curve: list[tuple[datetime, Decimal]] = [(start, OPENING_BALANCE)]
     halted_at: datetime | None = None
+    halted_equity: Decimal | None = None
 
     def equity() -> Decimal:
         return cash + sum((p.amount * marks[p.coin] for p in positions), Decimal(0))
@@ -244,7 +249,8 @@ def replay(
                     decision.target,
                 ),
                 LIMITS,
-                AccountState(equity(), cash, len(positions)),
+                # the risk module sizes the balance without slippage: leave its share aside (M-3)
+                AccountState(equity(), cash / (1 + SLIPPAGE), len(positions)),
                 rules[decision.coin],
                 whitelist,
                 FEE,
@@ -257,8 +263,20 @@ def replay(
                 name = REJECTIONS.get(approval.reason) if approval.reason else None
                 results[index] = PaperTrade(decision, Status.REJECTED, name or "reddedildi")
                 continue
+            pair_rules = rules[decision.coin]
+            step = Decimal(str(pair_rules.amount_step))
             amount = approval.amount
             price = decision.entry_high * (1 + SLIPPAGE)
+            while amount > 0 and amount * price * (1 + FEE) > cash:  # never spend past the cash
+                amount -= step
+            notional = amount * decision.entry_high
+            if (
+                amount <= 0
+                or amount < Decimal(str(pair_rules.min_amount))
+                or notional < Decimal(str(pair_rules.min_notional))
+            ):
+                results[index] = PaperTrade(decision, Status.REJECTED, "en küçük tutar")
+                continue
             paid = amount * price * (1 + FEE)
             cash -= paid
             marks[decision.coin] = price
@@ -272,14 +290,16 @@ def replay(
                     decision.stop,
                     decision.target,
                     moment,
+                    decision.market or bar.open <= decision.entry_high,
                 )
             )
             results[index] = PaperTrade(decision, Status.OPEN, None, moment, price, amount)
         for position in list(positions):
             bar = bars[position.coin][moment]
+            target_counts = moment != position.fill_bar or position.at_open
             if bar.low <= position.stop:
                 close(position, moment + HOUR, position.stop * (1 - SLIPPAGE), ExitKind.STOP)
-            elif bar.high >= position.target:
+            elif target_counts and bar.high >= position.target:
                 close(position, moment + HOUR, position.target * (1 - SLIPPAGE), ExitKind.TARGET)
             elif moment >= position.fill_bar + HOUR * HOLD_BARS:
                 close(position, moment + HOUR, bar.close * (1 - SLIPPAGE), ExitKind.TIME)
@@ -291,7 +311,7 @@ def replay(
             state = update.state
             curve.append((after, equity()))
             if state.halted and halted_at is None:
-                halted_at = after
+                halted_at, halted_equity = after, equity()
         moment = after
     if horizon >= end:
         last = end - HOUR
@@ -307,4 +327,4 @@ def replay(
         for index in pending:
             results[index] = PaperTrade(decisions[index], Status.PENDING)
     trades = tuple(result for result in results if result is not None)
-    return Replay(trades, tuple(curve), halted_at, equity())
+    return Replay(trades, tuple(curve), halted_at, equity(), halted_equity)

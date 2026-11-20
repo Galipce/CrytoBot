@@ -32,6 +32,7 @@ from crytobot.app._llm_paper_report import (
 
 START = MEASUREMENT_START
 D = Decimal
+END = MEASUREMENT_END
 PERIOD = Period("m", "p", START, MEASUREMENT_END)
 
 
@@ -104,25 +105,25 @@ GOOD = Counts(10, 10, {"ok": 10}, 100, 20, 70, 5, 5)
 
 def test_verdict_running_insufficient_each_threshold_positive() -> None:
     before = MEASUREMENT_END - HOUR
-    assert verdict(PERIOD, before, _metrics(), CHANCE, GOOD).name == RUNNING
-    assert verdict(PERIOD, MEASUREMENT_END, _metrics(closed=29), CHANCE, GOOD).name == INSUFFICIENT
-    assert verdict(PERIOD, MEASUREMENT_END, _metrics(), CHANCE, GOOD).name == POSITIVE
+    assert verdict(PERIOD, before, _metrics(), CHANCE, GOOD, END).name == RUNNING
+    assert verdict(PERIOD, END, _metrics(closed=29), CHANCE, GOOD, END).name == INSUFFICIENT
+    assert verdict(PERIOD, END, _metrics(), CHANCE, GOOD, END).name == POSITIVE
     for changes, name in (
         ({"net": "0"}, "net kâr ≤ 0"),
         ({"pf": "1.1"}, "kâr faktörü < 1.2"),
         ({"dd": "0.16"}, "drawdown > %15"),
         ({"net": "9"}, "rastgelenin 95. yüzdeliğini geçmiyor"),
     ):
-        judged = verdict(PERIOD, MEASUREMENT_END, _metrics(**changes), CHANCE, GOOD)  # type: ignore[arg-type]
+        judged = verdict(PERIOD, END, _metrics(**changes), CHANCE, GOOD, MEASUREMENT_END)  # type: ignore[arg-type]
         assert judged.name == NEGATIVE and name in judged.failed, changes
 
 
 def test_quality_blocks_positive() -> None:
     bad = Counts(10, 10, {"ok": 10}, 100, 20, 59, 11, 10)  # 21 % bad
-    judged = verdict(PERIOD, MEASUREMENT_END, _metrics(), CHANCE, bad)
+    judged = verdict(PERIOD, END, _metrics(), CHANCE, bad, END)
     assert judged.name == NEGATIVE and "karar kalitesi düşük" in judged.failed
     edge = Counts(10, 10, {"ok": 10}, 100, 20, 60, 10, 10)  # exactly 20 %: allowed
-    assert verdict(PERIOD, MEASUREMENT_END, _metrics(), CHANCE, edge).name == POSITIVE
+    assert verdict(PERIOD, END, _metrics(), CHANCE, edge, END).name == POSITIVE
 
 
 def _replay() -> Replay:
@@ -170,7 +171,7 @@ def test_report_fields() -> None:
         result,
         found,
         CHANCE,
-        verdict(PERIOD, START, found, CHANCE, GOOD),
+        verdict(PERIOD, START, found, CHANCE, GOOD, END),
         _facts(s0),
     )
     for part in (
@@ -193,7 +194,7 @@ def test_s0_missing() -> None:
         result,
         found,
         CHANCE,
-        verdict(PERIOD, START, found, CHANCE, GOOD),
+        verdict(PERIOD, START, found, CHANCE, GOOD, END),
         _facts(None),
     )
     assert "S0 yok" in text
@@ -208,5 +209,29 @@ def test_unmeasurable_named() -> None:
 
 @pytest.mark.parametrize("pf", [None])
 def test_no_losses_profit_factor_none(pf: None) -> None:
-    judged = verdict(PERIOD, MEASUREMENT_END, _metrics(pf=pf), CHANCE, GOOD)
+    judged = verdict(PERIOD, END, _metrics(pf=pf), CHANCE, GOOD, END)
     assert judged.name == POSITIVE  # no losing trade: the factor is unbounded, not failing
+
+
+def test_verdict_waits_for_complete_data() -> None:
+    """Review round 1 M-1: dönem bitti ama oynatma sona ulaşmadı -> hüküm yok."""
+    judged = verdict(PERIOD, END, _metrics(), CHANCE, GOOD, MEASUREMENT_END - HOUR)
+    assert judged.name == RUNNING and judged.failed == ("veri eksik: önce llm-paper download",)
+
+
+def test_insufficient_keeps_quality_warning() -> None:
+    """Review round 1 M-5."""
+    bad = Counts(10, 10, {"ok": 10}, 100, 20, 59, 11, 10)
+    judged = verdict(PERIOD, END, _metrics(closed=3), CHANCE, bad, END)
+    assert judged.name == INSUFFICIENT and judged.quality_low
+
+
+def test_report_ratios_and_halt_equity() -> None:
+    """Review round 1 M-7, L-3, I-2."""
+    result = Replay(_replay().trades, _replay().curve, START + HOUR, D("84"), D("84.5"))
+    found = metrics(result)
+    judged = verdict(PERIOD, START, found, CHANCE, GOOD, START)
+    text = report_text([PERIOD], PERIOD, GOOD, result, found, CHANCE, judged, _facts(None))
+    assert "oranlar: al=%20.0 claude_bekle=%70.0 tutarsız=%5.0 şema_dışı=%5.0" in text
+    assert "durdurmadaki_kasa=84.50" in text
+    assert "varsayım: dolum mumu" in text

@@ -54,9 +54,11 @@ RulesFile = tuple[str | None, Mapping[str, Mapping[str, str]]]
 
 @dataclass(frozen=True)
 class LlmPaperDownloadParts:
-    """`rules`: borsa kuralları metni (JSON) ya da okunamama nedeni (`str` ve `False` değil)."""
+    """`fetch_rules`: borsa kuralları metni (JSON) ya da okunamama nedeni; `record`: karar kaydı
+    (etkin dönemin sonu için; okunamıyorsa nedeni, M-2, M-8)."""
 
     coins: tuple[str, ...]
+    record: Callable[[], LlmPaperRecord | str | None]
     fetch_rules: Callable[[], tuple[str, None] | tuple[None, str]]
     download: Callable[[tuple[PriceNeed, ...]], DownloadOutcome]
     write_file: Callable[[str, str], bool]
@@ -108,12 +110,16 @@ def _floor(moment: datetime) -> datetime:
 
 def _download(config: LlmPaperConfig, parts: LlmPaperDownloadParts) -> str:
     now = parts.clock()
+    record = parts.record()
+    if isinstance(record, str):
+        raise _Halt(ForwardOutcome.REFUSED, record)
+    period_end = MEASUREMENT_END if record is None else active_period(record.turns).end
     rules, reason = parts.fetch_rules()
     if rules is None:
         raise _Halt(ForwardOutcome.FAILED, f"borsa kuralları okunamadı: {reason}")
     if not parts.write_file(config.rules_path, rules):
         raise _Halt(ForwardOutcome.NOT_WRITTEN, f"kural dosyası yazılamadı: {config.rules_path}")
-    start, end = MEASUREMENT_START - HOUR, min(_floor(now), MEASUREMENT_END)
+    start, end = MEASUREMENT_START - HOUR, min(_floor(now), period_end)
     wanted = tuple(PriceNeed(coin, start, end) for coin in parts.coins) if end > start else ()
     parts.write(f"{EVENT} download: başladı: coin={len(parts.coins)} aralık={len(wanted)}")
     if not wanted:
@@ -144,6 +150,24 @@ def parse_rules(found: RulesFile, coins: Sequence[str]) -> dict[str, PairRules] 
         }
     except (KeyError, TypeError, InvalidOperation):
         return f"kural dosyası okunamıyor; {DOWNLOAD_FIRST}"
+
+
+def _covered(prices: PriceData, coins: Sequence[str]) -> datetime:
+    """L-1: on coinin ölçüm başından kesintisiz indirilmiş kapsamının en erken sonu; yarım kalan
+    bir indirme ufku ilerletmez."""
+    pairs = prices.pairs or {}
+    start = MEASUREMENT_START - HOUR
+    ends = []
+    for coin in coins:
+        pair = pairs.get(coin)
+        reach = start
+        spans = () if pair is None else prices.spans.get(pair.symbol, ())
+        for span in sorted(spans, key=lambda s: s.start):
+            if span.start > reach:
+                break
+            reach = max(reach, span.end)
+        ends.append(reach)
+    return min(ends) if ends else start
 
 
 def _bars(prices: PriceData, coins: Sequence[str]) -> dict[str, dict[datetime, Bar]]:
@@ -198,14 +222,20 @@ def _report(config: LlmPaperConfig, parts: LlmPaperReportParts, at: datetime | N
         if isinstance(parsed, str):
             raise _Halt(ForwardOutcome.REFUSED, parsed)
         rules = parsed
+        absent = [coin for coin in parts.coins if coin not in rules]
+        if absent:
+            raise _Halt(
+                ForwardOutcome.REFUSED, f"kural dosyası eksik: {absent[0]}; {DOWNLOAD_FIRST}"
+            )
         bars = _bars(prices, parts.coins)
         ceiling = prices.ceiling
         horizon = min(horizon, period.end if ceiling is None else _floor(ceiling))
+        horizon = min(horizon, _covered(prices, parts.coins))
     window = (period.start, period.end, horizon)
     result = replay(buys, bars, rules, *window)
     chance = random_distribution(result.trades, bars, rules, parts.coins, window)
     found = metrics(result)
-    judged = verdict(period, report_at, found, chance, tally)
+    judged = verdict(period, report_at, found, chance, tally, horizon)
     facts = ReportFacts(
         report_at,
         parts.clock(),
@@ -215,6 +245,7 @@ def _report(config: LlmPaperConfig, parts: LlmPaperReportParts, at: datetime | N
         rules_at,
         parts.s0(period.start, period.end),
         chance.missing,
+        horizon,
     )
     if not parts.write_rows(config.trades_path, trade_rows(result.trades)):
         raise _Halt(ForwardOutcome.NOT_WRITTEN, f"işlem dosyası yazılamadı: {config.trades_path}")

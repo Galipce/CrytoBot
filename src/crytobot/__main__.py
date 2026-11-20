@@ -1753,6 +1753,7 @@ def _llm_paper_download(
                 config,
                 LlmPaperDownloadParts(
                     PREREGISTERED_COINS,
+                    _llm_paper_record(config.decide_store_path),
                     real_llm_paper_rules(clock) if rules is None else rules,
                     lambda needs: download(needs, store, parts, config.request_gap_s),
                     write_atomic,

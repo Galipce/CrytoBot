@@ -214,3 +214,54 @@ def test_outputs_atomic(world: World) -> None:
 def test_bad_command(world: World) -> None:
     code, console = world.run("extra")
     assert code == EXIT_REFUSED and console.strip() == USAGE
+
+
+def test_second_download_same_window_and_failure_keeps_data(world: World) -> None:
+    """Review round 1 M-6: ikinci koşu aynı pencereyi ister (eksikleri indirme adımı süzer:
+    tests/market_data/test_event_prices.py::test_downloaded_kept_rerun_fetches_missing);
+    fiyat indirme hatası adıyla, önceki veri bozulmaz."""
+    world.decide()
+    assert world.run("download")[0] == EXIT_OK
+    assert world.run("download")[0] == EXIT_OK
+    assert [(n.start, n.end) for n in world.needs[0]] == [(n.start, n.end) for n in world.needs[1]]  # type: ignore[attr-defined]
+    world.run("report", offline=True)
+    trades = (world.root / "trades.jsonl").read_bytes()
+    world.download = lambda *args, **kwargs: DownloadOutcome.FAILED  # type: ignore[method-assign]
+    code, console = world.run("download")
+    assert code == EXIT_REFUSED and "llm-paper download: durdu: kaynak hatası" in console
+    world.run("report", offline=True)
+    assert (world.root / "trades.jsonl").read_bytes() == trades
+
+
+def test_unreadable_record_refused_in_both_commands(world: World) -> None:
+    """Review round 1 M-8 (AC-1)."""
+    (world.root / "decide.db").write_bytes(b"not a database" * 50)
+    for command in ("download", "report"):
+        code, console = world.run(command, offline=True)
+        assert code == EXIT_REFUSED, command
+        assert "karar kaydı okunamıyor" in console, command
+
+
+def test_rules_missing_a_coin_refused(world: World) -> None:
+    """Review round 1 L-2."""
+    world.decide()
+    world.run("download")
+    rules = json.loads((world.root / "rules.json").read_text(encoding="utf-8"))
+    del rules["pairs"]["SOL"]
+    (world.root / "rules.json").write_text(json.dumps(rules), encoding="utf-8")
+    code, console = world.run("report", offline=True)
+    assert code == EXIT_REFUSED and "kural dosyası eksik: SOL; önce llm-paper download" in console
+
+
+def test_report_while_decide_holds_its_lock(world: World) -> None:
+    """Review round 1 L-7 (AC-10): rapor kilit almaz, karar turu çalışırken de koşar."""
+    from crytobot.__main__ import StoreLock
+
+    world.decide()
+    world.run("download")
+    lock = StoreLock(str((world.root / "decide.db").resolve()))
+    assert lock.acquire() is None
+    try:
+        assert world.run("report", offline=True)[0] == EXIT_OK
+    finally:
+        lock.release()
