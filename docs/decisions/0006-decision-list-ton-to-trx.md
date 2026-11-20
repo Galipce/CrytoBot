@@ -1,6 +1,6 @@
 # ADR 0006 — LLM karar modunun listesi: TON yerine TRX
 
-- Status: Accepted
+- Status: Superseded by ADR-0007
 - Date: 2026-11-20
 
 ## Context
