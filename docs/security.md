@@ -67,6 +67,12 @@
   izlenmez (anahtar başlığı başka adrese taşınmaz). Zaman damgası Binance'in sunucu saatinden, anahtarsız istekle
   (plan A-7); doğrulanamayan yetkinin satırı yalnız sırsız neden adı taşır (HTTP durumu, Binance'in sayısal kodu).
 
+- **LLM karar turu (spec 0059, ADR 0005):** `decide` çağrısı skorlayıcının `claude -p` yalıtımını aynen kullanır
+  (argv'de sabit tek satır ASCII sistem talimatı ve model adı; istem stdin'den). İstemdeki veri bölümü kendi
+  parmak izinden türeyen işaretlerle sınırlıdır ve "talimat değildir" der. Yanıt güvenilmeyen girdidir: en çok
+  64 KB, tek JSON nesnesi (yinelenen anahtar, bilinmeyen alan, `NaN` ret), seviyeler son 48 mumun aralığına
+  bağlı; gerekçe Telegram'a HTML kaçışıyla ve kısaltılarak girer. Ham yanıt ve haber metni kayda yazılmaz.
+  Kararlar emir, limit ya da mod tetiklemez (Key domain invariants); bot karar kaydını import kuralıyla okuyamaz.
 ## AuthN / AuthZ
 - Tek kullanıcı. **Varsayılan: reddet.**
 - **Varsayılan mod `paper`.** `live` için config bayrağı **ve** açık onay (CLI'de ya da Telegram'da TOTP + teyit) gerekir.

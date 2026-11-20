@@ -1,0 +1,23 @@
+# CrytoBot LLM karar turu ayarı örneği (spec 0059, ADR 0005). Kopyala: crytobot-decide.toml
+# (çalışma dizininde, git'e girmez). Botun, haberin, events ve forward ayarından ayrıdır.
+#
+# `python -m crytobot decide` her 1h mum kapanışından `minute_after_close` dakika sonra on coinin
+# teknik özetini (herkese açık piyasa verisi, anahtarsız) ve skor kaydındaki son 24 saatin olay
+# skorlarını tek bir `claude -p` çağrısıyla Claude'a verir; yanıt doğrulanır ve karar kaydına yalnız
+# eklenir. Geçerli `al` kararları Telegram'a "paper öncesi — uygulanmıyor" işaretiyle gider (bot
+# ayarındaki [reporting.telegram]). Kararlar hiçbir defterin, botun ya da filtrenin girdisi değildir.
+# `python -m crytobot decide status` ağa ve LLM'e çıkmadan son turları gösterir.
+#
+# Liste ADR 0005'te ön kayıtlıdır: başka bir liste reddedilir. Karar kaydı ve kayıt dosyası bot,
+# haber, skor, gölge, forward ve olay kayıtları ya da ayar dosyaları olamaz.
+
+[decide]
+coins = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "LINK", "TON"]
+model = "claude-sonnet-5-5"
+store_path = "C:/CrytoBot-data/crytobot-decide.db"   # karar kaydı (SQLite, yalnız eklenir)
+log_path = "C:/CrytoBot-data/crytobot-decide.log"    # satır kaydı
+score_path = "C:/CrytoBot-data/crytobot-score.db"    # skor kaydı (crytobot-news.toml [score]), yalnız okunur
+minute_after_close = 5      # 1h kapanışından sonraki dakika (0…59)
+daily_call_limit = 24       # UTC günü başına en çok çağrı (1…48)
+timeout_s = 180             # çağrı zaman aşımı, saniye
+quota_wait_minutes = 60     # kota yanıtından sonra çağrısız bekleme

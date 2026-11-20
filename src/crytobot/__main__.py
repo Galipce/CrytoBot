@@ -105,10 +105,12 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import FrameType
 from typing import IO, TextIO
 
+from crytobot.analysis import Candle
 from crytobot.app import (
     BacktestConfig,
     BacktestOutcome,
@@ -198,6 +200,21 @@ from crytobot.dashboard import (
     create_server,
     load_dashboard_config,
 )
+from crytobot.decide import (
+    QUOTE,
+    CoinData,
+    DecideConfig,
+    DecideExit,
+    DecideParts,
+    DecideReply,
+    DecideStore,
+    DecideStoreError,
+    EventNote,
+    decide_status_lines,
+    load_decide_config,
+    read_decide_snapshot,
+    run_decide,
+)
 from crytobot.llm import ClaudeRequest, call_claude
 from crytobot.market_data import (
     DownloadOutcome,
@@ -284,10 +301,11 @@ CONFIG_FILE = "crytobot.toml"
 NEWS_CONFIG_FILE = "crytobot-news.toml"
 EVENTS_CONFIG_FILE = "crytobot-events.toml"
 FORWARD_CONFIG_FILE = "crytobot-forward.toml"
+DECIDE_CONFIG_FILE = "crytobot-decide.toml"
 USAGE = (
     "kullanım: python -m crytobot "
     "prepare|start|download|backtest|calibrate|status|kill-switch|resume|stop|dashboard|news|events"
-    "|shadow|forward"
+    "|shadow|forward|decide"
     " [--live] [--trial] [--final] [archive] [score] [status] [download] [measure]"
     " [report] [--at YYYY-MM-DDTHH:MM:SSZ]"
 )
@@ -319,6 +337,8 @@ COMMANDS = (
     ["shadow", "status"],
     ["forward", "download"],
     ["forward", "report"],
+    ["decide"],
+    ["decide", "status"],
 )
 EXIT_OK = 0
 EXIT_REFUSED = 1
@@ -359,6 +379,7 @@ NEWS_BUSY = "haber kaydı başka bir toplama komutunda açık"
 ArchiveFetch = Callable[[str, int, Callable[[], bool]], Fetched]
 ARCHIVE_BUSY = "arşiv başka bir arşiv komutunda açık"
 SCORE_BUSY = "skor kaydı başka bir skorlayıcıda açık"
+DECIDE_BUSY = "karar kaydı başka bir karar sürecinde açık"
 EventsDownload = Callable[
     [Sequence[PriceNeed], PriceStore, EventPriceParts, float], DownloadOutcome
 ]
@@ -1320,6 +1341,221 @@ def _news_score(
     return EXIT_OK if exit_ is ScoreExit.STOPPED else EXIT_REFUSED
 
 
+DecideCall = Callable[[str, str, str, float], DecideReply]
+DecideRead = Callable[[tuple[str, ...], datetime], Mapping[str, CoinData | None]]
+# spec 0059 plan Risk 2: 250 x 1h warms EMA 200 and the 7-day change; 40 x 4h covers the 30 shown
+DECIDE_H1 = ReadSettings(
+    "binance", timedelta(hours=1), 250, timedelta(seconds=10), timedelta(minutes=2)
+)
+DECIDE_H4 = ReadSettings(
+    "binance", timedelta(hours=4), 40, timedelta(seconds=10), timedelta(minutes=2)
+)
+_DAY = timedelta(hours=24)
+
+
+def real_decide_call(stopped: Callable[[], bool]) -> DecideCall:
+    """`claude -p` alt süreci (spec 0059 R-3; 0051 R-5): komut PATH'te bir kez aranır."""
+    found = shutil.which("claude")
+    executable = None if found is None else [found]
+
+    def call(model: str, system_prompt: str, prompt: str, timeout_s: float) -> DecideReply:
+        reply = call_claude(
+            ClaudeRequest(model, system_prompt, prompt, timeout_s),
+            executable=executable,
+            stopped=stopped,
+        )
+        return DecideReply(reply.outcome.value, reply.text)
+
+    return call
+
+
+def _floats(read: MarketRead) -> dict[str, tuple[tuple[Candle, ...], Decimal | None]]:
+    """Çift → (mumlar, fiyat adımı); mumu okunamayan çift yoktur."""
+    found: dict[str, tuple[tuple[Candle, ...], Decimal | None]] = {}
+    for pair in read.pairs:
+        if pair.candles is None:
+            continue
+        candles = tuple(
+            Candle(c.open_time, float(c.open), float(c.high), float(c.low), float(c.close))
+            for c in pair.candles
+        )
+        found[pair.pair] = (candles, pair.tick)
+    return found
+
+
+def _decide_events(
+    score_path: str, coins: Sequence[str], boundary: datetime
+) -> dict[str, tuple[EventNote, ...]] | None:
+    """Son 24 saatin olay skorları, coin başına (plan Risk 3); kayıt yoksa ya da
+    okunamıyorsa `None`."""
+    try:
+        record = read_score_record(score_path)
+    except (ScoreStoreError, OSError):
+        return None
+    if record is None:
+        return None
+    moments = {
+        row.news_id: row.at for row in record.results if boundary - _DAY <= row.at < boundary
+    }
+    notes: dict[str, list[EventNote]] = {coin: [] for coin in coins}
+    for event in record.events:
+        at = moments.get(event.news_id)
+        if at is not None and event.coin in notes:
+            notes[event.coin].append(
+                EventNote(at, event.event_type, event.direction, event.severity)
+            )
+    return {coin: tuple(sorted(found, key=lambda e: e.at)) for coin, found in notes.items()}
+
+
+def make_decide_read(
+    clock: Clock,
+    score_path: str,
+    say: Callable[[str], None],
+    market: Callable[[tuple[str, ...], ReadSettings], MarketRead] | None = None,
+) -> DecideRead:
+    """Herkese açık piyasa okuması (anahtarsız, spec 0017) ve skor kaydı, yalnız okuma."""
+
+    def market_read(pairs: tuple[str, ...], settings: ReadSettings) -> MarketRead:
+        return read_market_data(pairs, settings, clock)
+
+    reader = market_read if market is None else market
+
+    def read(coins: tuple[str, ...], boundary: datetime) -> dict[str, CoinData | None]:
+        pairs = tuple(f"{coin}/{QUOTE}" for coin in coins)
+        h1, h4 = _floats(reader(pairs, DECIDE_H1)), _floats(reader(pairs, DECIDE_H4))
+        events = _decide_events(score_path, coins, boundary)
+        if events is None:
+            say("skor kaydı okunamadı ya da yok: olay skorsuz tur")
+        found: dict[str, CoinData | None] = {}
+        for coin, pair in zip(coins, pairs, strict=True):
+            if pair not in h1 or pair not in h4:
+                found[coin] = None
+                continue
+            found[coin] = CoinData(
+                coin, h1[pair][0], h4[pair][0], h1[pair][1], () if events is None else events[coin]
+            )
+        return found
+
+    return read
+
+
+def _decide_config(
+    paths: tuple[Path, Path, Path, Path, Path], output: Output
+) -> DecideConfig | None:
+    """Spec 0059 AC-1: hiçbir kayda dokunmadan, ilk sorun adıyla. Karar kaydı ve kayıt dosyası
+    bot, haber, skor, gölge, forward ve olay kayıtları ya da ayar dosyaları olamaz, birbirleri de
+    olamaz: başka yazımla da. Skor kaydının yolu haber ayarındakiyle aynı olmalıdır."""
+    decide_path, bot_path, news_path, events_path, forward_path = paths
+    document = _load_toml(decide_path)
+    if isinstance(document, str):
+        output.say(f"decide: reddedildi: {document}")
+        return None
+    result = load_decide_config(document)
+    config = result.config
+    if config is None:
+        output.say(f"decide: reddedildi: {result.message}")
+        return None
+    bot, news = _load_toml(bot_path), _load_toml(news_path)
+    others = (
+        *_bot_paths(bot_path),
+        *_raw_paths(bot, "stage", ("paper_store_path",)),
+        *_raw_paths(bot, "shadow", ("record_path", "score_path", "news_path")),
+        *_raw_paths(
+            news, "news", ("store_path", "log_path", "archive_store_path", "archive_log_path")
+        ),
+        *_raw_paths(news, "score", ("store_path", "log_path")),
+        *_raw_paths(
+            _load_toml(events_path), "events", ("price_store_path", "report_path", "library_path")
+        ),
+        *_raw_paths(
+            _load_toml(forward_path), "forward", ("price_store_path", "report_path", "samples_path")
+        ),
+        *(str(path) for path in paths),
+    )
+    if any(_same_file(config.store_path, other) for other in others):
+        output.say("decide: reddedildi: ayar geçersiz: decide.store_path")
+        return None
+    if any(_same_file(config.log_path, other) for other in (*others, config.store_path)):
+        output.say("decide: reddedildi: ayar geçersiz: decide.log_path")
+        return None
+    if _same_file(config.score_path, config.store_path) or _same_file(
+        config.score_path, config.log_path
+    ):
+        output.say("decide: reddedildi: ayar geçersiz: decide.score_path")
+        return None
+    return config
+
+
+def _decide_status(config: DecideConfig, output: Output, clock: Clock) -> int:
+    """R-7: ağsız, LLM'siz, kilitsiz; kayıt yalnız okunur, yoksa oluşturulmaz."""
+    today = clock().astimezone(UTC).date()
+    try:
+        snapshot = read_decide_snapshot(config.store_path, today)
+    except DecideStoreError as error:
+        output.say(f"decide: reddedildi: {error}")
+        return EXIT_REFUSED
+    for row in decide_status_lines(config, snapshot, today):
+        output.say(row)
+    return EXIT_OK
+
+
+def _decide(
+    argv: Sequence[str],
+    paths: tuple[Path, Path, Path, Path, Path],
+    console: TextIO,
+    clock: Clock,
+    stop: StopRequest,
+    wait: Callable[[float], None] | None,
+    effects: tuple[DecideCall | None, DecideRead | None, ReportingService | None],
+) -> int:
+    """Spec 0059: `decide` saatte bir karar turu koşar, `decide status` gösterir (AC-7, AC-8)."""
+    call, read, reporter = effects
+    output = Output(console)
+    config = _decide_config(paths, output)
+    if config is None:
+        return EXIT_REFUSED
+    if list(argv[1:]) == ["status"]:
+        return _decide_status(config, output, clock)
+    lock = StoreLock(str(Path(config.store_path).resolve()))
+    refused = lock.acquire()
+    if refused is not None:
+        output.say(f"decide: reddedildi: {DECIDE_BUSY if refused == LOCK_BUSY else refused}")
+        return EXIT_REFUSED
+    output = Output(console, config.log_path)
+
+    def say(text: str) -> None:
+        output(line(clock(), "karar", text))
+
+    try:
+        try:
+            store = DecideStore.open(config.store_path)
+        except DecideStoreError as error:
+            say(f"reddedildi: {error}")
+            return EXIT_REFUSED
+        try:
+            service = _news_reporter(paths[1], reporter)
+            parts = DecideParts(
+                clock,
+                make_wait(stop) if wait is None else wait,
+                lambda: stop.requested,
+                make_decide_read(clock, config.score_path, say) if read is None else read,
+                real_decide_call(lambda: stop.requested) if call is None else call,
+                say,
+                None if service is None else service.dispatch,
+            )
+            exit_ = run_decide(config, store, parts)
+        finally:
+            store.close()
+    except ForcedStop:
+        return EXIT_FORCED
+    except LogWriteError:
+        output.say(line(clock(), "karar", "kayıt dosyası yazılamıyor: karar turu durdu"))
+        return EXIT_LOG_FAILED
+    finally:
+        lock.release()
+    return EXIT_OK if exit_ is DecideExit.STOPPED else EXIT_REFUSED
+
+
 def repo_root() -> Path | None:
     """Botun çalışma ağacı: paketin üstündeki ilk `pyproject.toml`'lu dizin (spec 0048 R-10)."""
     for parent in Path(__file__).resolve().parents:
@@ -2152,6 +2388,9 @@ def run(
     score_call: ScoreCall | None = None,
     forward_config_path: Path = Path(FORWARD_CONFIG_FILE),
     news_stream: NewsStreamIO | None = None,
+    decide_config_path: Path = Path(DECIDE_CONFIG_FILE),
+    decide_call: DecideCall | None = None,
+    decide_read: DecideRead | None = None,
 ) -> int:
     """Komutu çalıştırır, çıkış kodunu döndürür. Ayar, kilit, depo sırası: borsaya ve depoya
     ayarlar denetlenmeden dokunulmaz (R-2); kilit depodan önce alınır (R-6)."""
@@ -2216,6 +2455,22 @@ def run(
         )
     if argv[0] == "shadow":
         return _shadow_status(config_path, output)
+    if argv[0] == "decide":
+        return _decide(
+            argv,
+            (
+                decide_config_path,
+                config_path,
+                news_config_path,
+                events_config_path,
+                forward_config_path,
+            ),
+            console,
+            clock,
+            stop,
+            wait,
+            (decide_call, decide_read, reporter),
+        )
     config = _config(config_path, output, clock)
     if config is None:
         return EXIT_REFUSED
