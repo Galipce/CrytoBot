@@ -1,6 +1,6 @@
 # Spec 0059 — LLM karar turu: teknik özet, Claude kararı, karar kaydı (paper öncesi)
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0059-plan.md`
 - Self-critique: done
@@ -74,41 +74,42 @@ none — no user interface (komut satırı ve Telegram mesajı; satır biçimler
 - Bot kararları ve ADR 0004 koşusu değişmez.
 
 ## Acceptance criteria
-- [ ] AC-1 — Ayar: liste ADR 0005'teki on coinden farklıysa, model ya da yollar eksikse ya da yollar başka kayıtlarla
+- [x] AC-1 — Ayar: liste ADR 0005'teki on coinden farklıysa, model ya da yollar eksikse ya da yollar başka kayıtlarla
   çakışıyorsa `decide` hiçbir çağrı yapmadan alan adıyla reddeder.
-- [ ] AC-2 — Özet: her coin için özet yalnız kapanmış mumlardan çıkar; 48 adet 1h ve 30 adet 4h mum, EMA 20/50/200,
+- [x] AC-2 — Özet: her coin için özet yalnız kapanmış mumlardan çıkar; 48 adet 1h ve 30 adet 4h mum, EMA 20/50/200,
   RSI 14, ATR 14, 24 saat ve 7 gün değişim, 48 mumun en yüksek/en düşüğü, son 24 saatin olay skorları ve BTC bağlamı
   içerir; verisi eksik ya da bayat coin "veri yok" olur ve karar istenmez.
-- [ ] AC-3 — Çağrı: tur başına tek çağrı; istem her coinin özetini veri bölümünde taşır; yalıtım ve zaman aşımı 0051 ile
+- [x] AC-3 — Çağrı: tur başına tek çağrı; istem her coinin özetini veri bölümünde taşır; yalıtım ve zaman aşımı 0051 ile
   aynı; günlük sınır dolmuşsa çağrı yapılmaz, tur "sınır" olarak kaydedilir.
-- [ ] AC-4 — Doğrulama: şemaya uymayan yanıt bütünüyle atılır (her coin `bekle`, neden `şema dışı`); şemaya uyan yanıtta
+- [x] AC-4 — Doğrulama: şemaya uymayan yanıt bütünüyle atılır (her coin `bekle`, neden `şema dışı`); şemaya uyan yanıtta
   R-4'ün her tutarlılık kuralının bozulduğu durum yalnız o coini `tutarsız` yapar, nedeni adıyla.
-- [ ] AC-5 — Kayıt: her tur yalnız eklenen kayda yazılır (tur anı, parmak izleri, sonuç sınıfı, coin başına karar ve
+- [x] AC-5 — Kayıt: her tur yalnız eklenen kayda yazılır (tur anı, parmak izleri, sonuç sınıfı, coin başına karar ve
   doğrulama); ham yanıt ve haber metni kayıtta yoktur; aynı tur iki kez yazılmaz.
-- [ ] AC-6 — Bildirim: geçerli her `al` için tek Telegram mesajı, "paper öncesi — uygulanmıyor" işaretiyle; `bekle`,
+- [x] AC-6 — Bildirim: geçerli her `al` için tek Telegram mesajı, "paper öncesi — uygulanmıyor" işaretiyle; `bekle`,
   tutarsız ve şema dışı kararlar bildirilmez.
-- [ ] AC-7 — Durum: `decide status` ağsız ve LLM'siz son turları, coin başına son kararı, bugünkü çağrı sayısını ve
+- [x] AC-7 — Durum: `decide status` ağsız ve LLM'siz son turları, coin başına son kararı, bugünkü çağrı sayısını ve
   tutarsız/şema dışı sayılarını gösterir; kayıt yoksa "henüz tur yok".
-- [ ] AC-8 — Zamanlama ve durdurma: tur, 1h mum kapanışından ayardaki dakika sonra koşar; Ctrl+C temiz durdurur (çıkış 0),
+- [x] AC-8 — Zamanlama ve durdurma: tur, 1h mum kapanışından ayardaki dakika sonra koşar; Ctrl+C temiz durdurur (çıkış 0),
   ikinci Ctrl+C zorla (130); yarım tur kaydı kalmaz.
-- [ ] AC-9 — Yalıtım sınırı: bot ve paper defterleri karar kaydını okumaz; `decide` bot deposuna yazmaz (import kuralıyla
+- [x] AC-9 — Yalıtım sınırı: bot ve paper defterleri karar kaydını okumaz; `decide` bot deposuna yazmaz (import kuralıyla
   ve testle).
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed (`docs/commands.md`, `docs/architecture.md`, `docs/security.md`, `docs/domain.md` paper istisnası, örnek ayar)
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed (`docs/commands.md`, `docs/architecture.md`, `docs/security.md`, `docs/domain.md` paper istisnası, örnek ayar)
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 (liste ADR 0006 ile değişti: plan A-7) |
+| Fix rounds | 2 (review turu 1; VERIFY sonrası TRX ve F-2 testi) |
+| Review findings: real / noise / deferred | 7 / 5 / 2 (B-103, B-104) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 (ship anında) |
 
 ## Handoff
-Next: PLAN — Developer runs /plan 0059
+Shipped — Galip Badem, 2026-11-20. Liste ADR 0006 ile (TON yerine TRX); ertelenenler B-103, B-104. Sırada 0060
+(LLM paper defteri, karşılaştırma, ön kayıtlı hüküm; Claude'un `bekle`si `action='bekle'` ile ayrılır).
