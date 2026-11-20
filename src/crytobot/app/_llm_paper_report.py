@@ -330,7 +330,7 @@ def report_text(
         *(
             [
                 f"uyarı: mumsuz indirilmiş aralık={facts.empty_spans} (borsa kesintisi ya da"
-                " kapanmamış mum; bir sonraki indirme yeniden ister)"
+                " kapanmamış mum; geçici olanları bir sonraki indirme yeniden ister)"
             ]
             if facts.empty_spans
             else []
